@@ -1,0 +1,6 @@
+export { default as ProductCard } from './ProductCard'
+export { default as Price } from './Price'
+export { default as Timer } from './Timer'
+export { default as SearchBar } from './SearchBar'
+export { default as PromoCard } from './PromoCard'
+export { default as ArticleCard } from './ArticleCard'

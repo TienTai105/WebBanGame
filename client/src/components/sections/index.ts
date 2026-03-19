@@ -1,0 +1,6 @@
+export { default as NewArrivalsSection } from './NewArrivalsSection'
+export { default as CategoryBannersSection } from './CategoryBannersSection'
+export { default as BestSellersSection } from './BestSellersSection'
+export { default as NewsSection } from './NewsSection'
+export { default as PromoSection } from './PromoSection'
+export { default as NewsletterSection } from './NewsletterSection'

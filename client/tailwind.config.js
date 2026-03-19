@@ -1,0 +1,47 @@
+export default {
+  content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        primary: 'hsl(var(--primary))',
+        'primary-foreground': 'hsl(var(--primary-foreground))',
+        secondary: 'hsl(var(--secondary))',
+        'secondary-foreground': 'hsl(var(--secondary-foreground))',
+        destructive: 'hsl(var(--destructive))',
+        'destructive-foreground': 'hsl(var(--destructive-foreground))',
+        muted: 'hsl(var(--muted))',
+        'muted-foreground': 'hsl(var(--muted-foreground))',
+        accent: 'hsl(var(--accent))',
+        'accent-foreground': 'hsl(var(--accent-foreground))',
+        popover: 'hsl(var(--popover))',
+        'popover-foreground': 'hsl(var(--popover-foreground))',
+        card: 'hsl(var(--card))',
+        'card-foreground': 'hsl(var(--card-foreground))',
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        'bg-dark': '#0F172A',
+        'bg-light': '#f6f6f8',
+      },
+      fontFamily: {
+        display: ['Space Grotesk', 'sans-serif'],
+      },
+      borderRadius: {
+        DEFAULT: '0.25rem',
+        sm: '0.125rem',
+        lg: '0.5rem',
+        xl: '0.75rem',
+        full: '9999px',
+      },
+      boxShadow: {
+        glow: '0 0 15px rgba(99, 102, 241, 0.1)',
+        'glow-lg': '0 0 20px rgba(99, 102, 241, 0.3)',
+        'glow-secondary': '0 0 10px rgba(34, 211, 238, 0.2)',
+      },
+    },
+  },
+  plugins: [],
+}

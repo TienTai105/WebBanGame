@@ -1,0 +1,96 @@
+import express, { Express, Request, Response, NextFunction } from 'express'
+import cors from 'cors'
+import helmet from 'helmet'
+import morgan from 'morgan'
+import cookieParser from 'cookie-parser'
+import dotenv from 'dotenv'
+import connectDB from './config/db.js'
+import { errorHandler } from './middleware/auth.js'
+import { startCronJobs } from './utils/cronJobs.js'
+
+// Routes
+import authRoutes from './routes/auth.js'
+import userRoutes from './routes/user.js'
+import productRoutes from './routes/products.js'
+import categoryRoutes from './routes/categories.js'
+import brandRoutes from './routes/brands.js'
+import platformRoutes from './routes/platforms.js'
+import genreRoutes from './routes/genres.js'
+import orderRoutes from './routes/orders.js'
+import reviewRoutes from './routes/reviews.js'
+import inventoryRoutes from './routes/inventory.js'
+import checkoutRoutes from './routes/checkout.js'
+import paymentRoutes from './routes/payment.js'
+
+dotenv.config()
+
+const app: Express = express()
+
+// Connect to MongoDB
+connectDB()
+
+// Start background jobs
+startCronJobs()
+
+// Middleware
+app.use(helmet()) // Security headers
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
+    credentials: true,
+  })
+)
+app.use(morgan('combined')) // Logging
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ limit: '10mb', extended: true }))
+app.use(cookieParser())
+
+// Static files for images
+app.use('/images', express.static('public/images'))
+
+// Routes
+app.use('/api/auth', authRoutes)
+app.use('/api/user', userRoutes)
+app.use('/api/products', productRoutes)
+app.use('/api/categories', categoryRoutes)
+app.use('/api/brands', brandRoutes)
+app.use('/api/platforms', platformRoutes)
+app.use('/api/genres', genreRoutes)
+app.use('/api/orders', orderRoutes)
+app.use('/api/reviews', reviewRoutes)
+app.use('/api/inventory', inventoryRoutes)
+app.use('/api/checkout', checkoutRoutes)
+app.use('/api/payment', paymentRoutes)
+
+// Health check
+app.get('/api/health', (req: Request, res: Response) => {
+  res.json({ status: 'Server is running', timestamp: new Date() })
+})
+
+// 404 handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ success: false, message: 'Route not found' })
+})
+
+// Error handler (must be last)
+app.use(errorHandler)
+
+const PORT = process.env.PORT || 5000
+const server = app.listen(PORT, () => {
+  console.log(`
+╔════════════════════════════════════════════╗
+║  🎮 WebBanGame Server                      ║
+║  ✓ Running on http://localhost:${PORT}      ║
+║  ✓ Environment: ${process.env.NODE_ENV || 'development'}           ║
+╚════════════════════════════════════════════╝
+  `)
+})
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server')
+  server.close(() => {
+    console.log('HTTP server closed')
+    process.exit(0)
+  })
+})
