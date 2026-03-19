@@ -193,8 +193,8 @@ const CartPage: FC = () => {
 
                         {/* Price Info */}
                         <div className="flex items-center gap-2 mt-3">
-                          <span className="text-sm text-slate-400">
-                            {item.quantity} × {item.price.toLocaleString('vi-VN')} ₫
+                          <span className="text-lg text-slate-400">
+                            {item.quantity} x
                           </span>
                           <span className="text-lg font-black text-indigo-400">
                             {(item.price * item.quantity).toLocaleString('vi-VN')} ₫

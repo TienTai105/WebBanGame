@@ -1,6 +1,6 @@
-import { FC, useState, useEffect } from 'react'
+import { FC, useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CheckCircle, Phone, Mail, ArrowRight, Clock, Loader } from 'lucide-react'
+import { CheckCircle, Phone, Mail, ArrowRight, Loader } from 'lucide-react'
 import { useCart } from '../context/CartContext'
 import Button from '../components/atomic/Button'
 import Stepper from '../components/modules/Stepper'
@@ -21,6 +21,7 @@ interface OrderData {
     address: string
     city: string
     ward: string
+    district?: string
   }
   appliedCodes: { code: string; amount: number; type: 'discount' | 'shipping' }[]
   orderCode?: string
@@ -43,67 +44,54 @@ const OrderConfirmPage: FC = () => {
   const { clearCart } = useCart()
   const [orderData, setOrderData] = useState<OrderData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
 
   const orderId = searchParams.get('orderId')
-
-  // Countdown timer for reservation window
-  useEffect(() => {
-    if (!orderData?.reservedUntil) return
-    const target = new Date(orderData.reservedUntil).getTime()
-
-    const tick = () => {
-      const diff = Math.max(0, Math.floor((target - Date.now()) / 1000))
-      setSecondsLeft(diff)
-    }
-    tick()
-    const interval = setInterval(tick, 1000)
-    return () => clearInterval(interval)
-  }, [orderData?.reservedUntil])
-
-  const formatCountdown = (s: number) => {
-    const m = Math.floor(s / 60)
-    const sec = s % 60
-    return `${m}:${sec.toString().padStart(2, '0')}`
-  }
-
-  // Calculate estimated delivery
-  const getEstimatedDelivery = (method: PaymentMethod) => {
-    const today = new Date()
-    let days = 2
-    if (method === 'momo') days = 1
-    if (method === 'cash') days = 3
-
-    const delivery = new Date(today)
-    delivery.setDate(delivery.getDate() + days)
-    return delivery.toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' })
-  }
+  const toastShownRef = useRef(false)
+  const mountedRef = useRef(false)
 
   useEffect(() => {
     // Fetch order from API using orderId from URL params or localStorage
     const fetchOrder = async () => {
+      // Prevent running twice in strict mode or on re-renders
+      if (mountedRef.current) return
+      mountedRef.current = true
+
       try {
         setLoading(true)
         const id = orderId || localStorage.getItem('lastOrderId')
         
+        console.log('📥 FETCH ORDER - ID:', id)
+        
         if (!id) {
+          console.log('❌ NO ORDER ID - Redirecting to checkout')
           navigate('/checkout')
           return
         }
 
+        console.log('🔄 FETCHING ORDER FROM API...')
         const res = await api.get(`/orders/${id}`)
+        console.log('✅ API RESPONSE:', res.data)
+        
         const order = res.data.data
+        console.log('📦 ORDER DATA:', order)
+        
+        if (!order) {
+          console.log('❌ NO ORDER DATA IN RESPONSE')
+          navigate('/checkout')
+          return
+        }
         
         // Transform order data to match OrderData interface
         const orderData: OrderData = {
           paymentMethod: order.paymentMethod === 'Momo' ? 'momo' : 'cash',
           formData: {
             fullName: order.shippingAddress.name,
-            email: '', // Email not stored in order, get from user if needed
+            email: order.shippingAddress.email || '',
             phone: order.shippingAddress.phone,
             address: order.shippingAddress.address,
             city: order.shippingAddress.city,
-            ward: '', // Ward not in shipping address model
+            ward: order.shippingAddress.ward || '',
+            district: order.shippingAddress.district || '',
           },
           appliedCodes: [], // Not tracked in current order model
           orderCode: order.orderCode,
@@ -119,16 +107,23 @@ const OrderConfirmPage: FC = () => {
           })),
         }
         
+        console.log('🎯 TRANSFORMED ORDER:', orderData)
         setOrderData(orderData)
-        // Clear cart after loading order
+        // Clear cart after loading order (safe to call directly without dependency issues)
         clearCart()
         
         // Save orderId to localStorage for future reference
         localStorage.setItem('lastOrderId', order._id)
         // Clear checkout data since we now have order from DB
         localStorage.removeItem('checkoutData')
+        console.log('✨ ORDER LOADED SUCCESSFULLY')
       } catch (err: any) {
-        console.error('Failed to fetch order:', err)
+        console.error('❌ FETCH ORDER ERROR:', {
+          message: err.message,
+          response: err.response?.data,
+          status: err.response?.status,
+          stack: err.stack
+        })
         navigate('/checkout')
       } finally {
         setLoading(false)
@@ -136,32 +131,28 @@ const OrderConfirmPage: FC = () => {
     }
 
     fetchOrder()
-  }, [orderId, navigate, clearCart])
+  }, []) // Empty dependency - fetch ONCE on mount only
 
-  // Poll for Momo payment confirmation
+  // Auto-show success toast for Momo payment on load
   useEffect(() => {
-    if (!orderData?.orderId || orderData?.paymentMethod !== 'momo') return
-
-    const pollPaymentStatus = async () => {
-      try {
-        const res = await api.get(`/payment/momo/status/${orderData.orderId}`)
-        const { paymentStatus } = res.data.data
-        if (paymentStatus === 'paid') {
-          // Payment confirmed by Momo callback
-          successToast('Thanh toán thành công!')
-          // Stop polling
-          return true
-        }
-      } catch (err) {
-        // Silent error during polling
-      }
-      return false
+    if (orderData?.paymentMethod === 'momo' && !toastShownRef.current) {
+      toastShownRef.current = true
+      successToast('Thanh toán Momo thành công!')
+      console.log('✨ AUTO SUCCESS TOAST SHOWN FOR MOMO')
     }
+  }, [orderData?.paymentMethod])
 
-    // Start polling every 3 seconds for Momo payments
-    const interval = setInterval(pollPaymentStatus, 3000)
-    return () => clearInterval(interval)
-  }, [orderData?.orderId, orderData?.paymentMethod])
+  // Calculate estimated delivery
+  const getEstimatedDelivery = (method: PaymentMethod) => {
+    const today = new Date()
+    let days = 4
+    if (method === 'momo') days = 3
+    if (method === 'cash') days = 4
+
+    const delivery = new Date(today)
+    delivery.setDate(delivery.getDate() + days)
+    return delivery.toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' })
+  }
 
   if (loading) {
     return (
@@ -198,6 +189,7 @@ const OrderConfirmPage: FC = () => {
     address: '',
     city: '',
     ward: '',
+    district: '',
   }
   const appliedCodes = orderData?.appliedCodes || []
 
@@ -290,28 +282,6 @@ const OrderConfirmPage: FC = () => {
             <p className="text-slate-400 text-lg">Cảm ơn bạn đã mua sắm tại WebBanGame</p>
           </div>
 
-          {/* Reservation Countdown Banner */}
-          {orderData?.reservedUntil && secondsLeft !== null && (
-            <div className={`flex items-center gap-3 p-4 rounded-lg border mb-8 ${
-              secondsLeft === 0
-                ? 'bg-red-900/30 border-red-500/40 text-red-300'
-                : secondsLeft < 120
-                ? 'bg-yellow-900/30 border-yellow-500/40 text-yellow-300'
-                : 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200'
-            }`}>
-              <Clock className="w-5 h-5 flex-shrink-0" />
-              {secondsLeft === 0 ? (
-                <span className="font-semibold">Thời gian giữ hàng đã hết. Nếu chưa thanh toán, đơn hàng có thể bị huỷ tự động.</span>
-              ) : (
-                <span>
-                  Hàng được giữ cho bạn trong{' '}
-                  <span className="font-black text-lg tabular-nums">{formatCountdown(secondsLeft)}</span>
-                  {' '}— vui lòng hoàn tất thanh toán trước khi hết giờ.
-                </span>
-              )}
-            </div>
-          )}
-
           {/* Order Info Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
             <OrderInfoCard
@@ -373,14 +343,17 @@ const OrderConfirmPage: FC = () => {
 
           {/* Shipping Info */}
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 mb-8">
-            <h3 className="text-xl font-bold text-white mb-4">Địa chỉ giao hàng</h3>
+            <h3 className="text-xl font-bold text-white mb-4">Thông tin giao hàng</h3>
             <div className="bg-slate-800/50 rounded p-4">
               <p className="text-white font-semibold mb-1">{formData.fullName}</p>
-              <p className="text-slate-300 text-sm">{formData.address}</p>
               <p className="text-slate-300 text-sm">
-                {formData.ward}, {formData.city}
+                {formData.address}
+                {formData.district && <span>, {formData.district}</span>}
+                {formData.city && <span>, {formData.city}</span>}
               </p>
-              <p className="text-slate-300 text-sm mt-3">📞 {formData.phone}</p>
+              {formData.phone && (
+                <p className="text-slate-300 text-sm mt-3">{formData.phone}</p>
+              )}
             </div>
           </div>
 

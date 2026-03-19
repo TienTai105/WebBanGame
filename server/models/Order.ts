@@ -16,6 +16,9 @@ interface IShippingAddress {
   address: string
   city: string
   phone: string
+  ward?: string
+  district?: string
+  email?: string
 }
 
 interface IOrderStatusHistory {
@@ -133,6 +136,9 @@ const orderSchema = new Schema<IOrder>(
       address: { type: String, required: true },
       city: { type: String, required: true },
       phone: { type: String, required: true },
+      ward: { type: String },
+      district: { type: String },
+      email: { type: String },
     },
     trackingNumber: String,
     reservedAt: Date,

@@ -78,14 +78,25 @@ class MomoService {
       lang,
     }
 
+    // 🔍 DEBUG: Log full request details
+    console.log('🔍 MOMO REQUEST DEBUG:')
+    console.log('  Raw Signature:', rawSignature)
+    console.log('  Calculated Signature:', signature)
+    console.log('  Request Body:', JSON.stringify(requestBody, null, 2))
+    console.log('  API URL:', this.momoUrl)
+
     try {
       const response = await axios.post<MomoPaymentResponse>(this.momoUrl, requestBody, {
         headers: { 'Content-Type': 'application/json' },
       })
 
+      console.log('✅ MOMO RESPONSE:', JSON.stringify(response.data, null, 2))
       return response.data
     } catch (error: any) {
-      console.error('❌ Momo API Error:', error.response?.data || error.message)
+      console.error('❌ Momo API Error:')
+      console.error('  Status:', error.response?.status)
+      console.error('  Data:', JSON.stringify(error.response?.data, null, 2))
+      console.error('  Message:', error.message)
       throw new Error(`Momo payment creation failed: ${error.response?.data?.message || error.message}`)
     }
   }
@@ -110,6 +121,55 @@ class MomoService {
     const expectedSignature = this.generateSignature(rawSignature)
     return expectedSignature === signature
   }
-}
 
+  /**
+   * Query payment status from Momo
+   * Check if a payment request has been completed
+   */
+  async queryPaymentStatus(requestId: string, orderId: string, amount: number): Promise<{
+    resultCode: number
+    message: string
+    transId?: string
+  }> {
+    const queryUrl = process.env.MOMO_ENVIRONMENT === 'production'
+      ? 'https://payment.momo.vn/v2/gateway/api/query'
+      : 'https://test-payment.momo.vn/v2/gateway/api/query'
+
+    // Build raw signature for query request
+    const rawSignature = [
+      `accessKey=${this.accessKey}`,
+      `orderId=${orderId}`,
+      `partnerCode=${this.partnerCode}`,
+      `requestId=${requestId}`,
+    ].join('&')
+
+    const signature = this.generateSignature(rawSignature)
+
+    const requestBody = {
+      partnerCode: this.partnerCode,
+      accessKey: this.accessKey,
+      requestId,
+      orderId,
+      signature,
+      lang: 'vi',
+    }
+
+    try {
+      console.log('🔍 QUERYING MOMO PAYMENT STATUS:', { requestId, orderId })
+      const response = await axios.post(queryUrl, requestBody, {
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      console.log('📊 MOMO QUERY RESPONSE:', JSON.stringify(response.data, null, 2))
+      return {
+        resultCode: response.data.resultCode,
+        message: response.data.message,
+        transId: response.data.transId,
+      }
+    } catch (error: any) {
+      console.error('❌ Momo Query Error:', error.response?.data || error.message)
+      throw error
+    }
+  }
+}
 export default new MomoService()

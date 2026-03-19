@@ -32,7 +32,12 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     // Verify token
     console.log('🔍 Verifying token:', token.substring(0, 20) + '...')
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any
-    console.log('✅ Token verified, user:', decoded._id)
+    console.log('✅ Token verified, payload:', {
+      _id: decoded._id,
+      userId: decoded.userId,
+      email: decoded.email,
+      role: decoded.role,
+    })
     req.user = decoded
     next()
   } catch (error: any) {

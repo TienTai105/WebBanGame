@@ -154,6 +154,7 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
 /**
  * GET /api/payment/momo/status/:orderId
  * Polling endpoint to check payment status
+ * Auto-queries Momo if payment not yet confirmed
  */
 export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params
@@ -168,6 +169,68 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
     return res.status(403).json({ success: false, message: 'Not authorized' })
   }
 
+  // If already paid, return immediately
+  if (order.paymentStatus === 'paid') {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.set('Pragma', 'no-cache')
+    res.set('Expires', '0')
+    return res.status(200).json({
+      success: true,
+      data: {
+        paymentStatus: order.paymentStatus,
+        orderStatus: order.orderStatus,
+        momoTransactionId: order.momoTransactionId,
+      },
+    })
+  }
+
+  // If Momo payment and not paid yet, query Momo API to check status
+  if (order.paymentMethod === 'Momo' && order.momoRequestId && order.paymentStatus === 'unpaid') {
+    try {
+      const momoStatus = await momoService.queryPaymentStatus(
+        order.momoRequestId,
+        order._id.toString(),
+        order.finalPrice
+      )
+
+      // resultCode 0 = payment successful
+      if (momoStatus.resultCode === 0) {
+        console.log('✅ MOMO PAYMENT DETECTED VIA QUERY - Updating order to paid')
+        
+        // Confirm order stock (move reserved → sold)
+        try {
+          await inventoryService.confirmOrderStock(order.orderItems as any, order._id.toString())
+        } catch (err: any) {
+          console.error('⚠️ Stock confirm failed:', err.message)
+        }
+
+        // Mark order as paid
+        order.paymentStatus = 'paid'
+        order.momoTransactionId = momoStatus.transId || `QUERY_${Date.now()}`
+        await order.save()
+
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+        res.set('Pragma', 'no-cache')
+        res.set('Expires', '0')
+        return res.status(200).json({
+          success: true,
+          data: {
+            paymentStatus: 'paid',
+            orderStatus: order.orderStatus,
+            momoTransactionId: order.momoTransactionId,
+          },
+        })
+      }
+    } catch (err: any) {
+      console.error('⚠️ Momo query error:', err.message)
+      // Silent fail - return current status
+    }
+  }
+
+  // Return current status
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.set('Pragma', 'no-cache')
+  res.set('Expires', '0')
   res.status(200).json({
     success: true,
     data: {

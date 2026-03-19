@@ -67,12 +67,32 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
   // Check authorization
   const userId = (req as any).user._id
   const userRole = (req as any).user.role
-  if (order.user.toString() !== userId && userRole !== 'admin') {
+  
+  // After populate, order.user is a full User object, so get _id from it
+  const orderUserId = order.user && typeof order.user === 'object' 
+    ? (order.user as any)._id?.toString() 
+    : (order.user as any)?.toString()
+  
+  console.log('🔐 ORDER AUTH DEBUG:', {
+    orderId: req.params.id,
+    orderUserId,
+    requestUserId: userId?.toString(),
+    userRole,
+    match: orderUserId === userId?.toString(),
+  })
+  
+  if (orderUserId !== userId?.toString() && userRole !== 'admin') {
+    console.log('❌ AUTH FAILED - User mismatch')
     return res.status(403).json({
       success: false,
       message: 'Not authorized',
     })
   }
+
+  // Force no-cache headers to prevent 304 responses
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.set('Pragma', 'no-cache')
+  res.set('Expires', '0')
 
   res.status(200).json({
     success: true,

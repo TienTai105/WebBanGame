@@ -314,6 +314,9 @@ const CheckoutPage: FC = () => {
           address: formData.address,
           city: formData.city,
           phone: formData.phone,
+          ward: formData.ward || '',
+          district: formData.district || '',
+          email: formData.email || '',
         },
       })
 
