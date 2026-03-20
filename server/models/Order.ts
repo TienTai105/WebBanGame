@@ -3,12 +3,13 @@ import mongoose, { Schema, Document, Model } from 'mongoose'
 interface IOrderItem {
   product: mongoose.Types.ObjectId
   variantSku?: string                           // Snapshot: variant SKU
+  variant?: string                              // Snapshot: variant name (ASIAN, USA, EURO)
+  warranty?: string                             // Snapshot: warranty (3 Tháng, 12 Tháng)
   quantity: number
   name: string                                  // Snapshot: product name at purchase
   image?: string                                // Snapshot: product image URL
   priceAtPurchase: number                       // Snapshot: price when ordered
   price: number                                 // Legacy: keeping for backward compat
-  variant?: Record<string, any>                 // Legacy: variant attributes snapshot
 }
 
 interface IShippingAddress {
@@ -44,6 +45,7 @@ interface IOrder extends Document {
   trackingNumber?: string
   reservedAt?: Date
   reservationExpiresAt?: Date
+  holdId?: string
   momoRequestId?: string
   momoTransactionId?: string
   statusHistory?: IOrderStatusHistory[]
@@ -97,7 +99,10 @@ const orderSchema = new Schema<IOrder>(
           required: true,
           min: 0,
         },
-        variant: Schema.Types.Mixed,  // Snapshot: variant attributes
+        variant: {
+          type: String,
+          default: null,
+        },
       },
     ],
     totalPrice: {
@@ -143,6 +148,7 @@ const orderSchema = new Schema<IOrder>(
     trackingNumber: String,
     reservedAt: Date,
     reservationExpiresAt: Date,
+    holdId: String,
     momoRequestId: String,
     momoTransactionId: String,
     statusHistory: [

@@ -160,6 +160,14 @@ const CheckoutPage: FC = () => {
 
   // Create hold once items + user are loaded
   useEffect(() => {
+    // If coming back from failed payment, reset holdCreated to allow new hold
+    const fromFailedPayment = sessionStorage.getItem('paymentFailed')
+    if (fromFailedPayment) {
+      holdCreated.current = false
+      sessionStorage.removeItem('paymentFailed')
+      console.log('🔄 Reset hold tracking after failed payment')
+    }
+    
     if (user && items.length > 0 && !holdCreated.current) {
       createCheckoutHold()
     }
@@ -284,6 +292,7 @@ const CheckoutPage: FC = () => {
     const orderItems = items.map(item => ({
       product: item.productId,
       variantSku: item.variantSku || null,
+      variant: item.variant || null,
       quantity: item.quantity,
       name: item.name,
       image: item.image,
@@ -328,7 +337,7 @@ const CheckoutPage: FC = () => {
       // For Momo: init payment and redirect to Momo, after success Momo will redirect to order-confirm
       if (paymentMethod === 'momo') {
         successToast(`Đơn hàng ${order.orderCode} đã được tạo!`)
-        clearCart()
+        // Don't clear cart yet - will be cleared after payment succeeds on OrderConfirmPage
         try {
           const payRes = await api.post('/payment/momo/init', { orderId: order._id })
           // Redirect to Momo payment URL
@@ -342,7 +351,7 @@ const CheckoutPage: FC = () => {
       }
 
       // For COD: redirect to order-confirm with orderId
-      clearCart()
+      clearCart() // Clear cart for COD (no payment step needed)
       successToast(`Đơn hàng ${order.orderCode} đã được tạo!`)
       navigate(`/order-confirm?orderId=${order._id}`)
     } catch (err: any) {
@@ -897,6 +906,11 @@ const CheckoutPage: FC = () => {
                         <p className="text-white font-semibold text-base truncate">{item.name}</p>
                         {item.variant && (
                           <p className="text-sm text-slate-400 mb-2">{item.variant}</p>
+                        )}
+                        {item.warranty && (
+                          <p className="text-sm text-slate-300 mt-1 mb-2">
+                            Bảo hành: {item.warranty}
+                          </p>
                         )}
                         <p className="text-sm text-indigo-400 font-bold mb-3">
                           {item.price.toLocaleString('vi-VN')} ₫

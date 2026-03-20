@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import Order from '../models/Order.js'
 import momoService from '../services/momoService.js'
 import inventoryService from '../services/inventoryService.js'
+import { sendOrderConfirmationEmail } from '../services/emailService.js'
 
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) =>
   (req: Request, res: Response, next: NextFunction) => {
@@ -133,21 +134,79 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
     order.momoTransactionId = transId
     await order.save()
 
-    return res.status(200).json({ success: true, message: 'Payment confirmed' })
-  } else {
-    // Payment failed
-    // Release hold if any
-    if (order.reservedAt && order.orderStatus === 'pending' && order.paymentStatus === 'unpaid') {
-      try {
-        await inventoryService.releaseStock(order.orderItems as any, order._id.toString())
-        order.orderStatus = 'failed'
-        await order.save()
-      } catch (err: any) {
-        console.error('⚠️ Stock release failed:', err.message)
+    // Send order confirmation email after payment success
+    try {
+      const populatedOrder = await (order as any).populate('user').populate({
+        path: 'orderItems.product',
+        select: 'name price',
+      })
+      
+      const customerEmail = populatedOrder.shippingAddress.email || (populatedOrder.user as any)?.email
+      if (customerEmail) {
+        const emailPayload = {
+          to: customerEmail,
+          orderCode: populatedOrder.orderCode,
+          orderItems: populatedOrder.orderItems.map((item: any) => ({
+            name: item.product?.name || 'Unknown Product',
+            quantity: item.quantity,
+            price: item.price,
+            variantSku: item.variantSku,
+            variant: item.variant,
+            warranty: item.warranty,
+          })),
+          shippingAddress: {
+            name: populatedOrder.shippingAddress.name || '',
+            address: populatedOrder.shippingAddress.address || '',
+            city: populatedOrder.shippingAddress.city || '',
+            phone: populatedOrder.shippingAddress.phone || '',
+            district: populatedOrder.shippingAddress.district,
+            ward: populatedOrder.shippingAddress.ward,
+          },
+          totalPrice: populatedOrder.totalPrice,
+          discountAmount: populatedOrder.discountAmount || 0,
+          shippingFee: 0,
+          finalTotal: populatedOrder.finalPrice,
+          paymentMethod: populatedOrder.paymentMethod,
+          paymentStatus: 'paid',
+        }
+        
+        await sendOrderConfirmationEmail(emailPayload)
+        console.log(`✅ Order confirmation email sent to ${customerEmail}`)
       }
+    } catch (emailError: any) {
+      console.error('⚠️ Failed to send confirmation email after Momo payment:', emailError.message)
     }
 
-    return res.status(400).json({ success: false, message: `Payment failed: ${resultCode}` })
+    return res.status(200).json({ success: true, message: 'Payment confirmed' })
+  } else {
+    // Payment failed - DELETE order since payment not completed
+    console.log(`❌ MOMO PAYMENT FAILED - Result Code: ${resultCode} - Deleting order ${order._id}`)
+    
+    try {
+      // Release stock first
+      await inventoryService.releaseStock(order.orderItems as any, order._id.toString())
+      
+      // If order has holdId, mark hold as released so it can be reused
+      if (order.holdId) {
+        const CheckoutHold = require('../models/CheckoutHold.js').default
+        await CheckoutHold.updateOne(
+          { holdId: order.holdId },
+          { released: false }
+        ).catch((err: any) => console.log('⚠️ Hold reset failed:', err.message))
+      }
+      
+      // Delete order from DB
+      await Order.deleteOne({ _id: order._id })
+      console.log(`✅ Order deleted after failed payment: ${order._id}`)
+    } catch (err: any) {
+      console.error('⚠️ Error cleaning up failed payment:', err.message)
+    }
+
+    // Don't send email on failed payment
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.' 
+    })
   }
 })
 
@@ -209,6 +268,47 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
         order.momoTransactionId = momoStatus.transId || `QUERY_${Date.now()}`
         await order.save()
 
+        // Send order confirmation email after payment success
+        try {
+          const populatedOrder = await (order as any).populate('user').populate({
+            path: 'orderItems.product',
+            select: 'name price',
+          })
+          
+          const customerEmail = populatedOrder.shippingAddress.email || (populatedOrder.user as any)?.email
+          if (customerEmail) {
+            const emailPayload = {
+              to: customerEmail,
+              orderCode: populatedOrder.orderCode,
+              orderItems: populatedOrder.orderItems.map((item: any) => ({
+                name: item.product?.name || 'Unknown Product',
+                quantity: item.quantity,
+                price: item.price,
+                variantSku: item.variantSku,
+                variant: item.variant,
+              })),
+              shippingAddress: {
+                name: populatedOrder.shippingAddress.name || '',
+                address: populatedOrder.shippingAddress.address || '',
+                city: populatedOrder.shippingAddress.city || '',
+                phone: populatedOrder.shippingAddress.phone || '',
+                district: populatedOrder.shippingAddress.district,
+                ward: populatedOrder.shippingAddress.ward,
+              },
+              totalPrice: populatedOrder.totalPrice,
+              discountAmount: populatedOrder.discountAmount || 0,
+              shippingFee: 0,
+              finalTotal: populatedOrder.finalPrice,
+              paymentMethod: populatedOrder.paymentMethod,
+              paymentStatus: 'paid',
+            }
+            
+            await sendOrderConfirmationEmail(emailPayload)
+          }
+        } catch (emailError: any) {
+          console.error('⚠️ Failed to send confirmation email via query:', emailError.message)
+        }
+
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
         res.set('Pragma', 'no-cache')
         res.set('Expires', '0')
@@ -219,6 +319,37 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
             orderStatus: order.orderStatus,
             momoTransactionId: order.momoTransactionId,
           },
+        })
+      } else {
+        // Payment failed - DELETE order since payment not completed
+        console.log(`❌ MOMO PAYMENT FAILED FROM QUERY - Result Code: ${momoStatus.resultCode} - Deleting order ${order._id}`)
+        
+        try {
+          // Release stock first
+          await inventoryService.releaseStock(order.orderItems as any, order._id.toString())
+          
+          // If order has holdId, mark hold as released so it can be reused
+          if (order.holdId) {
+            const CheckoutHold = require('../models/CheckoutHold.js').default
+            await CheckoutHold.updateOne(
+              { holdId: order.holdId },
+              { released: false }
+            ).catch((err: any) => console.log('⚠️ Hold reset failed:', err.message))
+          }
+          
+          // Delete order from DB
+          await Order.deleteOne({ _id: order._id })
+          console.log(`✅ Order deleted after failed payment: ${order._id}`)
+        } catch (err: any) {
+          console.error('⚠️ Error cleaning up failed payment:', err.message)
+        }
+
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+        res.set('Pragma', 'no-cache')
+        res.set('Expires', '0')
+        return res.status(400).json({
+          success: false,
+          message: 'Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.',
         })
       }
     } catch (err: any) {
@@ -273,6 +404,47 @@ export const testMomoCallback = asyncHandler(async (req: Request, res: Response)
     order.paymentStatus = 'paid'
     order.momoTransactionId = `TEST_${Date.now()}`
     await order.save()
+
+    // Send order confirmation email after payment success
+    try {
+      const populatedOrder = await (order as any).populate('user').populate({
+        path: 'orderItems.product',
+        select: 'name price',
+      })
+      
+      const customerEmail = populatedOrder.shippingAddress.email || (populatedOrder.user as any)?.email
+      if (customerEmail) {
+        const emailPayload = {
+          to: customerEmail,
+          orderCode: populatedOrder.orderCode,
+          orderItems: populatedOrder.orderItems.map((item: any) => ({
+            name: item.product?.name || 'Unknown Product',
+            quantity: item.quantity,
+            price: item.price,
+            variantSku: item.variantSku,
+            variant: item.variant,
+          })),
+          shippingAddress: {
+            name: populatedOrder.shippingAddress.name || '',
+            address: populatedOrder.shippingAddress.address || '',
+            city: populatedOrder.shippingAddress.city || '',
+            phone: populatedOrder.shippingAddress.phone || '',
+            district: populatedOrder.shippingAddress.district,
+            ward: populatedOrder.shippingAddress.ward,
+          },
+          totalPrice: populatedOrder.totalPrice,
+          discountAmount: populatedOrder.discountAmount || 0,
+          shippingFee: 0,
+          finalTotal: populatedOrder.finalPrice,
+          paymentMethod: populatedOrder.paymentMethod,
+          paymentStatus: 'paid',
+        }
+        
+        await sendOrderConfirmationEmail(emailPayload)
+      }
+    } catch (emailError: any) {
+      console.error('⚠️ Failed to send confirmation email in test callback:', emailError.message)
+    }
 
     res.status(200).json({ success: true, message: 'Test payment confirmed' })
   } catch (err: any) {

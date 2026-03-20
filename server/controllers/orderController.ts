@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import Order from '../models/Order.js'
 import CheckoutHold from '../models/CheckoutHold.js'
 import inventoryService from '../services/inventoryService.js'
+import { sendOrderConfirmationEmail } from '../services/emailService.js'
 
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) => 
   (req: Request, res: Response, next: NextFunction) => {
@@ -154,6 +155,7 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     shippingAddress,
     reservedAt,
     reservationExpiresAt,
+    holdId: holdId || undefined,
   })
 
   // STEP 3: Reserve stock only if hold was NOT consumed (hold already reserved the stock)
@@ -190,6 +192,44 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     path: 'orderItems.product',
     select: 'name slug images price',
   })
+
+  // Send order confirmation email only for COD (Momo sends after payment confirmed)
+  if (isCOD) {
+    try {
+      const customerEmail = shippingAddress?.email || (order.user as any)?.email
+      if (customerEmail) {
+        const emailPayload = {
+          to: customerEmail,
+          orderCode: order.orderCode,
+          orderItems: order.orderItems.map((item: any) => ({
+            name: item.product?.name || 'Unknown Product',
+            quantity: item.quantity,
+            price: item.price,
+            variantSku: item.variantSku,
+            variant: item.variant,
+          })),
+          shippingAddress: {
+            name: shippingAddress?.name || '',
+            address: shippingAddress?.address || '',
+            city: shippingAddress?.city || '',
+            phone: shippingAddress?.phone || '',
+            district: shippingAddress?.district,
+            ward: shippingAddress?.ward,
+          },
+          totalPrice: order.totalPrice,
+          discountAmount: order.discountAmount || 0,
+          shippingFee: 0,
+          finalTotal: order.finalPrice,
+          paymentMethod: order.paymentMethod,
+          paymentStatus: 'unpaid',
+        }
+        
+        await sendOrderConfirmationEmail(emailPayload)
+      }
+    } catch (emailError: any) {
+      console.error('⚠️ Failed to send order confirmation email:', emailError.message)
+    }
+  }
 
   res.status(201).json({
     success: true,

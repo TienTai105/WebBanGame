@@ -7,7 +7,7 @@ import Stepper from '../components/modules/Stepper'
 import OrderInfoCard from '../components/modules/OrderInfoCard'
 import NextStepItem from '../components/modules/NextStepItem'
 import InfoContactCard from '../components/modules/InfoContactCard'
-import { successToast } from '../utils/toast'
+import { successToast, errorToast } from '../utils/toast'
 import api from '../services/api'
 
 type PaymentMethod = 'cash' | 'momo'
@@ -77,7 +77,21 @@ const OrderConfirmPage: FC = () => {
         
         if (!order) {
           console.log('❌ NO ORDER DATA IN RESPONSE')
+          errorToast('Đơn hàng không tồn tại. Vui lòng tạo đơn hàng mới.')
           navigate('/checkout')
+          return
+        }
+
+        // Check payment status
+        if (order.paymentMethod === 'Momo' && order.paymentStatus === 'unpaid') {
+          console.log('⚠️ MOMO PAYMENT STILL UNPAID - Redirecting to checkout')
+          errorToast('Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.')
+          sessionStorage.setItem('paymentFailed', 'true')
+          localStorage.removeItem('lastOrderId')
+          
+          setTimeout(() => {
+            navigate('/checkout')
+          }, 2000)
           return
         }
         
@@ -103,13 +117,14 @@ const OrderConfirmPage: FC = () => {
             image: item.image || '',
             price: item.priceAtPurchase || item.price,
             quantity: item.quantity,
-            variant: item.variant?.size || item.variant?.color || '',
+            variant: typeof item.variant === 'string' ? item.variant : (item.variant?.size || item.variant?.color || ''),
+            warranty: item.warranty || '',
           })),
         }
         
         console.log('🎯 TRANSFORMED ORDER:', orderData)
         setOrderData(orderData)
-        // Clear cart after loading order (safe to call directly without dependency issues)
+        // Only clear cart after successful payment
         clearCart()
         
         // Save orderId to localStorage for future reference
@@ -124,6 +139,20 @@ const OrderConfirmPage: FC = () => {
           status: err.response?.status,
           stack: err.stack
         })
+        
+        // If order not found or deleted
+        if (err.response?.status === 404) {
+          console.log('❌ ORDER NOT FOUND (404) - Order was deleted after failed payment')
+          errorToast('Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.')
+          sessionStorage.setItem('paymentFailed', 'true')
+          localStorage.removeItem('lastOrderId')
+          
+          setTimeout(() => {
+            navigate('/checkout')
+          }, 2000)
+          return
+        }
+        
         navigate('/checkout')
       } finally {
         setLoading(false)
@@ -367,8 +396,11 @@ const OrderConfirmPage: FC = () => {
                 <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <p className="text-white font-semibold">{item.name}</p>
-                  {item.variant && <p className="text-indigo-400 text-sm">{item.variant}</p>}
-                  {item.warranty && <p className="text-slate-400 text-xs">Bảo hành: {item.warranty}</p>}
+                  {item.warranty ? (
+                    <p className="text-slate-300 text-sm">Bảo hành: {item.warranty}</p>
+                  ) : (
+                    item.variant && <p className="text-indigo-400 text-sm">{item.variant}</p>
+                  )}
                   <p className="text-slate-400 text-sm">Số lượng: {item.quantity}</p>
                 </div>
                 <p className="text-cyan-400 font-bold">
