@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext'
 import Button from '../components/atomic/Button'
 import Checkbox from '../components/atomic/Checkbox'
 import Stepper from '../components/modules/Stepper'
+import PromotionInput from '../components/modules/PromotionInput'
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio'
 import { successToast, warningToast, errorToast } from '../utils/toast'
 import { useProvinces } from '../hooks/useProvinces'
@@ -123,7 +124,7 @@ const CheckoutPage: FC = () => {
 
   // Debug: Log form visibility state
   useEffect(() => {
-    console.log('📋 Address Form State:')
+    console.log('Address Form State:')
     console.log('  - isEditingAddress:', isEditingAddress)
     console.log('  - savedAddresses.length:', savedAddresses.length)
     console.log('  - Should show form?', isEditingAddress || savedAddresses.length === 0)
@@ -203,7 +204,6 @@ const CheckoutPage: FC = () => {
   // ─────────────────────────────────────────────────────────────────────
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('momo')
-  const [discountCode, setDiscountCode] = useState('')
   const [appliedCodes, setAppliedCodes] = useState<{ code: string; amount: number; type: 'discount' | 'shipping' }[]>([])
 
   // Calculate totals
@@ -221,39 +221,6 @@ const CheckoutPage: FC = () => {
 
   const finalShippingFee = Math.max(0, shippingFee - shippingDiscountAmount)
   const finalTotal = totalPrice - productDiscountAmount + finalShippingFee
-
-  // Handle apply discount code
-  const handleApplyDiscount = () => {
-    // Discount codes mapping with type
-    const discountMap: Record<string, { amount: number; type: 'discount' | 'shipping' }> = {
-      'SAVE10': { amount: totalPrice * 0.1, type: 'discount' }, // 10% discount on products
-      'SAVE20': { amount: totalPrice * 0.2, type: 'discount' }, // 20% discount on products
-      'FREESHIP': { amount: shippingFee, type: 'shipping' }, // Free shipping
-      'SUMMER50': { amount: 50000, type: 'discount' }, // Fixed 50k discount on products
-    }
-
-    const code = discountCode.toUpperCase().trim()
-    if (!code) {
-      warningToast('Vui lòng nhập mã giảm giá')
-      return
-    }
-
-    // Check if code already applied
-    if (appliedCodes.some(item => item.code === code)) {
-      warningToast(`Mã ${code} đã được áp dụng rồi`)
-      return
-    }
-
-    const discountInfo = discountMap[code]
-    if (discountInfo) {
-      setAppliedCodes([...appliedCodes, { code, amount: discountInfo.amount, type: discountInfo.type }])
-      const typeLabel = discountInfo.type === 'shipping' ? 'miễn phí vận chuyển' : 'giảm giá'
-      successToast(`Áp dụng mã ${code} thành công! ${typeLabel} ${discountInfo.amount.toLocaleString('vi-VN')} ₫`)
-      setDiscountCode('')
-    } else {
-      warningToast('Mã giảm giá không hợp lệ')
-    }
-  }
 
   // Handle remove discount code
   const handleRemoveCode = (codeToRemove: string) => {
@@ -949,54 +916,68 @@ const CheckoutPage: FC = () => {
                   ))}
                 </div>
 
-                {/* Discount Code */}
-                <div className="space-y-2 py-4 border-b border-slate-800">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Nhập mã giảm giá"
-                      value={discountCode}
-                      onChange={(e) => setDiscountCode(e.target.value)}
-                      className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors text-sm"
-                    />
-                    <button
-                      onClick={handleApplyDiscount}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold transition-colors text-sm"
-                    >
-                      Áp dụng
-                    </button>
-                  </div>
-
-                  {/* Applied Codes List */}
-                  {appliedCodes.length > 0 && (
-                    <div className="space-y-2">
-                      {appliedCodes.map((item) => (
-                        <div
-                          key={item.code}
-                          className="flex justify-between items-center bg-lime-900/20 border border-lime-600/30 rounded p-2"
-                        >
-                          <div className="flex-1">
-                            <p className="text-xs text-slate-400 mb-1">
-                              {item.type === 'shipping' ? 'Voucher vận chuyển' : 'Voucher giảm giá'}
-                            </p>
-                            <div className="flex justify-between">
-                              <p className="text-sm font-bold text-lime-400">{item.code}</p>
-                              <p className="text-sm font-bold text-lime-400">
-                                {item.type === 'shipping' ? 'Miễn phí' : `-${item.amount.toLocaleString('vi-VN')} ₫`}
-                              </p>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleRemoveCode(item.code)}
-                            className="ml-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold transition-colors self-start"
-                          >
-                            Xóa
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                {/* Discount Code - Using PromotionInput Component */}
+                <div className="py-4 border-b border-slate-800">
+                  <PromotionInput
+                    isDark={true}
+                    orderValue={totalPrice}
+                    userId={user?._id}
+                    cartItems={items.map(item => ({
+                      productId: item.productId,
+                    }))}
+                    onDiscountApplied={(discount, code, _promotion) => {
+                      if (discount > 0) {
+                        // Check if already applied
+                        if (appliedCodes.some(item => item.code === code)) {
+                          warningToast(`Mã ${code} đã được áp dụng rồi`)
+                          return
+                        }
+                        
+                        setAppliedCodes([
+                          ...appliedCodes,
+                          { code, amount: discount, type: 'discount' }
+                        ])
+                        successToast(`Áp dụng mã ${code} thành công!`)
+                      } else if (discount === 0 && code) {
+                        // Clear if discount is 0
+                        setAppliedCodes(appliedCodes.filter(item => item.code !== code))
+                      }
+                    }}
+                    onError={(error) => {
+                      errorToast(error)
+                    }}
+                  />
                 </div>
+
+                {/* Applied Codes List */}
+                {appliedCodes.length > 0 && (
+                  <div className="space-y-2 py-4 border-b border-slate-800">
+                    {appliedCodes.map((item) => (
+                      <div
+                        key={item.code}
+                        className="flex justify-between items-center bg-lime-900/20 border border-lime-600/30 rounded p-2"
+                      >
+                        <div className="flex-1">
+                          <p className="text-xs text-slate-400 mb-1">
+                            {item.type === 'shipping' ? 'Voucher vận chuyển' : 'Voucher giảm giá'}
+                          </p>
+                          <div className="flex justify-between">
+                            <p className="text-sm font-bold text-lime-400">{item.code}</p>
+                            <p className="text-sm font-bold text-lime-400">
+                              {item.type === 'shipping' ? 'Miễn phí' : `-${item.amount.toLocaleString('vi-VN')} ₫`}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveCode(item.code)}
+                          className="ml-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold transition-colors self-start"
+                        >
+                          Xóa
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Pricing */}
                 <div className="space-y-3 py-4 border-b border-slate-800">

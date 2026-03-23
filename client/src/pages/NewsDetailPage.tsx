@@ -5,7 +5,7 @@ import { useComments, useCreateComment } from '../hooks/queries/useComments'
 import { useAuthStore } from '../stores/authStore'
 import ArticleCard from '../components/small/ArticleCard'
 import SectionContainer from '../components/atomic/SectionContainer'
-import { Icon } from '../components/atomic'
+import { Icon, Button } from '../components/atomic'
 import { BlocksRenderer } from '../components/modules/BlockRenderer'
 
 const NewsDetailPage: FC = () => {
@@ -322,7 +322,7 @@ const NewsDetailPage: FC = () => {
                 <div className="lg:col-span-4">
                   <div className="space-y-6 sticky top-24">
                     {/* Newsletter Signup */}
-                    <div className="p-6 bg-gradient-to-br from-cyan-600 to-blue-600 rounded-xl shadow-lg border border-cyan-500/30">
+                    <div className="p-6 bg-slate-800/50 rounded-xl shadow-lg border border-cyan-500/30">
                       <h3 className="text-white font-black text-lg mb-2 flex items-center gap-2">
                         <Icon name="mail" size="sm" />
                         Nhận tin tức
@@ -332,14 +332,16 @@ const NewsDetailPage: FC = () => {
                         <input
                           type="email"
                           placeholder="Email của bạn"
-                          className="w-full px-4 py-3 rounded-lg bg-white text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition font-medium text-sm"
+                          className="w-full px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                         />
-                        <button
+                        <Button
                           type="submit"
-                          className="w-full px-4 py-3 bg-white text-cyan-600 font-bold rounded-lg hover:bg-slate-100 transition shadow-lg text-sm"
+                          variant="primary"
+                          size="md"
+                          className="w-full "
                         >
                           SUBSCRIBE
-                        </button>
+                        </Button>
                       </form>
                     </div>
 
@@ -403,9 +405,13 @@ const NewsDetailPage: FC = () => {
                       <p className="text-slate-400 text-xs mb-4 line-clamp-2">
                         Cập nhật các bản phát hành sắp tới
                       </p>
-                      <button className="w-full px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded-lg transition shadow-lg hover:shadow-cyan-500/30 text-sm uppercase">
+                      <Button
+                        variant="primary"
+                        size="md"
+                        className="w-full"
+                      >
                         Xem chi tiết
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -458,7 +464,7 @@ const NewsDetailPage: FC = () => {
                             placeholder="Nhập tên..."
                             value={formData.name}
                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition text-sm"
+                            className="w-full px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                             disabled={isSubmitting}
                           />
                         </div>
@@ -471,7 +477,7 @@ const NewsDetailPage: FC = () => {
                           placeholder="your@email.com"
                           value={isAuthenticated && user ? user.email : formData.email}
                           onChange={(e) => !isAuthenticated && setFormData({ ...formData, email: e.target.value })}
-                          className="w-full px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition text-sm"
+                          className="w-full px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                           disabled={isSubmitting || isAuthenticated}
                         />
                       </div>
@@ -483,27 +489,20 @@ const NewsDetailPage: FC = () => {
                         rows={5}
                         value={formData.content}
                         onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                        className="w-full px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition text-sm resize-none"
+                        className="w-full px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm resize-none"
                         disabled={isSubmitting}
                       />
                     </div>
-                    <button
+                    <Button
                       type="submit"
                       disabled={isSubmitting || createCommentMutation.isPending}
-                      className="px-6 py-3 bg-primary text-white font-bold rounded-lg transition shadow-lg hover:bg-primary-dark text-sm uppercase flex items-center gap-2"
+                      size="md"
+                      isLoading={isSubmitting || createCommentMutation.isPending}
+                      loadingText="Đang gửi..."
+                      icon={!isSubmitting && !createCommentMutation.isPending ? 'send' : undefined}
                     >
-                      {isSubmitting || createCommentMutation.isPending ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-slate-300 border-t-white rounded-full animate-spin" />
-                          Đang gửi...
-                        </>
-                      ) : (
-                        <>
-                          <Icon name="send" size="sm" />
-                          Gửi bình luận
-                        </>
-                      )}
-                    </button>
+                      Gửi bình luận
+                    </Button>
                   </form>
                 </div>
 

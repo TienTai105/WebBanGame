@@ -15,6 +15,8 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import NewsListPage from './pages/NewsListPage'
 import NewsDetailPage from './pages/NewsDetailPage'
+import PromotionPage from './pages/PromotionPage'
+import StorePage from './pages/StorePage'
 
 // Global Cart Modal Component - Handles navigation
 function GlobalCartModal() {
@@ -52,7 +54,7 @@ function AppContent() {
     if (pathname.startsWith('/products')) return 'products'
     if (pathname.startsWith('/category/phu-kien')) return 'accessories'
     if (pathname.startsWith('/news')) return 'news'
-    if (pathname.startsWith('/programs')) return 'programs'
+    if (pathname.startsWith('/promotions')) return 'promotions'
     if (pathname.startsWith('/store')) return 'store'
     return 'home'
   }
@@ -87,6 +89,8 @@ function AppContent() {
           <Route path="/order-confirm" element={<OrderConfirmPage />} />
           <Route path="/news" element={<NewsListPage />} />
           <Route path="/news/:slug" element={<NewsDetailPage />} />
+          <Route path="/promotions" element={<PromotionPage />} />
+          <Route path="/store" element={<StorePage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
         </Routes>

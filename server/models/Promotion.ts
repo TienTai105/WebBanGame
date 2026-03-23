@@ -14,10 +14,13 @@ interface IPromotion extends Document {
   usedCount: number                                // đã dùng bao nhiêu lần
   usagePerUser?: number                            // 1 user dùng tối đa 1 lần
   usedByUsers?: mongoose.Types.ObjectId[]          // users đã dùng
+  badge?: 'NEW_MEMBER' | 'HOT' | 'FLASH_SALE' | 'PREMIUM' | 'UNLIMITED'  // visual badge
+  applicableToNewMembersOnly?: boolean             // chỉ dành cho thành viên mới
   startDate: Date
   endDate: Date
   isActive: boolean
   description?: string
+  conditions?: string[]                            // điều kiện chi tiết (mảng text)
   createdAt: Date
   updatedAt: Date
 }
@@ -100,6 +103,15 @@ const promotionSchema = new Schema<IPromotion>(
         ref: 'User',
       },
     ],
+    badge: {
+      type: String,
+      enum: ['NEW_MEMBER', 'HOT', 'FLASH_SALE', 'PREMIUM', 'UNLIMITED'],
+      default: null,
+    },
+    applicableToNewMembersOnly: {
+      type: Boolean,
+      default: false,
+    },
     startDate: {
       type: Date,
       required: [true, 'Start date required'],
@@ -116,6 +128,7 @@ const promotionSchema = new Schema<IPromotion>(
       index: true,
     },
     description: String,
+    conditions: [String],                           // điều kiện chi tiết
   },
   { timestamps: true }
 )

@@ -1,10 +1,10 @@
-import { FC, useState } from 'react'
+import { FC, useState, useRef } from 'react'
 import Breadcrumb from '../atomic/Breadcrumb'
 import Pagination from '../modules/Pagination'
 import ProductCard from '../small/ProductCard'
 import { useProducts, ProductListFilters, usePlatforms, useCategories } from '../../hooks/queries/useProducts'
 import { cn } from '../../utils/cn'
-import { Checkbox } from '../ui/checkbox'
+import { Icon } from '../atomic'
 import { Slider } from '../ui/slider'
 
 interface PriceRange {
@@ -28,12 +28,10 @@ interface FilterState {
  * @component
  */
 const ProductListPage: FC = () => {
-  // Mock data - in production, fetch from backend
-  const AVAILABLE_BRANDS = ['ASUS ROG', 'Sony Interactive', 'Razer Blade', 'Logitech G']
-
   // Fetch platforms and categories from API
   const { data: platformsData = [] } = usePlatforms()
   const { data: categoriesData = [] } = useCategories()
+  const sortDetailsRef = useRef<HTMLDetailsElement>(null)
 
   // Filter state - now stores platform IDs instead of names
   const [filters, setFilters] = useState<FilterState>({
@@ -66,8 +64,30 @@ const ProductListPage: FC = () => {
   const displayProducts = products
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900">
-      <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20 py-12">
+    <main className="min-h-screen bg-slate-950 relative overflow-hidden" style={{
+      backgroundImage: `
+        radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
+        linear-gradient(135deg, 
+          rgba(15, 23, 42, 1) 0%,
+          rgba(30, 27, 75, 0.5) 25%,
+          rgba(15, 23, 42, 1) 50%,
+          rgba(30, 27, 75, 0.5) 75%,
+          rgba(15, 23, 42, 1) 100%)
+      `,
+      backgroundAttachment: 'fixed',
+    }}>
+      {/* Grid Pattern Overlay */}
+      <div className="absolute inset-0 opacity-5 pointer-events-none" style={{
+        backgroundImage: `
+          linear-gradient(0deg, transparent 24%, rgba(99, 102, 241, 0.05) 25%, rgba(99, 102, 241, 0.05) 26%, transparent 27%, transparent 74%, rgba(99, 102, 241, 0.05) 75%, rgba(99, 102, 241, 0.05) 76%, transparent 77%, transparent),
+          linear-gradient(90deg, transparent 24%, rgba(99, 102, 241, 0.05) 25%, rgba(99, 102, 241, 0.05) 26%, transparent 27%, transparent 74%, rgba(99, 102, 241, 0.05) 75%, rgba(99, 102, 241, 0.05) 76%, transparent 77%, transparent)
+        `,
+        backgroundSize: '50px 50px',
+      }}/>
+      {/* Content */}
+      <div className="relative z-10">
+        <div className="w-full px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20 py-12">
         {/* Breadcrumb - Auto-generated from route */}
         <Breadcrumb autoGenerate={true} />
 
@@ -75,7 +95,7 @@ const ProductListPage: FC = () => {
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Sidebar Filter */}
           <div className="w-full lg:w-80 shrink-0">
-            <div className="sticky top-8 bg-gradient-to-br from-indigo-950/60 to-slate-900/60 backdrop-blur-sm border border-indigo-500/30 rounded-xl p-6 space-y-6 shadow-lg shadow-indigo-500/10">
+            <div className="sticky top-8 bg-gradient-to-br from-indigo-950/60 to-slate-900/60 backdrop-blur-sm border border-indigo-500/30 rounded-xl p-6 space-y-6  shadow-indigo-500/10">
               <h2 className="text-lg font-black flex items-center gap-3">
                 <span className="material-symbols-outlined text-cyan-400 text-2xl">filter_alt</span>
                 <span className="bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">Bộ lọc</span>
@@ -84,37 +104,7 @@ const ProductListPage: FC = () => {
               {/* Filters Wrapper */}
               <div className="space-y-7">
                 {/* Brand Filter */}
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-widest bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent mb-4">
-                    Thương hiệu
-                  </h3>
-                  <div className="space-y-3">
-                    {AVAILABLE_BRANDS.map((brand) => (
-                      <label
-                        key={brand}
-                        className="flex items-center gap-3 cursor-pointer group px-3 py-2 rounded-lg hover:bg-indigo-500/10 transition-colors"
-                      >
-                        <Checkbox
-                          checked={filters.brands.includes(brand)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setFilters({ ...filters, brands: [...filters.brands, brand], page: 1 })
-                            } else {
-                              setFilters({
-                                ...filters,
-                                brands: filters.brands.filter((b) => b !== brand),
-                                page: 1,
-                              })
-                            }
-                          }}
-                        />
-                        <span className="text-sm font-medium text-slate-200 group-hover:text-cyan-400 transition-colors">
-                          {brand}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                
 
                 {/* Platform Filter */}
                 <div>
@@ -225,30 +215,63 @@ const ProductListPage: FC = () => {
             </div>
 
             {/* Sort Dropdown */}
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <span className="text-sm font-medium text-slate-300 whitespace-nowrap">Sắp xếp:</span>
-              <select
-                value={filters.sortBy}
-                onChange={(e) =>
-                  setFilters({
-                    ...filters,
-                    sortBy: e.target.value as FilterState['sortBy'],
-                  })
-                }
-                className={cn(
-                  'flex-1 sm:flex-none bg-indigo-900/30 border border-indigo-400/50',
-                  'rounded-lg text-sm text-white placeholder-slate-400',
-                  'focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/30',
-                  'transition-all duration-200',
-                  'px-3 py-2.5 cursor-pointer hover:bg-indigo-900/50'
-                )}
-              >
-                <option value="newest">Mới nhất</option>
-                <option value="priceAsc">Giá thấp đến cao</option>
-                <option value="priceDesc">Giá cao đến thấp</option>
-                <option value="bestSellers">Bán chạy nhất</option>
-              </select>
-            </div>
+            <details ref={sortDetailsRef} className="group relative w-48">
+              <summary className="flex items-center justify-between px-6 py-4 bg-slate-900/30 border border-indigo-500/30 rounded-lg text-white text-base font-medium cursor-pointer hover:border-indigo-400/50 transition list-none">
+                <span className="font-medium">
+                  {filters.sortBy === 'newest' && 'Mới nhất'}
+                  {filters.sortBy === 'priceAsc' && 'Giá thấp đến cao'}
+                  {filters.sortBy === 'priceDesc' && 'Giá cao đến thấp'}
+                  {filters.sortBy === 'bestSellers' && 'Bán chạy nhất'}
+                </span>
+                <Icon name="expand_more" size="md" className="group-open:rotate-180 transition text-indigo-400" />
+              </summary>
+              <div className="absolute top-full left-0 right-0 mb-2 bg-slate-900 border border-indigo-500/30 rounded-lg shadow-2xl z-50 overflow-hidden">
+                <button
+                  onClick={() => {
+                    setFilters({ ...filters, sortBy: 'newest' })
+                    sortDetailsRef.current?.removeAttribute('open')
+                  }}
+                  className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
+                    filters.sortBy === 'newest' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
+                  }`}
+                >
+                  Mới nhất
+                </button>
+                <button
+                  onClick={() => {
+                    setFilters({ ...filters, sortBy: 'priceAsc' })
+                    sortDetailsRef.current?.removeAttribute('open')
+                  }}
+                  className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
+                    filters.sortBy === 'priceAsc' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
+                  }`}
+                >
+                  Giá thấp đến cao
+                </button>
+                <button
+                  onClick={() => {
+                    setFilters({ ...filters, sortBy: 'priceDesc' })
+                    sortDetailsRef.current?.removeAttribute('open')
+                  }}
+                  className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
+                    filters.sortBy === 'priceDesc' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
+                  }`}
+                >
+                  Giá cao đến thấp
+                </button>
+                <button
+                  onClick={() => {
+                    setFilters({ ...filters, sortBy: 'bestSellers' })
+                    sortDetailsRef.current?.removeAttribute('open')
+                  }}
+                  className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
+                    filters.sortBy === 'bestSellers' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
+                  }`}
+                >
+                  Bán chạy nhất
+                </button>
+              </div>
+            </details>
           </div>
 
           {/* Loading State */}
@@ -309,9 +332,10 @@ const ProductListPage: FC = () => {
             </div>
           )}
         </div>
-        </div>
       </div>
-    </main>
+    </div>
+  </div>
+</main>
   )
 }
 

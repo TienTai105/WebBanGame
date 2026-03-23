@@ -4,7 +4,6 @@ import { useNewsList, useNewsCategories } from '../hooks/queries/useNews'
 import ArticleCard from '../components/small/ArticleCard'
 import Pagination from '../components/modules/Pagination'
 import SectionContainer from '../components/atomic/SectionContainer'
-import Breadcrumb from '../components/atomic/Breadcrumb'
 import SearchBar from '../components/small/SearchBar'
 import { Icon } from '../components/atomic'
 
@@ -38,15 +37,6 @@ const NewsListPage: FC = () => {
     setPage(1)
   }
 
-  const handleCategoryChange = (newCategory: string) => {
-    setCategory(newCategory === category ? '' : newCategory)
-    setPage(1)
-  }
-
-  const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setSort(e.target.value)
-    setPage(1)
-  }
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage)
@@ -89,28 +79,16 @@ const NewsListPage: FC = () => {
 
       {/* Content */}
       <div className="relative z-10">
-      {/* Breadcrumb */}
-      <SectionContainer className="pt-6">
-        <Breadcrumb
-          items={[
-            { label: 'Trang chủ', href: '/' },
-            { label: 'Tin tức & Bài viết' },
-          ]}
-        />
-      </SectionContainer>
 
       {/* Hero Section - Premium Design */}
-      <section className="relative overflow-hidden py-20 mt-6">
+      <section className="relative overflow-hidden py-15 mt-6 w-full max-w-8xl mx-auto">
         {/* Background Elements */}
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
-        </div>
+    
 
         <SectionContainer>
           {/* Badge */}
-          <div className="inline-block mb-4">
-            <div className="px-4 py-2 bg-cyan-500/20 border border-cyan-500/30 rounded-full">
+          <div className="inline-block mb-4 ">
+            <div className="px-4 py-2 rounded-full">
               <span className="text-cyan-400 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
                 <Icon name="newspaper" size="xs" />
                 Latest Updates
@@ -128,7 +106,7 @@ const NewsListPage: FC = () => {
       </section>
 
       {/* Filters Section - Using SearchBar & Built-in Components */}
-      <section className="bg-slate-900/50 border-y border-slate-800/50 sticky top-0 z-40 backdrop-blur-xl">
+      <section className=" sticky py-6 top-0 z-40 backdrop-blur-xl max-w-8xl mx-auto">
         <SectionContainer className="py-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Search Input - Using Built-in SearchBar */}
@@ -143,24 +121,24 @@ const NewsListPage: FC = () => {
 
             {/* Sort Dropdown */}
             <details ref={sortDetailsRef} className="group relative">
-              <summary className="flex items-center justify-between px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-sm cursor-pointer hover:border-slate-600/50 transition list-none">
+              <summary className="flex items-center justify-between px-6 py-4 bg-slate-900/30 border border-indigo-500/30 rounded-lg text-white text-base font-medium cursor-pointer hover:border-indigo-400/50 transition list-none">
                 <span className="font-medium">
                   {sort === 'newest' && 'Newest First'}
                   {sort === 'oldest' && 'Oldest First'}
                   {sort === 'mostviewed' && 'Most Viewed'}
                   {sort === 'trending' && 'Trending'}
                 </span>
-                <Icon name="expand_more" size="sm" className="group-open:rotate-180 transition text-cyan-400" />
+                <Icon name="expand_more" size="md" className="group-open:rotate-180 transition text-indigo-400" />
               </summary>
-              <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700/50 rounded-lg shadow-2xl z-50 overflow-hidden">
+              <div className="absolute top-full left-0 right-0 mb-2 bg-slate-900 border border-indigo-500/30 rounded-lg shadow-2xl z-50 overflow-hidden">
                 <button
                   onClick={() => {
                     setSort('newest')
                     setPage(1)
                     sortDetailsRef.current?.removeAttribute('open')
                   }}
-                  className={`w-full text-left px-4 py-3 text-sm font-medium transition border-l-2 ${
-                    sort === 'newest' ? 'bg-cyan-500/20 text-cyan-400 border-l-cyan-400' : 'text-slate-300 border-l-transparent hover:bg-slate-700/50'
+                  className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
+                    sort === 'newest' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
                   }`}
                 >
                   Newest First
@@ -171,8 +149,8 @@ const NewsListPage: FC = () => {
                     setPage(1)
                     sortDetailsRef.current?.removeAttribute('open')
                   }}
-                  className={`w-full text-left px-4 py-3 text-sm font-medium transition border-l-2 ${
-                    sort === 'oldest' ? 'bg-cyan-500/20 text-cyan-400 border-l-cyan-400' : 'text-slate-300 border-l-transparent hover:bg-slate-700/50'
+                  className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
+                    sort === 'oldest' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
                   }`}
                 >
                   Oldest First
@@ -183,8 +161,8 @@ const NewsListPage: FC = () => {
                     setPage(1)
                     sortDetailsRef.current?.removeAttribute('open')
                   }}
-                  className={`w-full text-left px-4 py-3 text-sm font-medium transition border-l-2 ${
-                    sort === 'mostviewed' ? 'bg-cyan-500/20 text-cyan-400 border-l-cyan-400' : 'text-slate-300 border-l-transparent hover:bg-slate-700/50'
+                  className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
+                    sort === 'mostviewed' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
                   }`}
                 >
                   Most Viewed
@@ -195,8 +173,8 @@ const NewsListPage: FC = () => {
                     setPage(1)
                     sortDetailsRef.current?.removeAttribute('open')
                   }}
-                  className={`w-full text-left px-4 py-3 text-sm font-medium transition border-l-2 ${
-                    sort === 'trending' ? 'bg-cyan-500/20 text-cyan-400 border-l-cyan-400' : 'text-slate-300 border-l-transparent hover:bg-slate-700/50'
+                  className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
+                    sort === 'trending' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
                   }`}
                 >
                   Trending
@@ -206,18 +184,18 @@ const NewsListPage: FC = () => {
 
             {/* Categories Dropdown */}
             <details ref={categoryDetailsRef} className="group relative">
-              <summary className="flex items-center justify-between px-4 py-3 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-sm cursor-pointer hover:border-slate-600/50 transition list-none">
+              <summary className="flex items-center justify-between px-6 py-4 bg-slate-900/30 border border-indigo-500/30 rounded-lg text-white text-base font-medium cursor-pointer hover:border-indigo-400/50 transition list-none">
                 <span className="font-medium">{category ? category : 'All Categories'}</span>
-                <Icon name="expand_more" size="sm" className="group-open:rotate-180 transition text-cyan-400" />
+                <Icon name="expand_more" size="md" className="group-open:rotate-180 transition text-indigo-400" />
               </summary>
-              <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700/50 rounded-lg shadow-2xl z-50 overflow-hidden">
+              <div className="absolute top-full left-0 right-0 mb-2 bg-slate-900 border border-indigo-500/30 rounded-lg shadow-2xl z-50 overflow-hidden">
                 <button
                   onClick={() => {
                     setCategory('')
                     setPage(1)
                     categoryDetailsRef.current?.removeAttribute('open')
                   }}
-                  className={`w-full text-left px-4 py-3 text-sm font-medium transition ${!category ? 'bg-cyan-500/20 text-cyan-400 border-l-2 border-cyan-400' : 'text-slate-300 border-l-2 border-transparent hover:bg-slate-700/50'}`}
+                  className={`w-full text-left px-6 py-4 text-base font-medium transition ${!category ? 'bg-indigo-500/20 text-indigo-400 border-l-2 border-indigo-400' : 'text-slate-300 border-l-2 border-transparent hover:bg-indigo-700/50'}`}
                 >
                   All Categories
                 </button>
@@ -229,8 +207,8 @@ const NewsListPage: FC = () => {
                       setPage(1)
                       categoryDetailsRef.current?.removeAttribute('open')
                     }}
-                    className={`w-full text-left px-4 py-3 text-sm font-medium transition border-l-2 ${
-                      category === cat ? 'bg-cyan-500/20 text-cyan-400 border-l-cyan-400' : 'text-slate-300 border-l-transparent hover:bg-slate-700/50'
+                    className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
+                      category === cat ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
                     }`}
                   >
                     {cat}
@@ -271,7 +249,7 @@ const NewsListPage: FC = () => {
       </section>
 
       {/* Content Section */}
-      <section className="py-20">
+      <section className="py-20 w-full max-w-8xl mx-auto">
         <SectionContainer>
           {newsQuery.isLoading ? (
             <div className="flex justify-center items-center py-32">
@@ -313,7 +291,7 @@ const NewsListPage: FC = () => {
           ) : (
             <>
               {/* Articles Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
                 {news.map((article) => (
                   <ArticleCard key={article._id} article={article} />
                 ))}

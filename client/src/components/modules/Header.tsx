@@ -143,12 +143,14 @@ const Header: FC<HeaderProps> = ({
               {/* Account Button with Dropdown */}
               <div className="relative" ref={dropdownRef}>
                 {user ? (
-                  <button
+                  <Button
                     onClick={() => setShowDropdown(!showDropdown)}
-                    className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors text-white text-sm font-semibold flex items-center gap-2 hover:text-primary"
+                    variant="secondary"
+                    size="sm"
+                    className="bg-slate-800 hover:bg-slate-700 text-white"
                   >
                     <span>{user.name || user.email}</span>
-                  </button>
+                  </Button>
                 ) : (
                   <Button
                     variant="icon"

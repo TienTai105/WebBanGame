@@ -1,5 +1,6 @@
 import { FC } from 'react'
 import { cn } from '../../utils/cn'
+import { Button } from '../atomic'
 
 interface PaginationProps {
   currentPage: number

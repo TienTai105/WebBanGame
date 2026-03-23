@@ -1,5 +1,5 @@
 import { FC, useState } from 'react'
-import { Icon } from '../atomic'
+import { Icon, Button } from '../atomic'
 
 const NewsletterSection: FC = () => {
   const [email, setEmail] = useState('')
@@ -44,26 +44,20 @@ const NewsletterSection: FC = () => {
               placeholder="Enter your email..."
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="flex-grow px-5 py-4 rounded-lg bg-slate-800/80 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 transition"
+              className="w-full px-4 py-3 rounded-lg bg-slate-700/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
               required
             />
-            <button
+            <Button
               type="submit"
               disabled={isLoading || !email}
-              className="px-8 py-4 rounded-lg bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold whitespace-nowrap transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              variant="primary"
+              size="md"
+              isLoading={isLoading}
+              loadingText="Subscribing..."
+              className="whitespace-nowrap text-slate-950"
             >
-              {isLoading ? (
-                <>
-                  <span className="inline-block w-5 h-5 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" />
-                  Subscribing...
-                </>
-              ) : (
-                <>
-                  Subscribe
-                  <Icon name="arrow_forward" size="md" />
-                </>
-              )}
-            </button>
+              Đăng ký ngay
+            </Button>
           </form>
 
           {/* Success Message */}

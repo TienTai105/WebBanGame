@@ -1,6 +1,5 @@
 import { FC, ReactNode } from 'react'
 import { cn } from '../../utils/cn'
-import Button from '../atomic/Button'
 
 type PromoVariant = 'membership' | 'preorder'
 
@@ -67,17 +66,16 @@ const PromoCard: FC<PromoCardProps> = ({
         >
           {subtitle}
         </p>
-        <Button
-          variant="primary"
-          size="md"
+        <button
           onClick={buttonAction}
           className={cn(
-            'px-6 py-2 rounded-lg font-bold',
+            'px-6 py-3 rounded-lg font-bold transition-all duration-200',
+            'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-white',
             buttonVariantStyles[variant]
           )}
         >
           {buttonText}
-        </Button>
+        </button>
       </div>
 
       {/* Image - Right Side */}

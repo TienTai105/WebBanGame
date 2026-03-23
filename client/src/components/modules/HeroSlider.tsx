@@ -130,21 +130,21 @@ const HeroSlider: FC<HeroSliderProps> = ({
       </SectionContainer>
 
       {/* Navigation Arrows */}
-      <button
+      <Button
         onClick={goToPrevious}
-        className="absolute left-6 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors group"
+        variant="icon"
+        icon="chevron_left"
+        className="absolute left-6 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors group text-white"
         aria-label="Previous slide"
-      >
-        <Icon name="chevron_left" size="xl" className="text-white group-hover:scale-110 transition-transform" />
-      </button>
+      />
 
-      <button
+      <Button
         onClick={goToNext}
-        className="absolute right-6 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors group"
+        variant="icon"
+        icon="chevron_right"
+        className="absolute right-6 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors group text-white"
         aria-label="Next slide"
-      >
-        <Icon name="chevron_right" size="xl" className="text-white group-hover:scale-110 transition-transform" />
-      </button>
+      />
 
       {/* Slide Indicators (Dots) */}
       <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex gap-3">

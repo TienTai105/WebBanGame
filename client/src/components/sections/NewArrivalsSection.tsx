@@ -16,7 +16,7 @@ const NewArrivalsSection: FC<NewArrivalsProps> = ({ limit = 4 }) => {
         <div className="flex flex-col lg:flex-row items-start lg:items-end justify-between mb-12 gap-8">
           <div className="flex-grow">
             <div className="inline-block mb-4">
-              <span className="text-cyan-400 text-sm font-bold uppercase tracking-widest">🆕 Fresh Arrivals</span>
+              <span className="text-cyan-400 text-sm font-bold uppercase tracking-widest">Fresh Arrivals</span>
             </div>
             <h2 className="text-4xl lg:text-5xl font-black text-white mb-4 leading-tight">
               Latest Gaming Gear
@@ -68,7 +68,7 @@ const NewArrivalsSection: FC<NewArrivalsProps> = ({ limit = 4 }) => {
                 variant="primary"
                 className="text-lg px-8 py-4 font-bold flex items-center gap-2 group"
               >
-                View All New Arrivals
+                Xem tất cả
                 <Icon name="arrow_forward" size="md" className="group-hover:translate-x-1 transition" />
               </Link>
             </div>

@@ -18,7 +18,7 @@ const navItems: NavItem[] = [
   { label: 'Sản Phẩm', href: '/products', slug: 'products' },
   { label: 'Phụ Kiện', href: '/category/phu-kien', slug: 'accessories' },
   { label: 'Tin Tức', href: '/news', slug: 'news' },
-  { label: 'Chương Trình', href: '/programs', slug: 'programs' },
+  { label: 'Khuyến Mãi', href: '/promotions', slug: 'promotions' },
   { label: 'Cửa Hàng', href: '/store', slug: 'store' },
 
 ]

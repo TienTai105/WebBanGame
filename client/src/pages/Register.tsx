@@ -321,20 +321,24 @@ const Register: FC = () => {
 
           {/* Social Login */}
           <div className="grid grid-cols-2 gap-3">
-            <button
+            <Button
               type="button"
-              className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-3 text-slate-300 font-semibold transition-all"
+              variant="secondary"
+              size="md"
+              className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300"
             >
-              <Chrome className="w-5 h-5" />
+              <Chrome className="w-5 h-5 mr-2" />
               <span className="hidden sm:inline">Google</span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-3 text-slate-300 font-semibold transition-all"
+              variant="secondary"
+              size="md"
+              className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300"
             >
-              <Facebook className="w-5 h-5" />
+              <Facebook className="w-5 h-5 mr-2" />
               <span className="hidden sm:inline">Facebook</span>
-            </button>
+            </Button>
           </div>
 
           {/* Login Link */}

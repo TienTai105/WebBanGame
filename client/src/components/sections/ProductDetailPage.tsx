@@ -2,6 +2,7 @@ import { FC, useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import Breadcrumb from '../atomic/Breadcrumb'
+import { Button } from '../atomic'
 import { useProduct, useProducts } from '../../hooks/queries/useProducts'
 import { useCart, CartItem } from '../../context/CartContext'
 import { RadioGroup, RadioGroupItem } from '../ui/radio'
@@ -386,18 +387,15 @@ const ProductDetailPage: FC = () => {
                   }}
                   className="w-24 px-3 py-3 bg-indigo-900/30 border-2 border-indigo-500/30 rounded-lg text-center outline-none text-white font-black text-lg hover:border-cyan-400/50 focus:border-cyan-400 transition-colors"
                 />
-                <button 
+                <Button
                   onClick={handleAddToCart}
                   disabled={!!inventoryData && !inventoryData.canBuy}
-                  className={cn(
-                    'flex-1 py-3 rounded-lg font-black text-lg transition-all shadow-lg',
-                    !!inventoryData && !inventoryData.canBuy
-                      ? 'bg-slate-700 text-slate-500 cursor-not-allowed border border-slate-600'
-                      : 'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white hover:from-indigo-600 hover:to-cyan-600 shadow-indigo-500/30'
-                  )}
+                  variant="gradient"
+                  size="md"
+                  className="flex-1 bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-600 hover:to-cyan-600 shadow-indigo-500/30"
                 >
                   {!!inventoryData && !inventoryData.canBuy ? 'Hết hàng' : 'Mua Ngay'}
-                </button>
+                </Button>
               </div>
             </div>
           </div>

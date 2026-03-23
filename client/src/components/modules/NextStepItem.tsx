@@ -21,7 +21,6 @@ const NextStepItem: FC<NextStepItemProps> = ({
   step,
   title,
   description,
-  icon,
 }) => {
   return (
     <div className="flex items-start gap-3">

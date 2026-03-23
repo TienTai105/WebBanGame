@@ -23,6 +23,8 @@ import checkoutRoutes from './routes/checkout.js'
 import paymentRoutes from './routes/payment.js'
 import newsRoutes from './routes/news.js'
 import commentRoutes from './routes/comments.js'
+import promotionRoutes from './routes/promotions.js'
+import contactRoutes from './routes/contact.js'
 
 dotenv.config()
 
@@ -63,7 +65,9 @@ app.use('/api/reviews', reviewRoutes)
 app.use('/api/inventory', inventoryRoutes)
 app.use('/api/checkout', checkoutRoutes)
 app.use('/api/payment', paymentRoutes)
+app.use('/api/promotions', promotionRoutes)
 app.use('/api/news', newsRoutes)
+app.use('/api/contact', contactRoutes)
 app.use('/api', commentRoutes)
 
 // Health check
