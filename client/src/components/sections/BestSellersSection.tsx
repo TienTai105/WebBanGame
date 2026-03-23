@@ -1,6 +1,6 @@
 import { FC } from 'react'
 import ProductCard from '../small/ProductCard'
-import { Link } from '../atomic'
+import { Icon, Link } from '../atomic'
 import { useBestSellerProducts } from '../../hooks/queries/useProducts'
 
 interface BestSellersProps {
@@ -30,11 +30,12 @@ const BestSellersSection: FC<BestSellersProps> = ({ limit = 8 }) => {
           </div>
           <Link
             to="/products?sort=best-sellers"
-            variant="secondary"
+            variant="primary"
             className="mt-6 lg:mt-0 font-bold text-lg"
           >
-            View All →
+          Xem tất cả <Icon name="arrow_forward" size="md" />
           </Link>
+
         </div>
 
         {/* Products Grid */}

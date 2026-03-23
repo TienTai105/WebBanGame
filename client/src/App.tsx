@@ -13,11 +13,12 @@ import OrderConfirmPage from './pages/OrderConfirmPage'
 import ProductDetailPage from './components/sections/ProductDetailPage'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import NewsListPage from './pages/NewsListPage'
+import NewsDetailPage from './pages/NewsDetailPage'
 
 // Global Cart Modal Component - Handles navigation
 function GlobalCartModal() {
   const navigate = useNavigate()
-  const location = useLocation()
   const { closeCart } = useCart()
 
   return (
@@ -84,6 +85,8 @@ function AppContent() {
           <Route path="/cart" element={<CartPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/order-confirm" element={<OrderConfirmPage />} />
+          <Route path="/news" element={<NewsListPage />} />
+          <Route path="/news/:slug" element={<NewsDetailPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
         </Routes>

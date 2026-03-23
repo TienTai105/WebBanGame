@@ -21,6 +21,8 @@ import reviewRoutes from './routes/reviews.js'
 import inventoryRoutes from './routes/inventory.js'
 import checkoutRoutes from './routes/checkout.js'
 import paymentRoutes from './routes/payment.js'
+import newsRoutes from './routes/news.js'
+import commentRoutes from './routes/comments.js'
 
 dotenv.config()
 
@@ -61,6 +63,8 @@ app.use('/api/reviews', reviewRoutes)
 app.use('/api/inventory', inventoryRoutes)
 app.use('/api/checkout', checkoutRoutes)
 app.use('/api/payment', paymentRoutes)
+app.use('/api/news', newsRoutes)
+app.use('/api', commentRoutes)
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {

@@ -6,11 +6,19 @@ export interface Article {
   _id: string
   title: string
   excerpt: string
-  image: string
-  author: string
-  date: string
+  image?: string
+  author: string | { _id: string; name: string; email?: string; avatar?: string }
+  date?: string
   category: string
   readTime: number
+  slug?: string
+  featuredImage?: {
+    url: string
+    cloudinaryId?: string
+    alt?: string
+  }
+  createdAt?: string
+  publishedAt?: string
 }
 
 interface ArticleCardProps {
@@ -19,14 +27,20 @@ interface ArticleCardProps {
 
 const ArticleCard: FC<ArticleCardProps> = ({ article }) => {
   const navigate = useNavigate()
-  const publishDate = new Date(article.date).toLocaleDateString('vi-VN')
+  
+  // Handle both old and new format
+  const imageUrl = article.image || article.featuredImage?.url || 'https://via.placeholder.com/600x400?text=No+Image'
+  const authorName = typeof article.author === 'string' ? article.author : article.author?.name || 'Anonymous'
+  const articleDate = article.date || article.publishedAt || article.createdAt || new Date().toISOString()
+  const publishDate = new Date(articleDate).toLocaleDateString('vi-VN')
+  const articlePath = article.slug ? `/news/${article.slug}` : `/article/${article._id}`
 
   return (
     <div className="group bg-slate-800/50 rounded-lg overflow-hidden border border-slate-700 hover:border-cyan-500/50 transition duration-300">
       {/* Image Container */}
-      <div className="relative overflow-hidden h-48 bg-slate-700">
+      <div className="relative overflow-hidden h-82 bg-slate-700">
         <img
-          src={article.image}
+          src={imageUrl}
           alt={article.title}
           className="w-full h-full object-cover group-hover:scale-110 transition duration-300"
         />
@@ -42,7 +56,7 @@ const ArticleCard: FC<ArticleCardProps> = ({ article }) => {
       </div>
 
       {/* Content */}
-      <div className="p-5 flex flex-col h-64">
+      <div className="p-5 flex flex-col h-82">
         {/* Title */}
         <h3 className="text-lg font-bold text-white mb-2 line-clamp-2 group-hover:text-cyan-400 transition">
           {article.title}
@@ -57,7 +71,7 @@ const ArticleCard: FC<ArticleCardProps> = ({ article }) => {
         <div className="flex items-center justify-between text-xs text-slate-500 mb-4 border-t border-slate-700 pt-4">
           <div className="flex items-center gap-2">
             <Icon name="account_circle" size="sm" />
-            <span>{article.author}</span>
+            <span>{authorName}</span>
           </div>
           <div className="flex items-center gap-2">
             <Icon name="schedule" size="sm" />
@@ -72,8 +86,8 @@ const ArticleCard: FC<ArticleCardProps> = ({ article }) => {
             <span>{article.readTime} min read</span>
           </div>
           <button
-            onClick={() => navigate(`/article/${article._id}`)}
-            className="flex items-center gap-2 text-cyan-400 hover:text-cyan-300 font-semibold text-sm transition"
+            onClick={() => navigate(articlePath)}
+            className="flex items-center gap-2 text-primary hover:text-primary-dark font-semibold text-sm transition"
           >
             Read More
             <Icon name="arrow_forward" size="sm" />

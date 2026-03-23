@@ -21,8 +21,8 @@ const variantStyles: Record<PromoVariant, string> = {
 }
 
 const buttonVariantStyles: Record<PromoVariant, string> = {
-  membership: 'bg-white text-indigo-600 hover:bg-gray-100',
-  preorder: 'bg-white text-cyan-600 hover:bg-gray-100',
+  membership: 'bg-white text-indigo-800 hover:bg-slate-100 shadow-md hover:shadow-lg',
+  preorder: 'bg-white text-cyan-700 hover:bg-slate-100 shadow-md hover:shadow-lg',
 }
 
 /**

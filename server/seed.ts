@@ -7,6 +7,7 @@ import {
   seedBrands,
   seedUsers, 
   seedProducts, 
+  seedNews,
   seedOrders,
   seedReviews
 } from './seeds/index.js'
@@ -52,6 +53,9 @@ const runSeeds = async () => {
 
     const productResult = await seedProducts()
     console.log(`✓ ${productResult.message}\n`)
+
+    const newsResult = await seedNews()
+    console.log(`✓ ${newsResult.message}\n`)
 
     // PHASE 3: Inventory Management (NEW)
     console.log('\n═══ PHASE 3: Inventory Management ═══\n')

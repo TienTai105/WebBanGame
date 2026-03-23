@@ -21,6 +21,7 @@
     "seed:stock-movement": "tsx seeds/seedStockMovement.ts",
     "seed:promotions": "tsx seeds/seedPromotions.ts",
     "seed:audit-logs": "tsx seeds/seedAuditLogs.ts",
+    "seed:news": "tsx seeds/seedNews.ts",
     "test": "jest --coverage"
   },
   "keywords": [

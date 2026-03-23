@@ -31,7 +31,7 @@ const Navigation: FC<NavigationProps> = ({ activeLink = 'home', className }) => 
   return (
     <div className={cn(
       'sticky top-[72px] z-[99]',
-      'bg-slate-900/50 border-t border-slate-800 backdrop-blur-sm',
+      'bg-slate-900 border-t border-slate-800 backdrop-blur-sm',
       'shadow-lg',
       className
     )}>
@@ -46,7 +46,7 @@ const Navigation: FC<NavigationProps> = ({ activeLink = 'home', className }) => 
                 'border-b-2',
                 activeLink === item.slug
                   ? 'text-primary border-b-primary'
-                  : 'text-slate-300 border-b-transparent hover:text-primary hover:border-b-primary transition-colors'
+                  : 'text-slate-300la border-b-transparent hover:text-primary hover:border-primary transition-colors'
               )}
             >
               {item.label}

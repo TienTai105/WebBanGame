@@ -198,7 +198,7 @@ const Header: FC<HeaderProps> = ({
                   variant="icon"
                   icon="shopping_cart"
                   onClick={openCart}
-                  className="text-slate-400 hover:text-secondary transition-colors scale-125"
+                  className="text-slate-400 hover:text-primary transition-colors scale-125"
                   title="Giỏ hàng"
                 />
                 {items.length > 0 && (

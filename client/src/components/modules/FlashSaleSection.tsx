@@ -5,7 +5,7 @@ import { useFlashSaleProducts } from '../../hooks/queries/useProducts'
 import ProductCard from '../small/ProductCard'
 import Timer from '../small/Timer'
 import Link from '../atomic/Link'
-
+import Icon from '../atomic/Icon'
 interface FlashSaleSectionProps {
   saleEndTime?: Date | number
   onAddToCart?: (productId: string) => void
@@ -38,8 +38,8 @@ const FlashSaleSection: FC<FlashSaleSectionProps> = ({
             <h2 className="text-3xl font-bold text-white">Flash Sale</h2>
             <Timer endTime={saleEndTime} showIcon={true} />
           </div>
-          <Link to="/flash-sale" variant="primary" icon="arrow_forward" iconPosition="right">
-            Xem tất cả
+          <Link to="/flash-sale" variant="primary" iconPosition="right">
+            Xem tất cả <Icon name="arrow_forward" size="md" />
           </Link>
         </div>
 
