@@ -27,6 +27,10 @@ interface OrderData {
   orderCode?: string
   orderId?: string
   reservedUntil?: string
+  totalPrice?: number
+  discountAmount?: number
+  shippingFee?: number
+  finalPrice?: number
   orderItems?: {
     id: string
     name: string
@@ -84,14 +88,99 @@ const OrderConfirmPage: FC = () => {
 
         // Check payment status
         if (order.paymentMethod === 'Momo' && order.paymentStatus === 'unpaid') {
-          console.log('⚠️ MOMO PAYMENT STILL UNPAID - Redirecting to checkout')
-          errorToast('Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.')
-          sessionStorage.setItem('paymentFailed', 'true')
-          localStorage.removeItem('lastOrderId')
+          console.log('⚠️ MOMO PAYMENT STILL UNPAID - Starting polling...')
           
-          setTimeout(() => {
-            navigate('/checkout')
+          // Poll for payment status update (Momo callback may be delayed)
+          let pollCount = 0
+          const maxPolls = 15 // 30 seconds with 2 second intervals
+          let pollInterval: ReturnType<typeof setInterval> | null = null
+          
+          const pollPaymentStatus = async () => {
+            try {
+              const pollRes = await api.get(`/payment/momo/status/${order._id}`)
+              const updatedOrder = pollRes.data.data
+              
+              console.log(`📊 Poll #${pollCount + 1} - Status: ${updatedOrder.paymentStatus}`)
+              
+              if (updatedOrder.paymentStatus === 'paid') {
+                console.log('✅ PAYMENT CONFIRMED VIA POLLING')
+                
+                // Clear polling interval
+                if (pollInterval) clearInterval(pollInterval)
+                
+                // Use original order data (has complete shippingAddress) but update paymentStatus
+                const confirmedOrder = { ...order, paymentStatus: 'paid' }
+                const orderData: OrderData = {
+                  paymentMethod: confirmedOrder.paymentMethod === 'Momo' ? 'momo' : 'cash',
+                  formData: {
+                    fullName: confirmedOrder.shippingAddress?.name || 'Unknown',
+                    email: confirmedOrder.shippingAddress?.email || '',
+                    phone: confirmedOrder.shippingAddress?.phone || '',
+                    address: confirmedOrder.shippingAddress?.address || '',
+                    city: confirmedOrder.shippingAddress?.city || '',
+                    ward: confirmedOrder.shippingAddress?.ward || '',
+                    district: confirmedOrder.shippingAddress?.district || '',
+                  },
+                  appliedCodes: [],
+                  orderCode: confirmedOrder.orderCode,
+                  orderId: confirmedOrder._id,
+                  reservedUntil: confirmedOrder.reservationExpiresAt,
+                  totalPrice: confirmedOrder.totalPrice,
+                  discountAmount: confirmedOrder.discountAmount,
+                  shippingFee: confirmedOrder.shippingFee,
+                  finalPrice: confirmedOrder.finalPrice,
+                  orderItems: confirmedOrder.orderItems.map((item: any) => ({
+                    id: item.product?.toString() || '',
+                    name: item.name,
+                    image: item.image || '',
+                    price: item.priceAtPurchase || item.price,
+                    quantity: item.quantity,
+                    variant: typeof item.variant === 'string' ? item.variant : (item.variant?.size || item.variant?.color || ''),
+                    warranty: item.warranty || '',
+                  })),
+                }
+                
+                setOrderData(orderData)
+                clearCart()
+                successToast('Thanh toán Momo thành công!')
+                setLoading(false)
+                return // STOP polling after success
+              }
+              
+              pollCount++
+              if (pollCount >= maxPolls) {
+                // Timeout: payment still unpaid after 30 seconds
+                console.log('❌ PAYMENT TIMEOUT - Still unpaid after 30 seconds')
+                if (pollInterval) clearInterval(pollInterval)
+                
+                errorToast('Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.')
+                sessionStorage.setItem('paymentFailed', 'true')
+                localStorage.removeItem('lastOrderId')
+                
+                setTimeout(() => {
+                  navigate('/checkout')
+                }, 2000)
+              }
+            } catch (pollErr: any) {
+              console.error('❌ POLLING ERROR:', pollErr)
+              pollCount++
+              if (pollCount >= maxPolls) {
+                if (pollInterval) clearInterval(pollInterval)
+                errorToast('Không thể xác nhận thanh toán. Vui lòng liên hệ hỗ trợ.')
+                navigate('/checkout')
+              }
+            }
+          }
+          
+          // Start polling every 2 seconds
+          pollPaymentStatus() // First call immediately
+          pollInterval = setInterval(() => {
+            if (pollCount < maxPolls) {
+              pollPaymentStatus()
+            }
           }, 2000)
+          
+          setLoading(false)
           return
         }
         
@@ -111,6 +200,10 @@ const OrderConfirmPage: FC = () => {
           orderCode: order.orderCode,
           orderId: order._id,
           reservedUntil: order.reservationExpiresAt,
+          totalPrice: order.totalPrice,
+          discountAmount: order.discountAmount,
+          shippingFee: order.shippingFee,
+          finalPrice: order.finalPrice,
           orderItems: order.orderItems.map((item: any) => ({
             id: item.product?.toString() || '',
             name: item.name,
@@ -220,19 +313,12 @@ const OrderConfirmPage: FC = () => {
     ward: '',
     district: '',
   }
-  const appliedCodes = orderData?.appliedCodes || []
 
-  // Calculate totals from order data
-  const totalPrice = displayItems.reduce((sum: number, item: any) => sum + item.price * item.quantity, 0)
-  const shippingFee = 30000
-  const productDiscountAmount = appliedCodes
-    .filter(item => item.type === 'discount')
-    .reduce((sum, item) => sum + item.amount, 0)
-  const shippingDiscountAmount = appliedCodes
-    .filter(item => item.type === 'shipping')
-    .reduce((sum, item) => sum + item.amount, 0)
-  const finalShippingFee = Math.max(0, shippingFee - shippingDiscountAmount)
-  const finalTotal = totalPrice - productDiscountAmount + finalShippingFee
+  // Get pricing from order data (don't recalculate)
+  const totalPrice = orderData?.totalPrice || 0
+  const discountAmount = orderData?.discountAmount || 0
+  const shippingFee = orderData?.shippingFee || 0
+  const finalTotal = orderData?.finalPrice || 0
 
   // Status info based on payment method
   const statusInfo: Record<PaymentMethod, { status: string }> = {
@@ -396,10 +482,11 @@ const OrderConfirmPage: FC = () => {
                 <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <p className="text-white font-semibold">{item.name}</p>
-                  {item.warranty ? (
+                  {item.warranty && (
                     <p className="text-slate-300 text-sm">Bảo hành: {item.warranty}</p>
-                  ) : (
-                    item.variant && <p className="text-indigo-400 text-sm">{item.variant}</p>
+                  )}
+                  {item.variant && (
+                    <p className="text-indigo-400 text-sm">Loại: {item.variant}</p>
                   )}
                   <p className="text-slate-400 text-sm">Số lượng: {item.quantity}</p>
                 </div>
@@ -419,21 +506,21 @@ const OrderConfirmPage: FC = () => {
                 </span>
               </div>
 
-              {productDiscountAmount > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-lime-400">Giảm giá:</span>
-                  <span className="text-lime-400 font-semibold">
-                    -{productDiscountAmount.toLocaleString('vi-VN')} ₫
-                  </span>
-                </div>
-              )}
-
               <div className="flex justify-between">
                 <span className="text-slate-400">Vận chuyển:</span>
                 <span className="text-cyan-400 font-semibold">
-                  {shippingDiscountAmount > 0 ? 'Miễn phí' : finalShippingFee.toLocaleString('vi-VN') + ' ₫'}
+                  {shippingFee > 0 ? shippingFee.toLocaleString('vi-VN') + ' ₫' : 'Miễn phí'}
                 </span>
               </div>
+
+              {discountAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-lime-400">Giảm giá:</span>
+                  <span className="text-lime-400 font-semibold">
+                    -{discountAmount.toLocaleString('vi-VN')} ₫
+                  </span>
+                </div>
+              )}
 
               <div className="flex justify-between pt-3 border-t border-slate-700">
                 <span className="text-white font-bold">Tổng cộng:</span>
@@ -514,7 +601,7 @@ const OrderConfirmPage: FC = () => {
           {/* Action Buttons */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Button
-              onClick={() => navigate('/account/orders')}
+              onClick={() => navigate(`/orders/${orderData?.orderId}`)}
               variant="primary"
               size="lg"
               className="w-full flex items-center justify-center gap-2"

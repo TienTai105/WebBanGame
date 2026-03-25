@@ -1,5 +1,5 @@
 import express from 'express'
-import { initMomoPayment, momoCallback, getMomoPaymentStatus, testMomoCallback } from '../controllers/paymentController.js'
+import { initMomoPayment, momoCallback, getMomoPaymentStatus, testMomoCallback, sendTestEmail } from '../controllers/paymentController.js'
 import { protect } from '../middleware/auth.js'
 
 const router = express.Router()
@@ -15,5 +15,8 @@ router.post('/momo/test-callback', protect, testMomoCallback)
 
 // Public: Momo sends IPN callback (Momo doesn't pass JWT token)
 router.post('/momo/callback', momoCallback)
+
+// Protected: test endpoint to send test email
+router.post('/test-email', protect, sendTestEmail)
 
 export default router

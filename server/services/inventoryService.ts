@@ -115,7 +115,7 @@ class InventoryService {
       )
 
       if (!inventory) {
-        console.error(`⚠️ Could not release stock for ${variantSku || productId}, order ${orderId}`)
+        console.error(`Could not release stock for ${variantSku || productId}, order ${orderId}`)
         continue
       }
 
@@ -129,6 +129,70 @@ class InventoryService {
         reference: { type: 'Order', id: orderId },
         notes: `Released for order: ${orderId}`,
       })
+    }
+  }
+
+  /**
+   * Release stock when cancelling order - handles both reserved and sold inventory
+   * (In case order was confirmed/paid before cancellation)
+   */
+  async releaseStockOnCancel(items: OrderItem[], orderId: string): Promise<void> {
+    for (const item of items) {
+      const productId = item.product.toString()
+      const variantSku = item.variantSku || null
+
+      // First try: release from reserved pool (for unpaid orders)
+      let inventory = await Inventory.findOneAndUpdate(
+        { productId, variantSku, reserved: { $gte: item.quantity } },
+        {
+          $inc: { reserved: -item.quantity, available: item.quantity },
+          $set: { lastUpdated: new Date() },
+        },
+        { new: true }
+      )
+
+      if (inventory) {
+        console.log(`Released ${item.quantity} from RESERVED pool for ${variantSku || productId}`)
+        await StockMovement.create({
+          inventoryId: inventory._id,
+          productId: new mongoose.Types.ObjectId(productId),
+          variantSku,
+          type: 'UNRESERVED',
+          quantity: item.quantity,
+          reason: 'Huỷ đơn hàng',
+          reference: { type: 'Order', id: orderId },
+          notes: `Released from reserved: ${orderId}`,
+        })
+        continue
+      }
+
+      // Second try: release from sold pool (for paid/confirmed orders)
+      inventory = await Inventory.findOneAndUpdate(
+        { productId, variantSku, sold: { $gte: item.quantity } },
+        {
+          $inc: { sold: -item.quantity, available: item.quantity },
+          $set: { lastUpdated: new Date() },
+        },
+        { new: true }
+      )
+
+      if (inventory) {
+        console.log(`✅ Released ${item.quantity} from SOLD pool for ${variantSku || productId}`)
+        await StockMovement.create({
+          inventoryId: inventory._id,
+          productId: new mongoose.Types.ObjectId(productId),
+          variantSku,
+          type: 'REFUNDED',
+          quantity: item.quantity,
+          reason: 'Hoàn lại hàng do huỷ đơn',
+          reference: { type: 'Order', id: orderId },
+          notes: `Refunded from sold: ${orderId}`,
+        })
+        continue
+      }
+
+      // Could not find stock in either pool
+      console.error(`⚠️ Stock not found for ${variantSku || productId} (order ${orderId}). Check inventory integrity!`)
     }
   }
 

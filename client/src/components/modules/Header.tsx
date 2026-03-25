@@ -1,6 +1,6 @@
 import { FC, useState, useRef, useEffect } from 'react'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
-import { LogOut, ShoppingBag } from 'lucide-react'
+import { LogOut, ShoppingBag, User } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useCart } from '../../context/CartContext'
 import Button from '../atomic/Button'
@@ -86,7 +86,11 @@ const Header: FC<HeaderProps> = ({
 
   const handleMyOrders = () => {
     setShowDropdown(false)
-    navigate('/account/orders')
+    navigate('/order-history')
+  }
+  const handleProfile = () => {
+    setShowDropdown(false)
+    navigate('/profile')
   }
 
   return (
@@ -172,7 +176,15 @@ const Header: FC<HeaderProps> = ({
 
                     {/* Dropdown Items */}
                     <div className="py-2">
+                      <button
+                        onClick={handleProfile}
+                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                      >
+                        <User className="w-4 h-4 text-cyan-400" />
+                        <span className="text-sm font-medium">Hồ sơ của tôi</span>
+                      </button>
                       {/* My Orders */}
+
                       <button
                         onClick={handleMyOrders}
                         className="w-full px-4 py-3 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"

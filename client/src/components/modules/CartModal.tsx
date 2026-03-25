@@ -42,20 +42,20 @@ const CartModal: FC<CartModalProps> = ({
       {/* Overlay */}
       {isOpen && (
         <div
-          className="fixed left-0 right-0 bottom-0 top-[76px] z-40 bg-black/50"
+          className="fixed left-0 right-0 bottom-0 top-[180px] z-40 bg-black/50"
           onClick={closeCart}
         />
       )}
 
       {/* Sidebar */}
       <div
-        className={`fixed right-0 top-[76px] h-[calc(100vh - 76px)] w-96 bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 pointer-events-auto overflow-hidden ${
+        className={`fixed right-0 top-[180px] h-[calc(100vh - 180px)] w-96 bg-white shadow-2xl z-50 flex flex-col transition-transform duration-300 pointer-events-auto overflow-hidden ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-slate-200 flex-shrink-0">
-          <h2 className="text-xl font-black text-slate-900">Giỏ Hàng</h2>
+          <h2 className="text-xl font-black text-indigo-600">Giỏ Hàng</h2>
           <button
             onClick={closeCart}
             className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"

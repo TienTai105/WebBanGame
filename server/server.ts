@@ -24,6 +24,7 @@ import paymentRoutes from './routes/payment.js'
 import newsRoutes from './routes/news.js'
 import commentRoutes from './routes/comments.js'
 import promotionRoutes from './routes/promotions.js'
+import adminRoutes from './routes/admin.js'
 import contactRoutes from './routes/contact.js'
 
 dotenv.config()
@@ -55,6 +56,7 @@ app.use('/images', express.static('public/images'))
 // Routes
 app.use('/api/auth', authRoutes)
 app.use('/api/user', userRoutes)
+app.use('/api/admin', adminRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/categories', categoryRoutes)
 app.use('/api/brands', brandRoutes)

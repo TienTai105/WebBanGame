@@ -6,6 +6,7 @@ import Button from '../components/atomic/Button'
 import Checkbox from '../components/atomic/Checkbox'
 import Stepper from '../components/modules/Stepper'
 import PromotionInput from '../components/modules/PromotionInput'
+import CustomSelect from '../components/ui/CustomSelect'
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio'
 import { successToast, warningToast, errorToast } from '../utils/toast'
 import { useProvinces } from '../hooks/useProvinces'
@@ -30,7 +31,12 @@ const CheckoutPage: FC = () => {
   const { items, updateQuantity, clearCart } = useCart()
   const { provinces, getDistrictsByProvince, getWardsByDistrict } = useProvinces()
 
-  // User & Address states
+  // Address type options
+  const addressTypeOptions = [
+    { code: 'HOME', name: 'Nhà riêng' },
+    { code: 'OFFICE', name: 'Văn phòng' },
+    { code: 'OTHER', name: 'Khác' },
+  ]
   const [user, setUser] = useState<any>(null)
   const [savedAddresses, setSavedAddresses] = useState<ShippingAddress[]>([])
   const [selectedAddressId, setSelectedAddressId] = useState<string | ''>('')
@@ -38,6 +44,7 @@ const CheckoutPage: FC = () => {
   const [shouldSaveAddress, setShouldSaveAddress] = useState(false)
   const [selectedProvinceCode, setSelectedProvinceCode] = useState<number | ''>('')
   const [selectedDistrictCode, setSelectedDistrictCode] = useState<number | ''>('')
+  const [selectedWardCode, setSelectedWardCode] = useState<number | ''>('')
 
   // Check authentication on mount and load user data
   useEffect(() => {
@@ -70,6 +77,7 @@ const CheckoutPage: FC = () => {
 
   // Form states
   const [formData, setFormData] = useState({
+    name: 'HOME',
     fullName: '',
     email: '',
     phone: '',
@@ -87,7 +95,8 @@ const CheckoutPage: FC = () => {
       if (selectedAddr) {
         setFormData(prev => ({
           ...prev,
-          fullName: selectedAddr.name || '',
+          name: selectedAddr.name || 'HOME',
+          fullName: user?.name || '',
           address: selectedAddr.street || '',
           city: selectedAddr.city || '',
           district: selectedAddr.district || '',
@@ -260,6 +269,7 @@ const CheckoutPage: FC = () => {
       product: item.productId,
       variantSku: item.variantSku || null,
       variant: item.variant || null,
+      warranty: item.warranty || null,
       quantity: item.quantity,
       name: item.name,
       image: item.image,
@@ -270,6 +280,7 @@ const CheckoutPage: FC = () => {
     const totalPriceCalc = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const discountAmt = appliedCodes.reduce((sum, c) => sum + c.amount, 0)
     const shippingAmt = appliedCodes.some(c => c.type === 'shipping') ? 0 : 30000
+    const discountCode = appliedCodes.find(c => c.type === 'discount')?.code || undefined
 
     // Map frontend payment method to backend enum
     const paymentMethodMap: Record<PaymentMethod, string> = {
@@ -278,10 +289,19 @@ const CheckoutPage: FC = () => {
     }
 
     try {
+      console.log('📦 CHECKOUT DEBUG:', {
+        paymentMethod,
+        formDataEmail: formData.email,
+        shippingAddressEmail: formData.email || 'EMPTY',
+        orderItems: orderItems.length,
+      })
+      
       const res = await api.post('/orders', {
         orderItems,
         totalPrice: totalPriceCalc,
+        discountCode: discountCode,
         discountAmount: discountAmt,
+        shippingFee: shippingAmt,
         finalPrice: totalPriceCalc - discountAmt + shippingAmt,
         paymentMethod: paymentMethodMap[paymentMethod],
         holdId: holdId ?? undefined, // pass hold so backend inherits reserved time
@@ -307,11 +327,17 @@ const CheckoutPage: FC = () => {
         // Don't clear cart yet - will be cleared after payment succeeds on OrderConfirmPage
         try {
           const payRes = await api.post('/payment/momo/init', { orderId: order._id })
+          console.log('💳 Momo Init Response:', payRes.data)
+          
           // Redirect to Momo payment URL
-          if (payRes.data.data.payUrl) {
+          if (payRes.data.data?.payUrl) {
             window.location.href = payRes.data.data.payUrl
+          } else {
+            errorToast('Không nhận được URL thanh toán từ Momo. ' + (payRes.data.message || ''))
+            console.error('❌ Missing payUrl in Momo response:', payRes.data)
           }
         } catch (err: any) {
+          console.error('❌ Momo Init Error:', err)
           errorToast(err?.response?.data?.message || 'Lỗi khởi tạo thanh toán Momo')
         }
         return
@@ -352,13 +378,13 @@ const CheckoutPage: FC = () => {
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name: formData.fullName,
+          name: formData.name,
           street: formData.address,
           city: formData.city,
           district: formData.district,
           ward: formData.ward,
           zipCode: '',
-          isDefault: true,
+          isDefault: shouldSaveAddress,
         }),
       })
 
@@ -409,12 +435,19 @@ const CheckoutPage: FC = () => {
       return
     }
 
+    // Check if user wants to save address
+    if (!shouldSaveAddress) {
+      warningToast('Vui lòng chọn "Lưu địa chỉ này làm mặc định"')
+      return
+    }
+
     // Save address to profile
     const saved = await saveAddressToProfile()
     if (saved) {
       // Reset form on success
       setIsEditingAddress(false)
       setFormData({
+        name: 'HOME',
         fullName: '',
         email: '',
         phone: '',
@@ -570,14 +603,18 @@ const CheckoutPage: FC = () => {
                         // Reset address selection dropdowns
                         setSelectedProvinceCode('')
                         setSelectedDistrictCode('')
+                        setSelectedWardCode('')
                         setFormData(prev => ({
                           ...prev,
+                          name: 'HOME',
                           fullName: user?.name || '',
                           email: user?.email || '',
                           phone: user?.phone || '',
+                          address: '',
                           city: '',
                           district: '',
                           ward: '',
+                          note: '',
                         }))
                       }}
                       className="text-indigo-400 hover:text-indigo-300 text-sm font-semibold flex items-center gap-1 transition-colors"
@@ -602,162 +639,171 @@ const CheckoutPage: FC = () => {
                       </div>
                     )}
 
-                    <div className="space-y-3">
-                  <input
-                    type="text"
-                    name="fullName"
-                    placeholder="Họ và tên"
-                    value={formData.fullName}
-                    onChange={handleInputChange}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                    style={{
-                      WebkitAutofillBoxShadow: '0 0 0 1000px rgb(30, 27, 75) inset',
-                      WebkitAutofillTextFillColor: '#ffffff',
-                      colorScheme: 'dark',
-                    } as any}
+                  <div className="space-y-6">
+                  <CustomSelect
+                    label="Loại địa chỉ"
+                    value={formData.name}
+                    options={addressTypeOptions}
+                    onChange={(type) => setFormData(prev => ({ ...prev, name: String(type) }))}
+                    placeholder="-- Chọn loại --"
                   />
 
-                  <input
-                    type="email"
-                    name="email"
-                    placeholder="Email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                    style={{
-                      WebkitAutofillBoxShadow: '0 0 0 1000px rgb(30, 27, 75) inset',
-                      WebkitAutofillTextFillColor: '#ffffff',
-                      colorScheme: 'dark',
-                    } as any}
-                  />
-
-                  <input
-                    type="tel"
-                    name="phone"
-                    placeholder="Số điện thoại"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                    style={{
-                      WebkitAutofillBoxShadow: '0 0 0 1000px rgb(30, 27, 75) inset',
-                      WebkitAutofillTextFillColor: '#ffffff',
-                      colorScheme: 'dark',
-                    } as any}
-                  />
-
-                  <input
-                    type="text"
-                    name="address"
-                    placeholder="Địa chỉ"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                    style={{
-                      WebkitAutofillBoxShadow: '0 0 0 1000px rgb(30, 27, 75) inset',
-                      WebkitAutofillTextFillColor: '#ffffff',
-                      colorScheme: 'dark',
-                    } as any}
-                  />
-
-                  <div className="grid grid-cols-3 gap-3">
-                    {/* Province Select */}
-                    <select
-                      value={selectedProvinceCode || ''}
-                      onChange={(e) => {
-                        const value = e.target.value
-                        if (!value) {
-                          setSelectedProvinceCode('')
-                          setSelectedDistrictCode('')
-                          setFormData(prev => ({ ...prev, city: '', district: '', ward: '' }))
-                          return
-                        }
-                        
-                        const numValue = Number(value)
-                        let found = provinces.find(p => p.code === numValue) || 
-                                   provinces.find(p => String(p.code) === value)
-                        let provinceName = found?.name || value
-                        
-                        setSelectedProvinceCode(numValue || '')
-                        setSelectedDistrictCode('')
-                        setFormData(prev => ({ ...prev, city: provinceName, district: '', ward: '' }))
-                      }}
-                      className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors text-sm"
-                    >
-                      <option value="">-- Tỉnh/Thành phố --</option>
-                      {provinces.map(province => (
-                        <option key={province.code} value={province.code}>
-                          {province.name}
-                        </option>
-                      ))}
-                    </select>
-
-                    {/* District Select */}
-                    <select
-                      value={selectedDistrictCode || ''}
-                      onChange={(e) => {
-                        const value = e.target.value
-                        if (!value) {
-                          setSelectedDistrictCode('')
-                          setFormData(prev => ({ ...prev, district: '', ward: '' }))
-                          return
-                        }
-                        
-                        const numValue = Number(value)
-                        const district = getDistrictsByProvince(selectedProvinceCode as number).find(d => d.code === numValue)
-                        const districtName = district?.name || ''
-                        
-                        setSelectedDistrictCode(numValue || '')
-                        setFormData(prev => ({ ...prev, district: districtName, ward: '' }))
-                      }}
-                      disabled={selectedProvinceCode === ''}
-                      className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <option value="">-- Quận/Huyện --</option>
-                      {selectedProvinceCode && 
-                        getDistrictsByProvince(selectedProvinceCode as number).map(district => (
-                          <option key={district.code} value={district.code}>
-                            {district.name}
-                          </option>
-                        ))
-                      }
-                    </select>
-
-                    {/* Ward Select */}
-                    <select
-                      value={formData.ward || ''}
-                      onChange={(e) =>
-                        setFormData(prev => ({ ...prev, ward: e.target.value }))
-                      }
-                      disabled={selectedDistrictCode === ''}
-                      className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <option value="">-- Phường/Xã --</option>
-                      {selectedDistrictCode && 
-                        getWardsByDistrict(selectedDistrictCode as number).map(ward => (
-                          <option key={ward.code} value={ward.name}>
-                            {ward.name}
-                          </option>
-                        ))
-                      }
-                    </select>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Họ và tên</label>
+                    <input
+                      type="text"
+                      name="fullName"
+                      placeholder="Nhập họ và tên"
+                      value={formData.fullName}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 bg-slate-900/40 border border-indigo-500/40 rounded-lg text-white text-sm outline-none focus:border-indigo-400 focus:bg-slate-900/60 transition"
+                      style={{
+                        WebkitAutofillBoxShadow: '0 0 0 1000px rgba(15, 23, 42, 0.4) inset',
+                        WebkitAutofillTextFillColor: '#ffffff',
+                        colorScheme: 'dark',
+                      } as any}
+                    />
                   </div>
 
-                  <textarea
-                    name="note"
-                    placeholder="Ghi chú (tùy chọn)"
-                    value={formData.note}
-                    onChange={handleInputChange}
-                    rows={3}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Email</label>
+                    <input
+                      type="email"
+                      name="email"
+                      placeholder="Nhập email"
+                      value={formData.email}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 bg-slate-900/40 border border-indigo-500/40 rounded-lg text-white text-sm outline-none focus:border-indigo-400 focus:bg-slate-900/60 transition"
+                      style={{
+                        WebkitAutofillBoxShadow: '0 0 0 1000px rgba(15, 23, 42, 0.4) inset',
+                        WebkitAutofillTextFillColor: '#ffffff',
+                        colorScheme: 'dark',
+                      } as any}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Số điện thoại</label>
+                    <input
+                      type="tel"
+                      name="phone"
+                      placeholder="Nhập số điện thoại"
+                      value={formData.phone}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 bg-slate-900/40 border border-indigo-500/40 rounded-lg text-white text-sm outline-none focus:border-indigo-400 focus:bg-slate-900/60 transition"
+                      style={{
+                        WebkitAutofillBoxShadow: '0 0 0 1000px rgba(15, 23, 42, 0.4) inset',
+                        WebkitAutofillTextFillColor: '#ffffff',
+                        colorScheme: 'dark',
+                      } as any}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Địa chỉ chi tiết *</label>
+                    <input
+                      type="text"
+                      name="address"
+                      placeholder="Ví dụ: 123 Đường ABC, Tòa nhà XYZ"
+                      value={formData.address}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 bg-slate-900/40 border border-indigo-500/40 rounded-lg text-white text-sm outline-none focus:border-indigo-400 focus:bg-slate-900/60 transition"
+                      style={{
+                        WebkitAutofillBoxShadow: '0 0 0 1000px rgba(15, 23, 42, 0.4) inset',
+                        WebkitAutofillTextFillColor: '#ffffff',
+                        colorScheme: 'dark',
+                      } as any}
+                    />
+                  </div>
+
+                  <CustomSelect
+                    label="Tỉnh / Thành phố"
+                    value={selectedProvinceCode}
+                    options={provinces}
+                    onChange={(provinceCode) => {
+                      const code = Number(provinceCode)
+                      setSelectedProvinceCode(code)
+                      setSelectedDistrictCode('')
+                      setSelectedWardCode('')
+                      const province = provinces.find(p => p.code === code)
+                      if (province) {
+                        setFormData(prev => ({
+                          ...prev,
+                          city: province.name,
+                          district: '',
+                          ward: '',
+                        }))
+                      }
+                    }}
+                    placeholder="-- Chọn Tỉnh / Thành phố --"
+                    required
                   />
+
+                  {selectedProvinceCode && (
+                    <CustomSelect
+                      label="Quận / Huyện"
+                      value={selectedDistrictCode}
+                      options={getDistrictsByProvince(selectedProvinceCode as number)}
+                      onChange={(districtCode) => {
+                        const code = Number(districtCode)
+                        setSelectedDistrictCode(code)
+                        setSelectedWardCode('')
+                        const district = getDistrictsByProvince(selectedProvinceCode as number).find(d => d.code === code)
+                        if (district) {
+                          setFormData(prev => ({
+                            ...prev,
+                            district: district.name,
+                            ward: '',
+                          }))
+                        }
+                      }}
+                      placeholder="-- Chọn Quận / Huyện --"
+                      required
+                    />
+                  )}
+
+                  {selectedDistrictCode && (
+                    <CustomSelect
+                      label="Phường / Xã"
+                      value={selectedWardCode}
+                      options={getWardsByDistrict(selectedDistrictCode as number)}
+                      onChange={(wardCode) => {
+                        const code = Number(wardCode)
+                        setSelectedWardCode(code)
+                        const ward = getWardsByDistrict(selectedDistrictCode as number).find(w => w.code === code)
+                        if (ward) {
+                          setFormData(prev => ({
+                            ...prev,
+                            ward: ward.name,
+                          }))
+                        }
+                      }}
+                      placeholder="-- Chọn Phường / Xã --"
+                      required
+                    />
+                  )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">Ghi chú (tùy chọn)</label>
+                    <textarea
+                      name="note"
+                      placeholder="Nhập ghi chú nếu cần"
+                      value={formData.note}
+                      onChange={handleInputChange}
+                      rows={3}
+                      className="w-full px-4 py-3 bg-slate-900/40 border border-indigo-500/40 rounded-lg text-white text-sm outline-none focus:border-indigo-400 focus:bg-slate-900/60 transition resize-none"
+                    />
+                  </div>
 
                   {/* Save Address Checkbox - Show when adding new address or no saved addresses */}
                   {(isEditingAddress || savedAddresses.length === 0) && (
-                    <div className="p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-lg hover:bg-indigo-500/20 transition-colors">
+                    <div className="p-4 bg-slate-900/30 border border-indigo-500/20 rounded-lg transition hover:border-indigo-400/50">
                       <Checkbox
+                        id="shouldSaveAddress"
+                        label="Lưu địa chỉ này làm mặc định"
                         checked={shouldSaveAddress}
                         onChange={(checked) => setShouldSaveAddress(checked)}
-                        label={<span className="text-indigo-300 text-sm font-semibold">Lưu địa chỉ này làm mặc định</span>}
+                        className="w-full"
                       />
                     </div>
                   )}
@@ -777,6 +823,7 @@ const CheckoutPage: FC = () => {
                         onClick={() => {
                           setIsEditingAddress(false)
                           setFormData({
+                            name: 'HOME',
                             fullName: user?.name || '',
                             email: user?.email || '',
                             phone: user?.phone || '',
@@ -788,6 +835,7 @@ const CheckoutPage: FC = () => {
                           })
                           setSelectedProvinceCode('')
                           setSelectedDistrictCode('')
+                          setSelectedWardCode('')
                           setShouldSaveAddress(false)
                         }}
                         variant="secondary"
@@ -1019,7 +1067,7 @@ const CheckoutPage: FC = () => {
                 {/* Total */}
                 <div className="flex justify-between items-center py-4 border-b border-slate-800">
                   <span className="text-white font-bold">Tổng cộng:</span>
-                  <span className="text-2xl font-black text-cyan-400">
+                  <span className="text-2xl font-black text-indigo-400">
                     {finalTotal.toLocaleString('vi-VN')} ₫
                   </span>
                 </div>

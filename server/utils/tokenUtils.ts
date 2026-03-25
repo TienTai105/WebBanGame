@@ -6,8 +6,16 @@ dotenv.config()
 const JWT_SECRET = process.env.JWT_SECRET as string
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET as string
 
-export const generateAccessToken = (userId: string): string => {
-  return jwt.sign({ _id: userId, userId }, JWT_SECRET, { expiresIn: '15m' })
+export const generateAccessToken = (user: { _id: string; email?: string; role?: string }): string => {
+  return jwt.sign(
+    { 
+      _id: user._id, 
+      email: user.email,
+      role: user.role 
+    }, 
+    JWT_SECRET, 
+    { expiresIn: '15m' }
+  )
 }
 
 export const generateRefreshToken = (userId: string): string => {

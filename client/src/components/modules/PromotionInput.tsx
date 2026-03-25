@@ -188,23 +188,7 @@ const PromotionInput: React.FC<PromotionInputProps> = ({
         </div>
       )}
 
-      {/* Final Order Value (if promotion applied) */}
-      {validatedPromotion && (
-        <div className={`p-4 rounded-lg border-2 ${
-          isDark
-            ? 'bg-indigo-900/30 border-indigo-600'
-            : 'bg-indigo-50 border-indigo-200'
-        }`}>
-          <div className="flex justify-between items-center">
-            <span className={`font-semibold ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>
-              Tổng tiền phải thanh toán:
-            </span>
-            <span className={`text-2xl font-bold ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`}>
-              {validatedPromotion.finalValue.toLocaleString()} VND
-            </span>
-          </div>
-        </div>
-      )}
+    
     </div>
   )
 }

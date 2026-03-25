@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express'
 import User from '../models/User.js'
+import AuditLog from '../models/AuditLog.js'
 import * as tokenUtils from '../utils/tokenUtils.js'
 
-const generateTokens = async (userId: string) => {
-  const accessToken = tokenUtils.generateAccessToken(userId)
-  const refreshToken = tokenUtils.generateRefreshToken(userId)
+const generateTokens = async (user: { _id: string; email?: string; role?: string }) => {
+  const accessToken = tokenUtils.generateAccessToken(user)
+  const refreshToken = tokenUtils.generateRefreshToken(user._id)
   return { accessToken, refreshToken }
 }
 
@@ -32,7 +33,11 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     // Create user
     const user = await User.create({ name, email, phone, password })
-    const { accessToken, refreshToken } = await generateTokens(user._id as string)
+    const { accessToken, refreshToken } = await generateTokens({
+      _id: user._id as string,
+      email: user.email,
+      role: user.role,
+    })
 
     // Set refresh token cookie
     res.cookie('refreshToken', refreshToken, {
@@ -49,9 +54,13 @@ export const register = async (req: Request, res: Response): Promise<void> => {
           _id: user._id,
           name: user.name,
           email: user.email,
+          emailVerified: user.emailVerified,
           phone: user.phone,
+          avatar: user.avatar,
           role: user.role,
           shippingAddresses: user.shippingAddresses || [],
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
         },
         accessToken,
       },
@@ -79,11 +88,43 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     const isPasswordValid = await user.matchPassword(password)
     if (!isPasswordValid) {
+      // Log failed login attempt
+      await AuditLog.create({
+        action: 'UPDATE',
+        entity: 'User',
+        entityId: user._id,
+        userId: user._id,
+        userEmail: user.email,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        status: 'failed',
+        errorMessage: 'Invalid password',
+      })
       res.status(401).json({ success: false, message: 'Invalid credentials' })
       return
     }
 
-    const { accessToken, refreshToken } = await generateTokens(user._id as string)
+    // Update lastLogin
+    user.lastLogin = new Date()
+    await user.save()
+
+    // Log successful login
+    await AuditLog.create({
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: user._id,
+      userId: user._id,
+      userEmail: user.email,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      status: 'success',
+    })
+
+    const { accessToken, refreshToken } = await generateTokens({
+      _id: user._id as string,
+      email: user.email,
+      role: user.role,
+    })
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
@@ -99,9 +140,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
           _id: user._id,
           name: user.name,
           email: user.email,
+          emailVerified: user.emailVerified,
           phone: user.phone,
+          avatar: user.avatar,
           role: user.role,
+          lastLogin: user.lastLogin,
           shippingAddresses: user.shippingAddresses || [],
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
         },
         accessToken,
       },
@@ -126,7 +172,18 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
       return
     }
 
-    const newAccessToken = tokenUtils.generateAccessToken(decoded.userId)
+    // Fetch user to get role
+    const user = await User.findById(decoded.userId)
+    if (!user) {
+      res.status(401).json({ success: false, message: 'User not found' })
+      return
+    }
+
+    const newAccessToken = tokenUtils.generateAccessToken({
+      _id: user._id as string,
+      email: user.email,
+      role: user.role,
+    })
 
     res.json({
       success: true,
@@ -153,7 +210,13 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
           _id: user?._id,
           name: user?.name,
           email: user?.email,
+          emailVerified: user?.emailVerified,
+          phone: user?.phone,
+          avatar: user?.avatar,
           role: user?.role,
+          shippingAddresses: user?.shippingAddresses || [],
+          createdAt: user?.createdAt,
+          updatedAt: user?.updatedAt,
         },
       },
     })

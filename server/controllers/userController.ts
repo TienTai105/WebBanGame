@@ -188,3 +188,64 @@ export const getShippingAddresses = async (req: AuthRequest, res: Response): Pro
     res.status(500).json({ success: false, message: error.message })
   }
 }
+
+export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = (req.user as any)?._id
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' })
+      return
+    }
+
+    const { name, phone, avatar } = req.body
+
+    // Validation
+    if (!name || !phone) {
+      res.status(400).json({ success: false, message: 'Name and phone are required' })
+      return
+    }
+
+    const user = await User.findById(userId)
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' })
+      return
+    }
+
+    // Update only allowed fields
+    user.name = name.trim()
+    user.phone = phone.trim()
+    
+    // Update avatar if provided
+    if (avatar) {
+      // Validate that it's a base64 string
+      if (!avatar.startsWith('data:image/')) {
+        res.status(400).json({ success: false, message: 'Invalid image format' })
+        return
+      }
+      user.avatar = avatar
+    }
+
+    await user.save()
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          avatar: user.avatar,
+          emailVerified: user.emailVerified,
+          role: user.role,
+          shippingAddresses: user.shippingAddresses || [],
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        },
+      },
+      message: 'Profile updated successfully',
+    })
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message })
+  }
+}

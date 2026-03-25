@@ -1,6 +1,6 @@
 import { FC } from 'react'
 import { cn } from '../../utils/cn'
-import { Button } from '../atomic'
+import { Icon } from '../atomic'
 
 interface PaginationProps {
   currentPage: number
@@ -24,7 +24,7 @@ const Pagination: FC<PaginationProps> = ({
   currentPage,
   totalPages,
   onPageChange,
-  maxVisiblePages = 5,
+  maxVisiblePages = 3,
 }) => {
   if (totalPages <= 1) return null
 
@@ -68,40 +68,40 @@ const Pagination: FC<PaginationProps> = ({
   const pageNumbers = getPageNumbers()
 
   return (
-    <div className="mt-12 flex justify-center gap-2">
+    <div className="flex items-center justify-center gap-1.5 py-6 flex-wrap">
       {/* Previous Button */}
       <button
         onClick={() => onPageChange(Math.max(1, currentPage - 1))}
         disabled={currentPage === 1}
         className={cn(
-          'h-10 w-10 flex items-center justify-center rounded-lg border',
-          'border-slate-700 text-slate-300',
-          'transition-all duration-200',
+          'flex items-center justify-center rounded-lg transition-all duration-200',
+          'h-9 w-9 p-0 text-sm font-bold shrink-0',
           currentPage === 1
-            ? 'opacity-50 cursor-not-allowed'
-            : 'hover:border-indigo-400/50 hover:text-indigo-400 hover:bg-indigo-500/10'
+            ? 'bg-slate-800/50 border border-slate-700 text-slate-500 cursor-not-allowed'
+            : 'bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 hover:bg-indigo-600/40 hover:border-indigo-400 hover:text-indigo-300'
         )}
+        title="Previous page"
       >
-        <span className="material-symbols-outlined">chevron_left</span>
+        <Icon name="chevron_left" size="sm" />
       </button>
 
       {/* Page Numbers */}
       {pageNumbers.map((pageNum, index) => (
         <div key={index}>
           {pageNum === '...' ? (
-            <span className="h-10 w-10 flex items-center justify-center text-slate-500">
+            <span className="h-9 w-6 flex items-center justify-center text-slate-500 text-xs font-bold">
               ...
             </span>
           ) : (
             <button
               onClick={() => onPageChange(pageNum as number)}
               className={cn(
-                'h-10 w-10 flex items-center justify-center rounded-lg',
-                'font-bold transition-all duration-200',
+                'h-9 w-9 flex items-center justify-center rounded-lg text-sm font-bold transition-all duration-200',
                 currentPage === pageNum
-                  ? 'bg-primary text-white border-0'
-                  : 'border border-slate-700 text-slate-300 hover:border-indigo-400/50 hover:text-slate-100 hover:bg-slate-800/50'
+                  ? 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white border border-indigo-500 shadow-lg shadow-indigo-500/20'
+                  : 'bg-slate-900/30 border border-indigo-500/20 text-slate-300 hover:bg-indigo-600/20 hover:border-indigo-400 hover:text-indigo-400'
               )}
+              title={`Go to page ${pageNum}`}
             >
               {pageNum}
             </button>
@@ -114,15 +114,15 @@ const Pagination: FC<PaginationProps> = ({
         onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
         disabled={currentPage === totalPages}
         className={cn(
-          'h-10 w-10 flex items-center justify-center rounded-lg border',
-          'border-slate-700 text-slate-300',
-          'transition-all duration-200',
+          'flex items-center justify-center rounded-lg transition-all duration-200',
+          'h-9 w-9 p-0 text-sm font-bold shrink-0',
           currentPage === totalPages
-            ? 'opacity-50 cursor-not-allowed'
-            : 'hover:border-indigo-400/50 hover:text-indigo-400 hover:bg-indigo-500/10'
+            ? 'bg-slate-800/50 border border-slate-700 text-slate-500 cursor-not-allowed'
+            : 'bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 hover:bg-indigo-600/40 hover:border-indigo-400 hover:text-indigo-300'
         )}
+        title="Next page"
       >
-        <span className="material-symbols-outlined">chevron_right</span>
+        <Icon name="chevron_right" size="sm" />
       </button>
     </div>
   )

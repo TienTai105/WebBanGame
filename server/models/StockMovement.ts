@@ -4,7 +4,7 @@ interface IStockMovement extends Document {
   inventoryId: mongoose.Types.ObjectId
   productId: mongoose.Types.ObjectId                // redundant lưu nhưng dễ query
   variantSku?: string                              // Track variant-specific movements
-  type: 'IN' | 'OUT' | 'ADJUST' | 'RESERVED' | 'UNRESERVED'
+  type: 'IN' | 'OUT' | 'ADJUST' | 'RESERVED' | 'UNRESERVED' | 'REFUNDED'
   quantity: number
   reason?: string
   reference?: {
@@ -39,7 +39,7 @@ const stockMovementSchema = new Schema<IStockMovement>(
     },
     type: {
       type: String,
-      enum: ['IN', 'OUT', 'ADJUST', 'RESERVED', 'UNRESERVED'],
+      enum: ['IN', 'OUT', 'ADJUST', 'RESERVED', 'UNRESERVED', 'REFUNDED'],
       required: [true, 'Stock movement type required'],
       index: true,
     },

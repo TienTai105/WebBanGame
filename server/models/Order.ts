@@ -37,6 +37,7 @@ interface IOrder extends Document {
   totalPrice: number
   discountCode?: string
   discountAmount: number
+  shippingFee: number
   finalPrice: number
   paymentMethod: string
   paymentStatus: 'unpaid' | 'paid'
@@ -103,6 +104,10 @@ const orderSchema = new Schema<IOrder>(
           type: String,
           default: null,
         },
+        warranty: {
+          type: String,
+          default: null,
+        },
       },
     ],
     totalPrice: {
@@ -112,6 +117,11 @@ const orderSchema = new Schema<IOrder>(
     },
     discountCode: String,
     discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    shippingFee: {
       type: Number,
       default: 0,
       min: 0,

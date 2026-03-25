@@ -27,7 +27,8 @@ interface OrderEmailPayload {
   orderItems: Array<{
     name: string
     quantity: number
-    price: number
+    price?: number
+    priceAtPurchase?: number
     variantSku?: string
     variant?: string
     warranty?: string
@@ -42,6 +43,7 @@ interface OrderEmailPayload {
   }
   totalPrice: number
   discountAmount: number
+  discountCode?: string
   shippingFee: number
   finalTotal: number
   paymentMethod: string
@@ -59,11 +61,11 @@ export const sendOrderConfirmationEmail = async (data: OrderEmailPayload) => {
       <tr>
         <td class="item-name">
           ${item.name}
-          ${item.warranty ? `<br><span style="font-size: 12px; color: #7f8c8d;">Bảo hành: ${item.warranty}</span>` : (item.variant ? `<br><span style="font-size: 12px; color: #7f8c8d;">${item.variant}</span>` : '')}
-    
+          ${item.warranty ? `<br><span style="font-size: 12px; color: #7f8c8d;">Bảo hành: ${item.warranty}</span>` : ''}
+          ${item.variant ? `<br><span style="font-size: 12px; color: #7f8c8d;">Loại: ${item.variant}</span>` : ''}
         </td>
         <td class="item-qty">${item.quantity}</td>
-        <td class="item-price">${item.price.toLocaleString('vi-VN')} ₫</td>
+        <td class="item-price">${(item.priceAtPurchase || item.price || 0).toLocaleString('vi-VN')} ₫</td>
       </tr>
     `
       )
@@ -381,24 +383,49 @@ export const sendOrderConfirmationEmail = async (data: OrderEmailPayload) => {
         <h2 class="section-header">Tóm tắt đơn hàng</h2>
         <table class="pricing-table">
           <tr>
-            <td>Tạm tính:</td>
-            <td>${data.totalPrice.toLocaleString('vi-VN')} ₫</td>
+            <td style="padding: 14px 12px; font-size: 14px; color: #666; font-weight: 500;">Tạm tính:</td>
+            <td style="padding: 14px 12px; text-align: right; font-size: 14px; color: #333;">${data.totalPrice.toLocaleString('vi-VN')} ₫</td>
           </tr>
           ${data.discountAmount > 0 ? `
-          <tr class="discount-row">
-            <td>Giảm giá:</td>
-            <td>-${data.discountAmount.toLocaleString('vi-VN')} ₫</td>
+          <tr style="background-color: #f0fdf4; border-top: 1px solid #e0e0e0; border-bottom: 1px solid #e0e0e0;">
+            <td style="padding: 14px 12px; font-size: 14px; color: #15803d; font-weight: 600;">Giảm giá${data.discountCode ? ` (${data.discountCode})` : ''}:</td>
+            <td style="padding: 14px 12px; text-align: right; font-size: 15px; color: #15803d; font-weight: 700;">-${data.discountAmount.toLocaleString('vi-VN')} ₫</td>
           </tr>
           ` : ''}
           <tr>
-            <td>Phí vận chuyển:</td>
-            <td>${data.shippingFee > 0 ? data.shippingFee.toLocaleString('vi-VN') + ' ₫' : 'Miễn phí'}</td>
+            <td style="padding: 14px 12px; font-size: 14px; color: #666; font-weight: 500;">
+              ${data.shippingFee > 0 ? 'Phí vận chuyển:' : 'Miễn phí vận chuyển:'}
+            </td>
+            <td style="padding: 14px 12px; text-align: right; font-size: 14px; color: ${data.shippingFee > 0 ? '#d97706' : '#15803d'}; font-weight: 600;">
+              ${data.shippingFee > 0 ? data.shippingFee.toLocaleString('vi-VN') + ' ₫' : 'Miễn phí'}
+            </td>
           </tr>
-          <tr class="total-row">
-            <td>TỔNG CỘNG:</td>
-            <td>${data.finalTotal.toLocaleString('vi-VN')} ₫</td>
+          <tr style="background-color: #eff6ff; border-top: 2px solid #0ea5e9; border-bottom: 1px solid #0ea5e9;">
+            <td style="padding: 16px 12px; font-size: 15px; font-weight: 700; color: #0c4a6e;">TỔNG CỘNG:</td>
+            <td style="padding: 16px 12px; text-align: right; font-size: 20px; font-weight: 700; color: #0284c7;">${data.finalTotal.toLocaleString('vi-VN')} ₫</td>
           </tr>
         </table>
+
+        <!-- Warranty Information -->
+        ${data.orderItems.some(item => item.warranty) ? `
+        <h2 class="section-header">Thông tin bảo hành</h2>
+        <div style="background-color: #f0f9ff; border-left: 4px solid #0284c7; padding: 18px 16px; border-radius: 3px; margin-bottom: 25px;">
+          <div style="font-size: 14px; line-height: 1.8; color: #333;">
+            ${data.orderItems
+              .filter(item => item.warranty)
+              .map(item => `
+                <div style="margin-bottom: 10px; display: flex; align-items: flex-start;">
+                  <span style="color: #0284c7; font-weight: 600; margin-right: 8px; margin-top: 2px;">✓</span>
+                  <div>
+                    <strong style="color: #0c4a6e;">${item.name}</strong><br>
+                    <span style="color: #666; font-size: 13px;">Bảo hành: ${item.warranty}</span>
+                  </div>
+                </div>
+              `)
+              .join('')}
+          </div>
+        </div>
+        ` : ''}
 
         <!-- Shipping Address -->
         <h2 class="section-header">Địa chỉ giao hàng</h2>
@@ -454,15 +481,20 @@ export const sendOrderConfirmationEmail = async (data: OrderEmailPayload) => {
     const mailOptions = {
       from: `${process.env.GMAIL_FROM_NAME} <${process.env.GMAIL_USER}>`,
       to: data.to,
-      subject: `✓ Xác nhận đơn hàng ${data.orderCode} - VOLTRIX`,
+      subject: `Xác nhận đơn hàng ${data.orderCode} - VOLTRIX`,
       html: htmlBody,
     }
 
     const result = await transporter.sendMail(mailOptions)
-    console.log(`✅ Order confirmation email sent to ${data.to} - Message ID: ${result.messageId}`)
+    console.log(`Order confirmation email sent successfully to ${data.to} - Message ID: ${result.messageId}`)
     return result
   } catch (error: any) {
-    console.error(`❌ Failed to send order confirmation email:`, error.message)
+    console.error(`Failed to send order confirmation email to ${data.to}:`, {
+      message: error?.message,
+      code: error?.code,
+      response: error?.response,
+      stack: error?.stack,
+    })
     throw error
   }
 }

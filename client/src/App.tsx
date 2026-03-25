@@ -1,9 +1,11 @@
-import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { Header, Footer, Navigation } from './components/modules'
 import CartModal from './components/modules/CartModal'
 import { CartProvider, useCart } from './context/CartContext'
+import { AdminAuthProvider, useAdminAuth } from './context/AdminAuthContext'
 import { warningToast } from './utils/toast'
 import Home from './pages/Home'
 import ProductList from './pages/ProductList'
@@ -17,6 +19,18 @@ import NewsListPage from './pages/NewsListPage'
 import NewsDetailPage from './pages/NewsDetailPage'
 import PromotionPage from './pages/PromotionPage'
 import StorePage from './pages/StorePage'
+import UserProfilePage from './pages/UserProfilePage'
+import OrderDetailsPage from './pages/OrderDetailsPage'
+import OrderHistoryPage from './pages/OrderHistoryPage'
+import AddressBookPage from './pages/AddressBookPage'
+import AdminDashboard from './pages/Admin/AdminDashboard'
+import AdminProducts from './pages/Admin/AdminProducts'
+import AdminOrders from './pages/Admin/AdminOrders'
+import AdminNews from './pages/Admin/AdminNews'
+import AdminSettings from './pages/Admin/AdminSettings'
+import AdminUsers from './pages/Admin/AdminUsers'
+import AdminPromotions from './pages/Admin/AdminPromotions'
+import AdminReviews from './pages/Admin/AdminReviews'
 
 // Global Cart Modal Component - Handles navigation
 function GlobalCartModal() {
@@ -43,9 +57,49 @@ function GlobalCartModal() {
   )
 }
 
-function AppContent() {
+// Protected Admin Route Component
+function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAdminAuth()
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+
+  return <>{children}</>
+}
+
+// Admin App Content - Separate layout without user Header/Navigation/Footer
+function AdminAppContent() {
+  return (
+    <Routes>
+      {/* Admin Routes */}
+      <Route path="/admin/dashboard" element={<ProtectedAdminRoute><AdminDashboard /></ProtectedAdminRoute>} />
+      <Route path="/admin/products" element={<ProtectedAdminRoute><AdminProducts /></ProtectedAdminRoute>} />
+      <Route path="/admin/orders" element={<ProtectedAdminRoute><AdminOrders /></ProtectedAdminRoute>} />
+      <Route path="/admin/news" element={<ProtectedAdminRoute><AdminNews /></ProtectedAdminRoute>} />
+      <Route path="/admin/settings" element={<ProtectedAdminRoute><AdminSettings /></ProtectedAdminRoute>} />
+      <Route path="/admin/users" element={<ProtectedAdminRoute><AdminUsers /></ProtectedAdminRoute>} />
+      <Route path="/admin/promotions" element={<ProtectedAdminRoute><AdminPromotions /></ProtectedAdminRoute>} />
+      <Route path="/admin/reviews" element={<ProtectedAdminRoute><AdminReviews /></ProtectedAdminRoute>} />
+      
+      {/* Catch-all redirect to dashboard */}
+      <Route path="/admin/*" element={<Navigate to="/admin/dashboard" replace />} />
+    </Routes>
+  )
+}
+
+function UserAppContent() {
   const navigate = useNavigate()
   const location = useLocation()
+
+  // Scroll to top on route change
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [location.pathname])
 
   // Get active navigation link based on current route
   const getActiveLink = (): string => {
@@ -81,6 +135,7 @@ function AppContent() {
       {/* Page Content */}
       <main className="flex-grow">
         <Routes>
+          {/* User Routes Only */}
           <Route path="/" element={<Home />} />
           <Route path="/products" element={<ProductList />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
@@ -91,6 +146,10 @@ function AppContent() {
           <Route path="/news/:slug" element={<NewsDetailPage />} />
           <Route path="/promotions" element={<PromotionPage />} />
           <Route path="/store" element={<StorePage />} />
+          <Route path="/profile" element={<UserProfilePage />} />
+          <Route path="/order-history" element={<OrderHistoryPage />} />
+          <Route path="/address-book" element={<AddressBookPage />} />
+          <Route path="/orders/:orderId" element={<OrderDetailsPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
         </Routes>
@@ -101,29 +160,37 @@ function AppContent() {
 
       {/* Global Cart Modal */}
       <GlobalCartModal />
-
-      {/* Toast Notifications */}
-      <ToastContainer
-        position="bottom-right"
-        autoClose={1500}
-        hideProgressBar={false}
-        newestOnTop={true}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="dark"
-      />
     </div>
   )
+}
+
+function AppRootContent() {
+  const location = useLocation()
+  const isAdminRoute = location.pathname.startsWith('/admin')
+
+  return isAdminRoute ? <AdminAppContent /> : <UserAppContent />
 }
 
 function App() {
   return (
     <Router>
       <CartProvider>
-        <AppContent />
+        <AdminAuthProvider>
+          <AppRootContent />
+          {/* Toast Notifications - Global */}
+          <ToastContainer
+            position="bottom-right"
+            autoClose={1500}
+            hideProgressBar={false}
+            newestOnTop={true}
+            closeOnClick
+            rtl={false}
+            pauseOnFocusLoss
+            draggable
+            pauseOnHover
+            theme="dark"
+          />
+        </AdminAuthProvider>
       </CartProvider>
     </Router>
   )

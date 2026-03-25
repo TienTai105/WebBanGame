@@ -28,22 +28,36 @@ const Login: FC = () => {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Allow browser to set/send cookies
         body: JSON.stringify(data),
       })
 
       if (response.ok) {
         const result = await response.json()
+        const user = result.data.user
+        const token = result.data.accessToken
+
         // Store token and user data
-        localStorage.setItem('accessToken', result.data.accessToken)
-        if (result.data.user) {
-          localStorage.setItem('user', JSON.stringify(result.data.user))
-          // Dispatch custom event to notify Header of login
+        localStorage.setItem('accessToken', token)
+        localStorage.setItem('user', JSON.stringify(user))
+
+        // Check user role - redirect accordingly
+        if (user.role === 'admin' || user.role === 'staff') {
+          // Admin/Staff user - store admin auth and redirect to admin dashboard
+          localStorage.setItem('adminToken', token)
+          localStorage.setItem('adminUser', JSON.stringify(user))
+          // Notify AdminAuthContext of changes
+          window.dispatchEvent(new Event('adminAuthChanged'))
+          window.dispatchEvent(new Event('adminLoggedIn'))
+          successToast('Đăng nhập admin thành công!')
+          navigate('/admin/dashboard')
+        } else {
+          // Regular customer - redirect to home
           window.dispatchEvent(new Event('userLoggedIn'))
+          successToast('Đăng nhập thành công!')
+          const redirectTo = (location.state as any)?.from || '/'
+          setTimeout(() => navigate(redirectTo), 1500)
         }
-        successToast('Đăng nhập thành công!')
-        // Redirect to previous page or home
-        const redirectTo = (location.state as any)?.from || '/'
-        setTimeout(() => navigate(redirectTo), 1500)
       } else {
         warningToast('Email hoặc mật khẩu không đúng')
       }

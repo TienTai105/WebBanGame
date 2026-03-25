@@ -74,7 +74,7 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
     ? (order.user as any)._id?.toString() 
     : (order.user as any)?.toString()
   
-  console.log('🔐 ORDER AUTH DEBUG:', {
+  console.log('ORDER AUTH DEBUG:', {
     orderId: req.params.id,
     orderUserId,
     requestUserId: userId?.toString(),
@@ -83,7 +83,7 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
   })
   
   if (orderUserId !== userId?.toString() && userRole !== 'admin') {
-    console.log('❌ AUTH FAILED - User mismatch')
+    console.log('AUTH FAILED - User mismatch')
     return res.status(403).json({
       success: false,
       message: 'Not authorized',
@@ -103,7 +103,7 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
 
 // Create order (with stock reservation)
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
-  const { orderItems, totalPrice, discountAmount, finalPrice, paymentMethod, shippingAddress, holdId } = req.body
+  const { orderItems, totalPrice, discountAmount, discountCode, shippingFee, finalPrice, paymentMethod, shippingAddress, holdId } = req.body
   const userId = (req as any).user._id
 
   if (!orderItems || orderItems.length === 0) {
@@ -147,7 +147,9 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     orderCode: generateOrderCode(),
     orderItems,
     totalPrice,
+    discountCode: discountCode || undefined,
     discountAmount: discountAmount || 0,
+    shippingFee: shippingFee || 0,
     finalPrice: finalPrice || totalPrice - (discountAmount || 0),
     paymentMethod,
     paymentStatus: 'unpaid',
@@ -194,40 +196,52 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   })
 
   // Send order confirmation email only for COD (Momo sends after payment confirmed)
+  console.log(`📧 Order created - paymentMethod: ${paymentMethod}, isCOD: ${isCOD}, will send email: ${isCOD}`)
   if (isCOD) {
     try {
       const customerEmail = shippingAddress?.email || (order.user as any)?.email
+      console.log(`📧 COD Email attempt - shippingAddress.email: ${shippingAddress?.email}, user.email: ${(order.user as any)?.email}, final: ${customerEmail}`)
+      
       if (customerEmail) {
+        console.log(`📨 Sending COD order confirmation email to ${customerEmail}`)
         const emailPayload = {
           to: customerEmail,
           orderCode: order.orderCode,
           orderItems: order.orderItems.map((item: any) => ({
-            name: item.product?.name || 'Unknown Product',
+            name: item.product?.name || item.name || 'Unknown Product',
             quantity: item.quantity,
-            price: item.price,
+            priceAtPurchase: item.priceAtPurchase || item.price,
             variantSku: item.variantSku,
             variant: item.variant,
+            warranty: item.warranty,
           })),
           shippingAddress: {
             name: shippingAddress?.name || '',
             address: shippingAddress?.address || '',
             city: shippingAddress?.city || '',
             phone: shippingAddress?.phone || '',
-            district: shippingAddress?.district,
-            ward: shippingAddress?.ward,
+            district: shippingAddress?.district || '',
+            ward: shippingAddress?.ward || '',
           },
           totalPrice: order.totalPrice,
           discountAmount: order.discountAmount || 0,
-          shippingFee: 0,
+          discountCode: order.discountCode || undefined,
+          shippingFee: order.shippingFee || 0,
           finalTotal: order.finalPrice,
           paymentMethod: order.paymentMethod,
           paymentStatus: 'unpaid',
         }
         
         await sendOrderConfirmationEmail(emailPayload)
+      } else {
+        console.warn('⚠️ No customer email found for COD order - skipping email')
       }
     } catch (emailError: any) {
-      console.error('⚠️ Failed to send order confirmation email:', emailError.message)
+      console.error('❌ Failed to send COD order confirmation email:', {
+        message: emailError?.message,
+        stack: emailError?.stack,
+        code: emailError?.code,
+      })
     }
   }
 
@@ -325,6 +339,8 @@ export const getAllOrders = asyncHandler(async (req: Request, res: Response) => 
 
 // Cancel order (user can cancel own pending orders)
 export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
+  console.log(`🔍 Cancel order request for: ${req.params.id}`)
+  
   const order = await Order.findById(req.params.id)
 
   if (!order) {
@@ -334,10 +350,12 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
     })
   }
 
-  if (order.orderStatus !== 'pending') {
+  console.log(`📦 Current order status: ${order.orderStatus}, Payment status: ${order.paymentStatus}`)
+
+  if (order.orderStatus !== 'pending' && order.orderStatus !== 'processing') {
     return res.status(400).json({
       success: false,
-      message: 'Can only cancel pending orders',
+      message: 'Chỉ có thể hủy đơn hàng chưa được giao hoặc đang xử lý',
     })
   }
 
@@ -349,17 +367,23 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
     })
   }
 
-  // Release reserved stock back to available
-  if (order.orderStatus === 'pending' && order.paymentStatus === 'unpaid') {
+  // Release reserved or sold stock back to available
+  if (order.orderStatus === 'pending' || order.orderStatus === 'processing') {
     try {
-      await inventoryService.releaseStock(order.orderItems as any, order._id.toString())
+      console.log(`💾 Releasing stock for ${order.orderItems.length} items...`)
+      await inventoryService.releaseStockOnCancel(order.orderItems as any, order._id.toString())
+      console.log(`✅ Stock released successfully`)
     } catch (err) {
       console.error('⚠️ Error releasing stock on cancel:', err)
     }
+  } else {
+    console.log(`⏭️ Skipping stock release - Status: ${order.orderStatus}`)
   }
 
   order.orderStatus = 'cancelled'
   await order.save()
+
+  console.log(`✔️ Order cancelled successfully: ${order._id}`)
 
   res.status(200).json({
     success: true,

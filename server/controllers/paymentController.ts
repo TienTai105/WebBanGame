@@ -67,7 +67,7 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
       order.momoRequestId = momoResponse.requestId
       await order.save()
 
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         data: {
           payUrl: momoResponse.payUrl,
@@ -78,7 +78,7 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
         },
       })
     } else {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         message: `Momo error: ${momoResponse.message}`,
         resultCode: momoResponse.resultCode,
@@ -86,7 +86,7 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
     }
   } catch (err: any) {
     console.error('❌ Momo init error:', err)
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: err.message || 'Failed to initialize Momo payment',
     })
@@ -98,13 +98,18 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
  * Momo sends IPN callback after payment
  */
 export const momoCallback = asyncHandler(async (req: Request, res: Response) => {
+  console.log('🔔 [MOMO CALLBACK] RECEIVED REQUEST - Body:', JSON.stringify(req.body, null, 2))
+  
   const { orderId, resultCode, transId, requestId } = req.body
 
-  console.log('📩 Momo Callback:', { orderId, resultCode, transId, requestId })
+  console.log('📩 [MOMO CALLBACK] Extracted data:', { orderId, resultCode, transId, requestId })
 
   // Find order
   const order = await Order.findById(orderId)
+  console.log(`📩 [MOMO CALLBACK] Order found: ${order ? 'YES - ' + order.orderCode : 'NO'}`)
+  
   if (!order) {
+    console.error('❌ [MOMO CALLBACK] Order not found for ID:', orderId)
     return res.status(404).json({ success: false, message: 'Order not found' })
   }
 
@@ -135,21 +140,32 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
     await order.save()
 
     // Send order confirmation email after payment success
+    console.log(`📧 Momo payment confirmed (resultCode: ${resultCode}) - sending confirmation email for order ${order.orderCode}`)
     try {
-      const populatedOrder = await (order as any).populate('user').populate({
-        path: 'orderItems.product',
-        select: 'name price',
-      })
+      const populatedOrder = await Order.findById(order._id)
+        .populate('user')
+        .populate({
+          path: 'orderItems.product',
+          select: 'name price',
+        })
       
-      const customerEmail = populatedOrder.shippingAddress.email || (populatedOrder.user as any)?.email
+      if (!populatedOrder) {
+        console.error('❌ Failed to populate order for email')
+        return
+      }
+      
+      const customerEmail = populatedOrder?.shippingAddress.email || (populatedOrder?.user as any)?.email
+      console.log(`📧 Momo Email attempt - shippingAddress.email: ${populatedOrder?.shippingAddress.email}, user.email: ${(populatedOrder?.user as any)?.email}, final: ${customerEmail}`)
+      
       if (customerEmail) {
+        console.log(`📨 Sending Momo order confirmation email to ${customerEmail}`)
         const emailPayload = {
           to: customerEmail,
           orderCode: populatedOrder.orderCode,
           orderItems: populatedOrder.orderItems.map((item: any) => ({
-            name: item.product?.name || 'Unknown Product',
+            name: item.product?.name || item.name || 'Unknown Product',
             quantity: item.quantity,
-            price: item.price,
+            priceAtPurchase: item.priceAtPurchase || item.price,
             variantSku: item.variantSku,
             variant: item.variant,
             warranty: item.warranty,
@@ -159,12 +175,13 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
             address: populatedOrder.shippingAddress.address || '',
             city: populatedOrder.shippingAddress.city || '',
             phone: populatedOrder.shippingAddress.phone || '',
-            district: populatedOrder.shippingAddress.district,
-            ward: populatedOrder.shippingAddress.ward,
+            district: populatedOrder.shippingAddress.district || '',
+            ward: populatedOrder.shippingAddress.ward || '',
           },
           totalPrice: populatedOrder.totalPrice,
           discountAmount: populatedOrder.discountAmount || 0,
-          shippingFee: 0,
+          discountCode: populatedOrder.discountCode || undefined,
+          shippingFee: populatedOrder.shippingFee || 0,
           finalTotal: populatedOrder.finalPrice,
           paymentMethod: populatedOrder.paymentMethod,
           paymentStatus: 'paid',
@@ -172,9 +189,15 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
         
         await sendOrderConfirmationEmail(emailPayload)
         console.log(`✅ Order confirmation email sent to ${customerEmail}`)
+      } else {
+        console.warn('⚠️ No customer email found for Momo order - skipping email')
       }
     } catch (emailError: any) {
-      console.error('⚠️ Failed to send confirmation email after Momo payment:', emailError.message)
+      console.error('❌ Failed to send confirmation email after Momo payment:', {
+        message: emailError?.message,
+        stack: emailError?.stack,
+        code: emailError?.code,
+      })
     }
 
     return res.status(200).json({ success: true, message: 'Payment confirmed' })
@@ -270,43 +293,59 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
 
         // Send order confirmation email after payment success
         try {
-          const populatedOrder = await (order as any).populate('user').populate({
-            path: 'orderItems.product',
-            select: 'name price',
-          })
+          const populatedOrder = await Order.findById(order._id)
+            .populate('user')
+            .populate({
+              path: 'orderItems.product',
+              select: 'name price',
+            })
           
-          const customerEmail = populatedOrder.shippingAddress.email || (populatedOrder.user as any)?.email
+          const customerEmail = populatedOrder?.shippingAddress.email || (populatedOrder?.user as any)?.email
+          if (!populatedOrder) {
+            console.error('❌ Failed to populate order for email')
+            throw new Error('Failed to populate order')
+          }
+          
           if (customerEmail) {
             const emailPayload = {
               to: customerEmail,
               orderCode: populatedOrder.orderCode,
               orderItems: populatedOrder.orderItems.map((item: any) => ({
-                name: item.product?.name || 'Unknown Product',
+                name: item.product?.name || item.name || 'Unknown Product',
                 quantity: item.quantity,
-                price: item.price,
+                priceAtPurchase: item.priceAtPurchase || item.price,
                 variantSku: item.variantSku,
                 variant: item.variant,
+                warranty: item.warranty,
               })),
               shippingAddress: {
                 name: populatedOrder.shippingAddress.name || '',
                 address: populatedOrder.shippingAddress.address || '',
                 city: populatedOrder.shippingAddress.city || '',
                 phone: populatedOrder.shippingAddress.phone || '',
-                district: populatedOrder.shippingAddress.district,
-                ward: populatedOrder.shippingAddress.ward,
+                district: populatedOrder.shippingAddress.district || '',
+                ward: populatedOrder.shippingAddress.ward || '',
               },
               totalPrice: populatedOrder.totalPrice,
               discountAmount: populatedOrder.discountAmount || 0,
-              shippingFee: 0,
+              discountCode: populatedOrder.discountCode || undefined,
+              shippingFee: populatedOrder.shippingFee || 0,
               finalTotal: populatedOrder.finalPrice,
               paymentMethod: populatedOrder.paymentMethod,
               paymentStatus: 'paid',
             }
             
             await sendOrderConfirmationEmail(emailPayload)
+            console.log(`✅ Order confirmation email sent to ${customerEmail}`)
+          } else {
+            console.warn('⚠️ No customer email found when querying Momo status - skipping email')
           }
         } catch (emailError: any) {
-          console.error('⚠️ Failed to send confirmation email via query:', emailError.message)
+          console.error('❌ Failed to send confirmation email via query:', {
+            message: emailError?.message,
+            stack: emailError?.stack,
+            code: emailError?.code,
+          })
         }
 
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
@@ -450,5 +489,66 @@ export const testMomoCallback = asyncHandler(async (req: Request, res: Response)
   } catch (err: any) {
     console.error('❌ Test callback error:', err)
     res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+// Test endpoint to send a test email
+export const sendTestEmail = asyncHandler(async (req: Request, res: Response) => {
+  const { testEmail = '2200010298@nttu.edu.vn' } = req.body
+  
+  console.log(`📧 [TEST EMAIL] Attempting to send test email to: ${testEmail}`)
+  
+  try {
+    const { sendOrderConfirmationEmail } = await import('../services/emailService.js')
+    
+    const testPayload = {
+      to: testEmail,
+      orderCode: 'TEST-' + Date.now(),
+      orderItems: [
+        {
+          name: 'Test Product',
+          quantity: 1,
+          priceAtPurchase: 100000,
+          warranty: '12 tháng',
+        }
+      ],
+      shippingAddress: {
+        name: 'Test User',
+        address: '123 Main St',
+        city: 'Ha Noi',
+        phone: '0123456789',
+        district: '',
+        ward: '',
+      },
+      totalPrice: 100000,
+      discountAmount: 0,
+      discountCode: undefined,
+      shippingFee: 30000,
+      finalTotal: 130000,
+      paymentMethod: 'COD',
+      paymentStatus: 'unpaid',
+    }
+    
+    console.log(`📧 [TEST EMAIL] Sending test payload...`)
+    const result = await sendOrderConfirmationEmail(testPayload)
+    
+    console.log(`✅ [TEST EMAIL] Sent successfully! Message ID: ${result.messageId}`)
+    res.status(200).json({ 
+      success: true, 
+      message: 'Test email sent successfully',
+      messageId: result.messageId,
+      to: testEmail,
+    })
+  } catch (error: any) {
+    console.error(`❌ [TEST EMAIL] Failed to send:`, {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack,
+    })
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to send test email',
+      error: error?.message,
+    })
   }
 })
