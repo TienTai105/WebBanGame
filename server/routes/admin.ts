@@ -12,6 +12,14 @@ router.use(protect)
 // ==================== DASHBOARD ====================
 // GET /api/admin/dashboard/stats - Get KPI data
 router.get('/dashboard/stats', staffOnly, asyncHandler(adminController.getDashboardStats))
+// ==================== PRODUCTS ====================
+// GET /api/admin/products - Get all products with pagination and filtering
+router.get('/products', staffOnly, asyncHandler(adminController.getAdminProducts))
+// GET /api/admin/products/:id - Get product detail
+router.get('/products/:id', staffOnly, asyncHandler(adminController.getAdminProductDetail))
+
+// DELETE /api/admin/products/:id - Delete a product
+router.delete('/products/:id', staffOnly, asyncHandler(adminController.deleteAdminProduct))
 
 // ==================== OTP VERIFICATION ====================
 // POST /api/admin/otp/generate - Generate OTP for action

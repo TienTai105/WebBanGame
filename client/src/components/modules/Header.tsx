@@ -41,7 +41,7 @@ const Header: FC<HeaderProps> = ({
       }
     }
 
-    const handleLogout = () => {
+    const handleLogoutEvent = () => {
       setUser(null)
       setShowDropdown(false)
     }
@@ -51,13 +51,13 @@ const Header: FC<HeaderProps> = ({
     // Listen for custom login event
     window.addEventListener('userLoggedIn', loadUser)
     // Listen for custom logout event
-    window.addEventListener('userLoggedOut', handleLogout)
+    window.addEventListener('userLoggedOut', handleLogoutEvent)
     // Also listen for storage changes
     window.addEventListener('storage', loadUser)
 
     return () => {
       window.removeEventListener('userLoggedIn', loadUser)
-      window.removeEventListener('userLoggedOut', handleLogout)
+      window.removeEventListener('userLoggedOut', handleLogoutEvent)
       window.removeEventListener('storage', loadUser)
     }
   }, [])
@@ -77,11 +77,9 @@ const Header: FC<HeaderProps> = ({
   const handleLogout = () => {
     localStorage.removeItem('accessToken')
     localStorage.removeItem('user')
-    setUser(null)
-    setShowDropdown(false)
-    // Dispatch event to notify other components
     window.dispatchEvent(new Event('userLoggedOut'))
-    navigate('/login')
+    // Hard redirect to trigger full page reload
+    window.location.href = '/login'
   }
 
   const handleMyOrders = () => {

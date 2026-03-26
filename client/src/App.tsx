@@ -25,6 +25,7 @@ import OrderHistoryPage from './pages/OrderHistoryPage'
 import AddressBookPage from './pages/AddressBookPage'
 import AdminDashboard from './pages/Admin/AdminDashboard'
 import AdminProducts from './pages/Admin/AdminProducts'
+import ProductDetail from './pages/Admin/ProductDetail'
 import AdminOrders from './pages/Admin/AdminOrders'
 import AdminNews from './pages/Admin/AdminNews'
 import AdminSettings from './pages/Admin/AdminSettings'
@@ -75,10 +76,13 @@ function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
 // Admin App Content - Separate layout without user Header/Navigation/Footer
 function AdminAppContent() {
   return (
-    <Routes>
+    <Routes>  
+      {/* Catch-all redirect to dashboard */}
+      <Route path="/admin/*" element={<Navigate to="/admin/dashboard" replace />} />
       {/* Admin Routes */}
       <Route path="/admin/dashboard" element={<ProtectedAdminRoute><AdminDashboard /></ProtectedAdminRoute>} />
       <Route path="/admin/products" element={<ProtectedAdminRoute><AdminProducts /></ProtectedAdminRoute>} />
+      <Route path="/admin/products/:productId" element={<ProtectedAdminRoute><ProductDetail /></ProtectedAdminRoute>} />
       <Route path="/admin/orders" element={<ProtectedAdminRoute><AdminOrders /></ProtectedAdminRoute>} />
       <Route path="/admin/news" element={<ProtectedAdminRoute><AdminNews /></ProtectedAdminRoute>} />
       <Route path="/admin/settings" element={<ProtectedAdminRoute><AdminSettings /></ProtectedAdminRoute>} />
@@ -86,8 +90,7 @@ function AdminAppContent() {
       <Route path="/admin/promotions" element={<ProtectedAdminRoute><AdminPromotions /></ProtectedAdminRoute>} />
       <Route path="/admin/reviews" element={<ProtectedAdminRoute><AdminReviews /></ProtectedAdminRoute>} />
       
-      {/* Catch-all redirect to dashboard */}
-      <Route path="/admin/*" element={<Navigate to="/admin/dashboard" replace />} />
+    
     </Routes>
   )
 }

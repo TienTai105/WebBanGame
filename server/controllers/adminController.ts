@@ -2,6 +2,7 @@ import { Request, Response } from 'express'
 import User from '../models/User.js'
 import Order from '../models/Order.js'
 import Product from '../models/Product.js'
+import Inventory from '../models/Inventory.js'
 import OTPVerification from '../models/OTPVerification.js'
 import AuditLog from '../models/AuditLog.js'
 import * as otpService from '../services/otpService.js'
@@ -126,10 +127,46 @@ export const getDashboardStats = async (req: AdminRequest, res: Response): Promi
       createdAt: { $gte: filterStartDate, $lte: filterEndDate },
     })
 
-    // Low stock products (not period-dependent)
-    const lowStockProducts = await Product.find({
-      stock: { $lt: 10 },
-    })
+    // Low stock products from Inventory (not period-dependent)
+    const lowStockProducts = await Inventory.aggregate([
+      {
+        $match: {
+          available: { $lt: 10 },
+        },
+      },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'productId',
+          foreignField: '_id',
+          as: 'productInfo',
+        },
+      },
+      {
+        $unwind: '$productInfo',
+      },
+      {
+        $project: {
+          _id: '$productId',
+          name: '$productInfo.name',
+          sku: { $ifNull: ['$variantSku', '$productInfo.sku'] },
+          stock: '$available',
+          image: {
+            $cond: [
+              { $isArray: '$productInfo.images' },
+              { $arrayElemAt: ['$productInfo.images', 0] },
+              null,
+            ],
+          },
+        },
+      },
+      {
+        $sort: { stock: 1 },
+      },
+      {
+        $limit: 10,
+      },
+    ])
 
     // Daily revenue for current period (for chart)
     const currentPeriodDailyRevenue = await Order.aggregate([
@@ -233,6 +270,24 @@ export const getDashboardStats = async (req: AdminRequest, res: Response): Promi
       // Promotion model might not exist yet
     }
 
+    // Payment methods stats for selected period (completed orders only)
+    const paymentMethods = await Order.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: filterStartDate, $lte: filterEndDate },
+          orderStatus: 'completed',
+        },
+      },
+      {
+        $group: {
+          _id: '$paymentMethod',
+          count: { $sum: 1 },
+          revenue: { $sum: '$finalPrice' },
+        },
+      },
+      { $sort: { count: -1 } },
+    ])
+
     res.status(200).json({
       success: true,
       data: {
@@ -259,7 +314,7 @@ export const getDashboardStats = async (req: AdminRequest, res: Response): Promi
           name: product.name,
           sku: product.sku,
           stock: product.stock,
-          image: product.image,
+          image: product.image?.url || null,
         })),
         topSellingProducts: topSellingProducts.map((item: any) => ({
           _id: item._id,
@@ -294,6 +349,11 @@ export const getDashboardStats = async (req: AdminRequest, res: Response): Promi
           active: activePromotions,
           inactive: totalPromotions - activePromotions,
         },
+        paymentMethods: paymentMethods.map((item: any) => ({
+          name: item._id || 'Unknown',
+          value: item.count,
+          revenue: item.revenue,
+        })),
       },
     })
   } catch (error: any) {
@@ -630,5 +690,165 @@ export const resetUserPassword = async (req: AdminRequest, res: Response): Promi
       success: false,
       message: error.message || 'Failed to reset password',
     })
+  }
+}
+
+/**
+ * GET /api/admin/products
+ * Get all products with pagination, filtering, and sorting
+ * Query params: page, limit, categoryId, search
+ */
+export const getAdminProducts = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    console.log('📦 Getting admin products...')
+    console.log('User:', { _id: req.user?._id, role: req.user?.role })
+    
+    const { page = 1, limit = 10, categoryId, search } = req.query
+    console.log('Query params:', { page, limit, categoryId, search })
+
+    const pageNum = Math.max(1, parseInt(page as string) || 1)
+    const limitNum = Math.max(1, Math.min(100, parseInt(limit as string) || 10))
+    const skip = (pageNum - 1) * limitNum
+
+    // Build filter
+    const filter: any = {}
+    if (categoryId) {
+      filter.categoryId = categoryId
+    }
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { sku: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ]
+    }
+
+    console.log('Filter:', filter)
+
+    // Fetch products with pagination
+    const products = await Product.find(filter)
+      .populate('categoryId', 'name')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean()
+
+    console.log(`Found ${products.length} products`)
+    if (products.length > 0) {
+      console.log('📦 Sample product from DB:', JSON.stringify(products[0], null, 2))
+      
+      // Debug: Check variant images
+      if (products[0].variants && products[0].variants.length > 0) {
+        console.log('🖼️ First variant of first product:', {
+          sku: products[0].variants[0].sku,
+          name: products[0].variants[0].name,
+          hasImages: !!products[0].variants[0].images,
+          imagesLength: products[0].variants[0].images?.length,
+          imagesData: products[0].variants[0].images,
+        })
+      }
+    }
+
+    // Get stock info from Inventory
+    const productsWithStock = await Promise.all(
+      products.map(async (product: any) => {
+        const inventory = await Inventory.findOne({ productId: product._id }).lean()
+        
+        // If product has variants, get inventory for each variant
+        let variantsWithStock = product.variants
+        if (product.variants && product.variants.length > 0) {
+          variantsWithStock = await Promise.all(
+            product.variants.map(async (variant: any) => {
+              const variantInventory = await Inventory.findOne({
+                productId: product._id,
+                variantSku: variant.sku
+              }).lean()
+              return {
+                ...variant,
+                stock: variantInventory?.available || variant.stock || 0,
+              }
+            })
+          )
+        }
+        
+        return {
+          ...product,
+          variants: variantsWithStock,
+          stock: inventory?.available || 0,
+          minPrice: product.minPrice || product.price,
+          maxPrice: product.maxPrice || product.finalPrice || product.price,
+        }
+      })
+    )
+
+    // Get total count for pagination
+    const total = await Product.countDocuments(filter)
+    const pages = Math.ceil(total / limitNum)
+
+    console.log(`Returning ${productsWithStock.length} products, total: ${total}`)
+
+    res.status(200).json({
+      success: true,
+      data: productsWithStock,
+      total,
+      page: pageNum,
+      pages,
+    })
+  } catch (error: any) {
+    console.error('❌ Error fetching admin products:', error)
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to fetch products',
+    })
+  }
+}
+
+/**
+ * DELETE /api/admin/products/:id
+ * Delete a product
+ */
+export const deleteAdminProduct = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params
+
+    const product = await Product.findById(id)
+    if (!product) {
+      res.status(404).json({ success: false, message: 'Product not found' })
+      return
+    }
+
+    // Delete product and its inventory
+    await Product.findByIdAndDelete(id)
+    await Inventory.deleteOne({ productId: id })
+
+    res.status(200).json({
+      success: true,
+      message: 'Product deleted successfully',
+    })
+  } catch (error: any) {
+    console.error('Error deleting product:', error)
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete product',
+    })
+  }
+}
+
+/**
+ * GET /api/admin/products/:id
+ * Get product detail by ID
+ */
+export const getAdminProductDetail = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .populate('categoryId', 'name')
+      .lean()
+    if (!product) {
+      res.status(404).json({ error: 'Product not found' })
+      return
+    }
+    res.status(200).json(product)
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to get product detail' })
   }
 }

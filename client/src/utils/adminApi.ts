@@ -59,6 +59,9 @@ export async function adminApiCall<T>(
       throw new Error('No admin token found')
     }
 
+    console.log('Admin API Call:', endpoint)
+    console.log('Token:', token.substring(0, 20) + '...')
+
     let response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       credentials: 'include', // Send cookies
@@ -68,6 +71,8 @@ export async function adminApiCall<T>(
         Authorization: `Bearer ${token}`,
       },
     })
+
+    console.log('Response Status:', response.status, response.statusText)
 
     // If 401 (token expired), try refreshing and retry
     if (response.status === 401) {
@@ -98,9 +103,11 @@ export async function adminApiCall<T>(
     }
 
     const responseData = await response.json() as ApiResponse<T>
+    console.log('Response Data:', responseData)
     return { data: responseData.data, error: null }
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error))
+    console.error('Admin API Error:', err.message)
     return { data: null, error: err }
   }
 }

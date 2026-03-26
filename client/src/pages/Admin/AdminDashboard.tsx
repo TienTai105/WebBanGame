@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import DatePicker from 'react-datepicker'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import 'react-datepicker/dist/react-datepicker.css'
 import '../../styles/datepicker.css'
 import AdminLayout from '../../components/admin/AdminLayout'
@@ -58,6 +58,11 @@ interface DashboardStats {
       revenue: number
     }>
   }
+  paymentMethods: Array<{
+    name: string
+    value: number
+    revenue: number
+  }>
   products: {
     total: number
     active: number
@@ -86,26 +91,15 @@ const AdminDashboard: React.FC = () => {
       const percentChange = previous > 0 ? ((difference / previous) * 100).toFixed(1) : 0
       const isPositive = difference >= 0
 
-      // Calculate compare date based on comparison type
+      // Calculate compare date based on comparison type (always previousPeriod)
       const currentDate = new Date(data.date)
       let compareDate = new Date(currentDate)
       let comparisonLabel = ''
 
-      if (comparisonType === 'yesterday') {
-        compareDate.setDate(compareDate.getDate() - 1)
-        comparisonLabel = 'Hôm qua'
-      } else if (comparisonType === 'lastmonth') {
-        compareDate.setMonth(compareDate.getMonth() - 1)
-        comparisonLabel = 'Tháng trước'
-      } else if (comparisonType === 'yearoveryear') {
-        compareDate.setFullYear(compareDate.getFullYear() - 1)
-        comparisonLabel = 'Cùng kỳ năm ngoái'
-      } else {
-        // previousPeriod - use auto-calculated range
-        const rangeDays = Math.floor((dateRange.endDate.getTime() - dateRange.startDate.getTime()) / (1000 * 60 * 60 * 24))
-        compareDate = new Date(currentDate.getTime() - rangeDays * 24 * 60 * 60 * 1000)
-        comparisonLabel = 'Kỳ trước'
-      }
+      // previousPeriod - use auto-calculated range
+      const rangeDays = Math.floor((dateRange.endDate.getTime() - dateRange.startDate.getTime()) / (1000 * 60 * 60 * 24))
+      compareDate = new Date(currentDate.getTime() - rangeDays * 24 * 60 * 60 * 1000)
+      comparisonLabel = 'Kỳ trước'
 
       const compareDateStr = compareDate.toISOString().split('T')[0]
 
@@ -178,7 +172,7 @@ const AdminDashboard: React.FC = () => {
 
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [comparisonType, setComparisonType] = useState('previousPeriod')
+  const comparisonType = 'previousPeriod' // Default comparison type
   const [dateRange, setDateRange] = useState({
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1), // First day of month
     endDate: new Date(), // Today
@@ -209,7 +203,7 @@ const AdminDashboard: React.FC = () => {
     }
 
     fetchStats()
-  }, [dateRange, comparisonType])
+  }, [dateRange])
 
   return (
     <AdminLayout>
@@ -301,6 +295,22 @@ const AdminDashboard: React.FC = () => {
             <button
               onClick={() => {
                 const today = new Date()
+                const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000)
+                yesterday.setHours(0, 0, 0, 0)
+                const todayEnd = new Date(today)
+                todayEnd.setHours(23, 59, 59, 999)
+                setDateRange({
+                  startDate: yesterday,
+                  endDate: todayEnd,
+                })
+              }}
+              className="px-4 py-2.5 rounded-lg text-sm font-semibold text-slate-600 bg-slate-50 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-all"
+            >
+              Yesterday
+            </button>
+            <button
+              onClick={() => {
+                const today = new Date()
                 const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
                 setDateRange({
                   startDate: startOfMonth,
@@ -376,7 +386,7 @@ const AdminDashboard: React.FC = () => {
                   <div className="flex flex-col items-center">
                     <span>
                       {(stats.revenue.current).toLocaleString('vi-VN')} 
-                      <span className="text-3xl pl-2 mb-2 text-slate-500 font-normal mt-2">đ</span>
+                      <span className="text-3xl pl-2 mb-2 text-slate-500 font-normal mt-2">VNĐ</span>
                     </span>
                    
                   </div>
@@ -533,21 +543,8 @@ const AdminDashboard: React.FC = () => {
             <div className="lg:col-span-2 space-y-8">
               {/* Revenue Chart */}
               <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
-                <div className="flex justify-between items-center mb-6">
+                <div className="mb-6">
                   <h3 className="text-lg font-bold text-slate-900">Revenue Trend</h3>
-                  <div className="flex gap-4 items-center">
-                    {/* Comparison Type Selector */}
-                    <select
-                      value={comparisonType}
-                      onChange={(e) => setComparisonType(e.target.value)}
-                      className="px-3 py-2 rounded-lg text-sm font-medium bg-slate-50 border border-slate-200 text-slate-700 hover:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
-                    >
-                      <option value="previousPeriod">So sánh: Kỳ trước</option>
-                      <option value="yesterday">So sánh: Hôm qua</option>
-                      <option value="lastmonth">So sánh: Tháng trước</option>
-                      <option value="yearoveryear">So sánh: Cùng kỳ năm ngoái</option>
-                    </select>
-                  </div>
                 </div>
                 <ResponsiveContainer width="100%" height={420}>
                   <LineChart data={
@@ -597,15 +594,7 @@ const AdminDashboard: React.FC = () => {
                 </ResponsiveContainer>
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
                   <p className="text-xs text-blue-900">
-                    <span className="font-semibold">💡 Cách đọc:</span> {
-                      comparisonType === 'yesterday' 
-                        ? 'So sánh doanh thu hôm nay (xanh đậm) với hôm qua (xám nhạt).'
-                        : comparisonType === 'lastmonth'
-                        ? 'So sánh doanh thu tháng này (xanh đậm) với tháng trước cùng ngày (xám nhạt).'
-                        : comparisonType === 'yearoveryear'
-                        ? 'So sánh doanh thu năm nay (xanh đậm) với cùng kỳ năm ngoái (xám nhạt).'
-                        : 'So sánh doanh thu khoảng thời gian hiện tại (xanh đậm) với kỳ trước có độ dài bằng nhau (xám nhạt).'
-                    } Giúp bạn nhận diện xu hướng bán hàng.
+                    <span className="font-semibold">💡 Cách đọc:</span> So sánh doanh thu khoảng thời gian hiện tại (xanh đậm) với kỳ trước có độ dài bằng nhau (xám nhạt). Giúp bạn nhận diện xu hướng bán hàng.
                   </p>
                 </div>
               </div>
@@ -703,9 +692,75 @@ const AdminDashboard: React.FC = () => {
               {/* Payment Mix */}
               <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
                 <h3 className="text-lg font-bold text-slate-900 mb-6">Payment Methods</h3>
-                <div className="h-64 bg-gradient-to-b from-slate-50 to-slate-100 rounded-lg flex items-center justify-center">
-                  <p className="text-slate-400">Chart placeholder - Coming soon</p>
-                </div>
+                {stats.paymentMethods && stats.paymentMethods.length > 0 ? (
+                  <div className="space-y-6">
+                    <ResponsiveContainer width="100%" height={350}>
+                      <PieChart>
+                        <Pie
+                          data={stats.paymentMethods}
+                          cx="50%"
+                          cy="45%"
+                          innerRadius={60}
+                          outerRadius={110}
+                          paddingAngle={2}
+                          labelLine={true}
+                          label={({ name, value }) => {
+                            const total = stats.paymentMethods.reduce((sum, m) => sum + m.value, 0)
+                            const percent = ((value / total) * 100).toFixed(0)
+                            return `${name} ${percent}%`
+                          }}
+                          fill="#8884d8"
+                          dataKey="value"
+                          animationBegin={0}
+                          animationDuration={600}
+                        >
+                          <Cell fill="#4f46e5" />
+                          <Cell fill="#06b6d4" />
+                          <Cell fill="#10b981" />
+                          <Cell fill="#f59e0b" />
+                          <Cell fill="#ef4444" />
+                          <Cell fill="#8b5cf6" />
+                        </Pie>
+                        <Tooltip 
+                          formatter={(value, name) => {
+                            if (name === 'value') return [`${value} orders`, 'Orders']
+                            return value
+                          }}
+                          contentStyle={{
+                            backgroundColor: '#1e293b',
+                            border: '2px solid #4f46e5',
+                            borderRadius: '10px',
+                            padding: '12px',
+                            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.3)',
+                          }}
+                          labelStyle={{ color: '#e0e7ff', fontWeight: 'bold' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    
+                    {/* Legend */}
+                    <div className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
+                      {stats.paymentMethods.map((method, idx) => {
+                        const colors = ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+                        const totalOrders = stats.paymentMethods.reduce((sum, m) => sum + m.value, 0)
+                        const percentage = ((method.value / totalOrders) * 100).toFixed(1)
+                        return (
+                          <div key={idx} className="flex items-center gap-2">
+                            <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: colors[idx % colors.length] }}></div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-slate-700 truncate">{method.name}</p>
+                              <p className="text-[10px] text-slate-500">{method.value} orders ({percentage}%)</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-64 bg-gradient-to-b from-slate-50 to-slate-100 rounded-lg flex items-center justify-center">
+                    <p className="text-slate-400">No payment data available</p>
+                  </div>
+                )}
               </div>
 
               {/* Inventory Alerts */}
@@ -724,11 +779,20 @@ const AdminDashboard: React.FC = () => {
                     {stats.lowStockProducts.map((product) => (
                       <div key={product._id} className="p-4 hover:bg-slate-50 transition-colors">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 flex-shrink-0">
-                            <span className="material-symbols-outlined text-sm">image</span>
+                          <div className="w-16 h-16 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden border border-slate-200">
+                            {product.image ? (
+                              <img 
+                                src={product.image} 
+                                alt={product.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <span className="material-symbols-outlined text-slate-400">image</span>
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <h4 className="text-sm font-bold text-slate-900 truncate">{product.name}</h4>
+                            <p className="text-xs text-slate-500 mb-2">SKU: {product.sku}</p>
                             <p className={`text-xs font-bold ${
                               product.stock === 0 ? 'text-red-600' : 'text-amber-600'
                             }`}>

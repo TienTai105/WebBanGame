@@ -96,7 +96,14 @@ export const AdminAuthProvider: React.FC<{ children: ReactNode }> = ({ children 
   const logout = () => {
     localStorage.removeItem('adminToken')
     localStorage.removeItem('adminUser')
+    // Also clear user data if exists
+    localStorage.removeItem('user')
+    localStorage.removeItem('accessToken')
     setUser(null)
+    // Notify other components
+    window.dispatchEvent(new Event('userLoggedOut'))
+    // Hard redirect to login
+    window.location.href = '/login'
   }
 
   const generateOTP = async (action: string) => {
