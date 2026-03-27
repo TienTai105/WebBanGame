@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout'
+import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal'
 import VariantManagementModal, { ProductVariant } from '../../components/admin/VariantManagementModal'
 import ActionMenu from '../../components/admin/ActionMenu'
@@ -310,11 +311,7 @@ const AdminProducts: React.FC = () => {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <nav className="flex text-xs text-slate-400 mb-2 gap-2">
-              <span>Dashboard</span>
-              <span>/</span>
-              <span className="text-indigo-600 font-medium">Product Management</span>
-            </nav>
+            <AdminBreadcrumb items={[{ label: 'Product Management' }]} />
             <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">Quản Lý Sản Phẩm</h1>
           </div>
           <div className="flex items-center gap-3">
@@ -323,7 +320,7 @@ const AdminProducts: React.FC = () => {
               Export
             </button>
             <button
-              onClick={() => navigate('/admin/products/new')}
+              onClick={() => navigate('/admin/products/create')}
               className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-br from-indigo-600 to-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-200 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>

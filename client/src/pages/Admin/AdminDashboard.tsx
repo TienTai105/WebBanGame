@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import 'react-datepicker/dist/react-datepicker.css'
 import '../../styles/datepicker.css'
 import AdminLayout from '../../components/admin/AdminLayout'
+import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import { errorToast } from '../../utils/toast'
 import adminApiCall from '../../utils/adminApi'
 
@@ -213,13 +214,7 @@ const AdminDashboard: React.FC = () => {
           <h2 className="text-4xl font-extrabold tracking-tight text-slate-900 mb-2">
             Dashboard Overview
           </h2>
-          <nav className="flex text-sm text-slate-500 gap-2">
-            <a href="/admin/dashboard" className="hover:text-indigo-600">
-              Admin Dashboard
-            </a>
-            <span>/</span>
-            <span className="text-indigo-600 font-semibold">Analytics</span>
-          </nav>
+          <AdminBreadcrumb items={[{ label: 'Analytics' }]} />
         </div>
         <div className="flex items-center gap-4 flex-wrap">
           {/* Date Range Picker */}

@@ -10,6 +10,7 @@ import { cn } from '../../utils/cn'
 import { successToast, errorToast } from '../../utils/toast'
 import { useInventory } from '../../hooks/useInventory'
 import { ProductResponse } from '../../services/index'
+import DOMPurify from 'dompurify'
 
 interface SelectedState {
   variantIndex: number | null
@@ -421,7 +422,10 @@ const ProductDetailPage: FC = () => {
         <div className="border-2 border-indigo-500/30 rounded-lg p-6 bg-gradient-to-br from-indigo-950/20 to-slate-900/20 mt-12">
           <h3 className="font-bold text-white mb-3">MÔ TẢ</h3>
           {product.description && (
-            <p className="text-sm text-slate-300 whitespace-pre-wrap">{product.description}</p>
+            <div
+              className="text-sm text-slate-300 prose prose-invert prose-sm max-w-none [&_img]:rounded-lg [&_img]:max-w-full [&_a]:text-cyan-400 [&_a]:underline"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description) }}
+            />
           )}
         </div>
 

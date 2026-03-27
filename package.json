@@ -13,10 +13,20 @@
     "build:client": "cd client && npm run build",
     "start": "cd server && npm start"
   },
-  "keywords": ["ecommerce", "gaming", "mern"],
+  "keywords": [
+    "ecommerce",
+    "gaming",
+    "mern"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@types/dompurify": "^3.0.5",
+    "dompurify": "^3.3.3",
+    "quill": "^2.0.3",
+    "react-quill": "^2.0.0"
   }
 }

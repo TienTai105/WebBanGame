@@ -26,6 +26,7 @@ import AddressBookPage from './pages/AddressBookPage'
 import AdminDashboard from './pages/Admin/AdminDashboard'
 import AdminProducts from './pages/Admin/AdminProducts'
 import ProductDetail from './pages/Admin/ProductDetail'
+import ProductCreate from './pages/Admin/ProductCreate'
 import AdminOrders from './pages/Admin/AdminOrders'
 import AdminNews from './pages/Admin/AdminNews'
 import AdminSettings from './pages/Admin/AdminSettings'
@@ -82,6 +83,7 @@ function AdminAppContent() {
       {/* Admin Routes */}
       <Route path="/admin/dashboard" element={<ProtectedAdminRoute><AdminDashboard /></ProtectedAdminRoute>} />
       <Route path="/admin/products" element={<ProtectedAdminRoute><AdminProducts /></ProtectedAdminRoute>} />
+      <Route path="/admin/products/create" element={<ProtectedAdminRoute><ProductCreate /></ProtectedAdminRoute>} />
       <Route path="/admin/products/:productId" element={<ProtectedAdminRoute><ProductDetail /></ProtectedAdminRoute>} />
       <Route path="/admin/orders" element={<ProtectedAdminRoute><AdminOrders /></ProtectedAdminRoute>} />
       <Route path="/admin/news" element={<ProtectedAdminRoute><AdminNews /></ProtectedAdminRoute>} />

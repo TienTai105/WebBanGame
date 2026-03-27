@@ -9,7 +9,7 @@ interface AuthRequest extends Request {
     _id: string
     userId?: string
     email?: string
-    role?: 'user' | 'admin'
+    role?: 'user' | 'customer' | 'staff' | 'admin'
   }
 }
 

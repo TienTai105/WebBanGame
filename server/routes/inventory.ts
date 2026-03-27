@@ -1,6 +1,7 @@
 import express from 'express'
-import { checkStock, getProductInventory, getInventoryReport } from '../controllers/inventoryController.js'
+import { checkStock, getProductInventory, getInventoryReport, updateInventory } from '../controllers/inventoryController.js'
 import { protect, adminOnly } from '../middleware/auth.js'
+import { staffOnly } from '../middleware/adminAuth.js'
 
 const router = express.Router()
 
@@ -13,5 +14,8 @@ router.get('/product/:productId', getProductInventory)
 
 // Admin: inventory report
 router.get('/report', protect, adminOnly, getInventoryReport)
+
+// Admin: update inventory (manual adjustment)
+router.put('/:productId/:variantSku', protect, staffOnly, updateInventory)
 
 export default router

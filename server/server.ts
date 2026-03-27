@@ -26,6 +26,7 @@ import commentRoutes from './routes/comments.js'
 import promotionRoutes from './routes/promotions.js'
 import adminRoutes from './routes/admin.js'
 import contactRoutes from './routes/contact.js'
+import uploadRoutes from './routes/upload.js'
 
 dotenv.config()
 
@@ -70,6 +71,7 @@ app.use('/api/payment', paymentRoutes)
 app.use('/api/promotions', promotionRoutes)
 app.use('/api/news', newsRoutes)
 app.use('/api/contact', contactRoutes)
+app.use('/api', uploadRoutes)
 app.use('/api', commentRoutes)
 
 // Health check

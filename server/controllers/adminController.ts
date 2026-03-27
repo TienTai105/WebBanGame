@@ -6,6 +6,7 @@ import Inventory from '../models/Inventory.js'
 import OTPVerification from '../models/OTPVerification.js'
 import AuditLog from '../models/AuditLog.js'
 import * as otpService from '../services/otpService.js'
+import * as productController from './productController.js'
 
 interface AdminRequest extends Request {
   user?: {
@@ -844,11 +845,38 @@ export const getAdminProductDetail = async (req: AdminRequest, res: Response): P
       .populate('categoryId', 'name')
       .lean()
     if (!product) {
-      res.status(404).json({ error: 'Product not found' })
+      res.status(404).json({ success: false, message: 'Product not found' })
       return
     }
-    res.status(200).json(product)
+    res.status(200).json({
+      success: true,
+      data: product,
+    })
   } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Failed to get product detail' })
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get product detail',
+    })
   }
+}
+
+/**
+ * POST /api/admin/products
+ * Create new product with admin privileges
+ * Auto-creates inventory for product and all variants
+ * Calls productController.createProduct directly
+ */
+export const createAdminProduct = async (req: AdminRequest, res: Response): Promise<void> => {
+  // Just delegate to productController.createProduct
+  await productController.createProduct(req, res)
+}
+
+/**
+ * PUT /api/admin/products/:id
+ * Update product with admin privileges
+ * Calls productController.updateProduct directly
+ */
+export const updateAdminProduct = async (req: AdminRequest, res: Response): Promise<void> => {
+  // Just delegate to productController.updateProduct
+  await productController.updateProduct(req, res)
 }

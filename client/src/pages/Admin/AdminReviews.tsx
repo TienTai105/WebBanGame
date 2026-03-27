@@ -1,5 +1,6 @@
 import React from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
+import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 
 const AdminReviews: React.FC = () => {
   return (
@@ -8,13 +9,7 @@ const AdminReviews: React.FC = () => {
         <h2 className="text-4xl font-extrabold tracking-tight text-slate-900 mb-2">
           Reviews Management
         </h2>
-        <nav className="flex text-sm text-slate-500 gap-2">
-          <a href="/admin/dashboard" className="hover:text-indigo-600">
-            Admin Dashboard
-          </a>
-          <span>/</span>
-          <span className="text-indigo-600 font-semibold">Reviews</span>
-        </nav>
+        <AdminBreadcrumb items={[{ label: 'Reviews' }]} />
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-8">

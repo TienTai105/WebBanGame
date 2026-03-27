@@ -1,5 +1,6 @@
 import { Request, Response } from 'express'
 import Product from '../models/Product.js'
+import Inventory from '../models/Inventory.js'
 
 export const getProducts = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -215,7 +216,7 @@ export const getProductsByTag = async (req: Request, res: Response): Promise<voi
 
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, price, category, sku } = req.body
+    const { name, description, price, category, sku, variants } = req.body
 
     if (!name || !description || !price || !category || !sku) {
       res.status(400).json({ success: false, message: 'Missing required fields' })
@@ -223,6 +224,31 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     }
 
     const product = await Product.create(req.body)
+
+    // Auto-create inventory entry for product
+    // If product has variants, create inventory for each variant
+    if (variants && Array.isArray(variants) && variants.length > 0) {
+      // Create inventory entry for each variant
+      const inventoryEntries = variants.map((variant: any) => ({
+        productId: product._id,
+        variantSku: variant.sku || `${product.sku}-${variant.name}`,
+        available: variant.available || 0,
+        reserved: 0,
+        sold: 0,
+        damaged: 0,
+      }))
+      await Inventory.insertMany(inventoryEntries)
+    } else {
+      // Create single inventory entry for product without variants
+      await Inventory.create({
+        productId: product._id,
+        variantSku: null,
+        available: 0,
+        reserved: 0,
+        sold: 0,
+        damaged: 0,
+      })
+    }
 
     res.status(201).json({
       success: true,
@@ -237,11 +263,38 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params
+    const { variants } = req.body
+    
     const product = await Product.findByIdAndUpdate(id, req.body, { new: true })
 
     if (!product) {
       res.status(404).json({ success: false, message: 'Product not found' })
       return
+    }
+
+    // Auto-create inventory for new variants if they don't have inventory yet
+    if (variants && Array.isArray(variants) && variants.length > 0) {
+      for (const variant of variants) {
+        const variantSku = variant.sku || `${product.sku}-${variant.name}`
+        
+        // Check if inventory already exists for this variant
+        const existingInventory = await Inventory.findOne({
+          productId: product._id,
+          variantSku: variantSku
+        })
+        
+        // Create inventory only if it doesn't exist
+        if (!existingInventory) {
+          await Inventory.create({
+            productId: product._id,
+            variantSku: variantSku,
+            available: variant.available || 0,
+            reserved: 0,
+            sold: 0,
+            damaged: 0,
+          })
+        }
+      }
     }
 
     res.json({ success: true, data: product, message: 'Product updated successfully' })

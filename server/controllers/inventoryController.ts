@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express'
 import inventoryService from '../services/inventoryService.js'
 import Inventory from '../models/Inventory.js'
+import StockMovement from '../models/StockMovement.js'
+import mongoose from 'mongoose'
 
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) =>
   (req: Request, res: Response, next: NextFunction) => {
@@ -81,4 +83,95 @@ export const getInventoryReport = asyncHandler(async (req: Request, res: Respons
   ])
 
   res.json({ success: true, data: report })
+})
+
+/**
+ * PUT /api/admin/inventory/:productId/:variantSku
+ * Admin: Update inventory stock (manual adjustment)
+ * Body: { available?, reserved?, damaged?, reason }
+ */
+export const updateInventory = asyncHandler(async (req: Request, res: Response) => {
+  const { productId, variantSku } = req.params
+  const { available, reserved, damaged, reason = 'Manual adjustment' } = req.body
+
+  if (!productId || variantSku === undefined) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'productId and variantSku are required' 
+    })
+  }
+
+  // Find existing inventory
+  let existingInventory = await Inventory.findOne({ 
+    productId, 
+    variantSku: variantSku === 'null' ? null : variantSku 
+  })
+
+  // If inventory doesn't exist, create it (auto-create for new variants)
+  if (!existingInventory) {
+    existingInventory = await Inventory.create({
+      productId,
+      variantSku: variantSku === 'null' ? null : variantSku,
+      available: available || 0,
+      reserved: reserved || 0,
+      sold: 0,
+      damaged: damaged || 0,
+    })
+    
+    return res.status(201).json({ 
+      success: true, 
+      data: existingInventory,
+      message: 'Inventory created and updated successfully' 
+    })
+  }
+
+  // Calculate changes
+  const changes: any = {
+    lastUpdated: new Date()
+  }
+  
+  let changeReason = reason
+  
+  if (available !== undefined && available !== existingInventory.available) {
+    const diff = available - existingInventory.available
+    changes.available = available
+    changeReason = `${reason} (Available: ${diff > 0 ? '+' : ''}${diff})`
+  }
+  
+  if (reserved !== undefined && reserved !== existingInventory.reserved) {
+    changes.reserved = reserved
+  }
+  
+  if (damaged !== undefined && damaged !== existingInventory.damaged) {
+    changes.damaged = damaged
+  }
+
+  // Update inventory
+  const updatedInventory = await Inventory.findByIdAndUpdate(
+    existingInventory._id,
+    { $set: changes },
+    { new: true }
+  )
+
+  // Log stock movement if available changed
+  if (available !== undefined && available !== existingInventory.available) {
+    const diff = available - existingInventory.available
+    
+    await StockMovement.create({
+      inventoryId: existingInventory._id,
+      productId: new mongoose.Types.ObjectId(productId),
+      variantSku: variantSku === 'null' ? null : variantSku,
+      type: diff > 0 ? 'IN' : 'OUT',
+      quantity: Math.abs(diff),
+      reason: changeReason,
+      reference: { type: 'Manual', id: 'admin-adjustment' },
+      notes: `Admin manually ${diff > 0 ? 'added' : 'removed'} ${Math.abs(diff)} units`
+    })
+  }
+
+  res.json({ 
+    success: true, 
+    data: updatedInventory,
+    message: 'Inventory updated successfully' 
+  })
 })

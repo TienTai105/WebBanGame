@@ -15,9 +15,12 @@ router.get('/dashboard/stats', staffOnly, asyncHandler(adminController.getDashbo
 // ==================== PRODUCTS ====================
 // GET /api/admin/products - Get all products with pagination and filtering
 router.get('/products', staffOnly, asyncHandler(adminController.getAdminProducts))
+// POST /api/admin/products - Create new product
+router.post('/products', staffOnly, asyncHandler(adminController.createAdminProduct))
 // GET /api/admin/products/:id - Get product detail
 router.get('/products/:id', staffOnly, asyncHandler(adminController.getAdminProductDetail))
-
+// PUT /api/admin/products/:id - Update product
+router.put('/products/:id', staffOnly, asyncHandler(adminController.updateAdminProduct))
 // DELETE /api/admin/products/:id - Delete a product
 router.delete('/products/:id', staffOnly, asyncHandler(adminController.deleteAdminProduct))
 
