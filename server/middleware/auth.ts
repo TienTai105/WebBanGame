@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
+import User from '../models/User.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -39,6 +40,17 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       role: decoded.role,
     })
     req.user = decoded
+
+    // Update lastActivity silently (fire-and-forget, throttle to 1 min)
+    const userId = decoded._id || decoded.userId
+    if (userId) {
+      const oneMinAgo = new Date(Date.now() - 60 * 1000)
+      User.updateOne(
+        { _id: userId, $or: [{ lastActivity: { $lt: oneMinAgo } }, { lastActivity: null }] },
+        { $set: { lastActivity: new Date() } }
+      ).exec().catch(() => {})
+    }
+
     next()
   } catch (error: any) {
     console.log('❌ Token verification failed:', error.message)

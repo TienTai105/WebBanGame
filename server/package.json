@@ -46,7 +46,8 @@
     "multer": "^2.1.1",
     "nanoid": "^5.1.7",
     "node-cron": "^4.2.1",
-    "nodemailer": "^6.10.1"
+    "nodemailer": "^6.10.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

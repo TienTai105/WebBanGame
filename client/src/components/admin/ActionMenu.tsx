@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 
 export interface ActionMenuItem {
   icon: string
@@ -13,16 +14,18 @@ interface ActionMenuProps {
 
 const ActionMenu: React.FC<ActionMenuProps> = ({ items }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        menuRef.current &&
+        dropdownRef.current &&
         buttonRef.current &&
-        !menuRef.current.contains(event.target as Node) &&
+        !dropdownRef.current.contains(event.target as Node) &&
         !buttonRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false)
@@ -32,6 +35,29 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ items }) => {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Close on scroll
+  useEffect(() => {
+    if (!isOpen) return
+    const handleScroll = () => setIsOpen(false)
+    window.addEventListener('scroll', handleScroll, true)
+    return () => window.removeEventListener('scroll', handleScroll, true)
+  }, [isOpen])
+
+  const handleToggle = useCallback(() => {
+    if (!isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      const menuHeight = items.length * 44 + 8
+      const spaceBelow = window.innerHeight - rect.bottom
+      const openUp = spaceBelow < menuHeight + 8
+
+      setPosition({
+        top: openUp ? rect.top - menuHeight - 4 : rect.bottom + 4,
+        left: rect.right - 224, // 224 = w-56 = 14rem
+      })
+    }
+    setIsOpen((prev) => !prev)
+  }, [isOpen, items.length])
 
   const getColorClass = (color?: string) => {
     switch (color) {
@@ -45,17 +71,21 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ items }) => {
   }
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div ref={menuRef}>
       <button
         ref={buttonRef}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
       >
         <span className="material-symbols-outlined text-xl">more_vert</span>
       </button>
 
-      {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-slate-200 z-40">
+      {isOpen && position && createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed w-56 bg-white rounded-lg shadow-lg border border-slate-200 z-[9999]"
+          style={{ top: position.top, left: position.left }}
+        >
           {items.map((item, index) => (
             <button
               key={index}
@@ -76,7 +106,8 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ items }) => {
               <span className="text-sm font-medium">{item.label}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

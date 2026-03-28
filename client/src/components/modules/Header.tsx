@@ -1,6 +1,7 @@
 import { FC, useState, useRef, useEffect } from 'react'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
-import { LogOut, ShoppingBag, User } from 'lucide-react'
+import { LogOut, ShoppingBag, User, Shield } from 'lucide-react'
+import { disconnectSocket } from '../../utils/socket'
 import { cn } from '../../utils/cn'
 import { useCart } from '../../context/CartContext'
 import Button from '../atomic/Button'
@@ -75,6 +76,7 @@ const Header: FC<HeaderProps> = ({
   }, [])
 
   const handleLogout = () => {
+    disconnectSocket()
     localStorage.removeItem('accessToken')
     localStorage.removeItem('user')
     window.dispatchEvent(new Event('userLoggedOut'))
@@ -190,6 +192,17 @@ const Header: FC<HeaderProps> = ({
                         <ShoppingBag className="w-4 h-4 text-cyan-400" />
                         <span className="text-sm font-medium">Đơn hàng của tôi</span>
                       </button>
+
+                      {/* Admin Panel */}
+                      {(user.role === 'admin' || user.role === 'staff') && (
+                        <button
+                          onClick={() => { setShowDropdown(false); navigate('/admin') }}
+                          className="w-full px-4 py-3 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                        >
+                          <Shield className="w-4 h-4 text-cyan-400" />
+                          <span className="text-sm font-medium">Trang quản trị</span>
+                        </button>
+                      )}
 
                       {/* Logout */}
                       <button

@@ -20,6 +20,7 @@ interface IUser extends Document {
   avatar?: string
   isActive: boolean
   lastLogin?: Date
+  lastActivity?: Date
   matchPassword(enteredPassword: string): Promise<boolean>
   createdAt: Date
   updatedAt: Date
@@ -83,6 +84,11 @@ const userSchema = new Schema<IUser>(
     lastLogin: {
       type: Date,
       default: null,
+    },
+    lastActivity: {
+      type: Date,
+      default: null,
+      index: true,
     },
   },
   { timestamps: true }

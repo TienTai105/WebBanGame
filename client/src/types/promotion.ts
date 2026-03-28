@@ -7,7 +7,7 @@ export interface IPromotion {
   minOrderValue?: number
   applicableProducts?: string[]
   applicableCategories?: string[]
-  applicableBrands?: string[]
+  applicablePlatforms?: string[]
   excludeProducts?: string[]
   usageLimit: number
   usedCount: number
@@ -31,7 +31,7 @@ export interface ValidateCouponRequest {
   cartItems?: Array<{
     productId?: string
     categoryId?: string
-    brandId?: string
+    platformId?: string
   }>
 }
 

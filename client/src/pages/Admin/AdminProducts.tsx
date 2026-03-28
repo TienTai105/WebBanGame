@@ -439,9 +439,9 @@ const AdminProducts: React.FC = () => {
                 <button
                   onClick={handleBulkDelete}
                   disabled={selectedProducts.size === 0}
-                  className="text-xs font-bold px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 text-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="text-xs font-bold px-3 py-2 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 text-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1"
                 >
-                  <span className="material-symbols-outlined text-sm mr-1" style={{ display: 'inline' }}>delete</span>
+                  <span className="material-symbols-outlined text-sm">delete</span>
                   Xóa ({selectedProducts.size})
                 </button>
               </div>

@@ -6,6 +6,7 @@ import { yupResolver } from '@hookform/resolvers/yup'
 import Button from '../components/atomic/Button'
 import { successToast, warningToast } from '../utils/toast'
 import { loginValidationSchema, LoginFormData } from '../validations/authValidation'
+import { connectSocket } from '../utils/socket'
 
 const Login: FC = () => {
   const navigate = useNavigate()
@@ -42,6 +43,9 @@ const Login: FC = () => {
         localStorage.setItem('user', JSON.stringify(user))
 
         // Check user role - redirect accordingly
+        // Connect socket for real-time tracking
+        connectSocket(token)
+
         if (user.role === 'admin' || user.role === 'staff') {
           // Admin/Staff user - store admin auth and redirect to admin dashboard
           localStorage.setItem('adminToken', token)

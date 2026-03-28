@@ -7,12 +7,13 @@ import CartModal from './components/modules/CartModal'
 import { CartProvider, useCart } from './context/CartContext'
 import { AdminAuthProvider, useAdminAuth } from './context/AdminAuthContext'
 import { warningToast } from './utils/toast'
+import { connectSocket } from './utils/socket'
 import Home from './pages/Home'
 import ProductList from './pages/ProductList'
 import CartPage from './pages/CartPage'
 import CheckoutPage from './pages/CheckoutPage'
 import OrderConfirmPage from './pages/OrderConfirmPage'
-import ProductDetailPage from './components/sections/ProductDetailPage'
+import ProductDetailPage from './pages/ProductDetailPage'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import NewsListPage from './pages/NewsListPage'
@@ -29,6 +30,8 @@ import ProductDetail from './pages/Admin/ProductDetail'
 import ProductCreate from './pages/Admin/ProductCreate'
 import AdminOrders from './pages/Admin/AdminOrders'
 import AdminNews from './pages/Admin/AdminNews'
+import NewsCreate from './pages/Admin/NewsCreate'
+import NewsDetail from './pages/Admin/NewsDetail'
 import AdminSettings from './pages/Admin/AdminSettings'
 import AdminUsers from './pages/Admin/AdminUsers'
 import AdminPromotions from './pages/Admin/AdminPromotions'
@@ -87,6 +90,8 @@ function AdminAppContent() {
       <Route path="/admin/products/:productId" element={<ProtectedAdminRoute><ProductDetail /></ProtectedAdminRoute>} />
       <Route path="/admin/orders" element={<ProtectedAdminRoute><AdminOrders /></ProtectedAdminRoute>} />
       <Route path="/admin/news" element={<ProtectedAdminRoute><AdminNews /></ProtectedAdminRoute>} />
+      <Route path="/admin/news/create" element={<ProtectedAdminRoute><NewsCreate /></ProtectedAdminRoute>} />
+      <Route path="/admin/news/:newsId" element={<ProtectedAdminRoute><NewsDetail /></ProtectedAdminRoute>} />
       <Route path="/admin/settings" element={<ProtectedAdminRoute><AdminSettings /></ProtectedAdminRoute>} />
       <Route path="/admin/users" element={<ProtectedAdminRoute><AdminUsers /></ProtectedAdminRoute>} />
       <Route path="/admin/promotions" element={<ProtectedAdminRoute><AdminPromotions /></ProtectedAdminRoute>} />
@@ -100,6 +105,12 @@ function AdminAppContent() {
 function UserAppContent() {
   const navigate = useNavigate()
   const location = useLocation()
+
+  // Reconnect socket on mount if user is logged in
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken')
+    if (token) connectSocket(token)
+  }, [])
 
   // Scroll to top on route change
   useEffect(() => {

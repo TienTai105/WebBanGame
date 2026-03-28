@@ -6,7 +6,7 @@ import { useAuthStore } from '../stores/authStore'
 import ArticleCard from '../components/small/ArticleCard'
 import SectionContainer from '../components/atomic/SectionContainer'
 import { Icon, Button } from '../components/atomic'
-import { BlocksRenderer } from '../components/modules/BlockRenderer'
+import DescriptionDisplay from '../components/sections/DescriptionDisplay'
 
 const NewsDetailPage: FC = () => {
   const { slug = '' } = useParams()
@@ -269,39 +269,9 @@ const NewsDetailPage: FC = () => {
                     </div>
                   </div>
 
-                  {/* Article Content - Render from blocks if available, otherwise use HTML */}
-                  {news.blocks && news.blocks.length > 0 ? (
-                    <div className="mb-12">
-                      <BlocksRenderer blocks={news.blocks as any} />
-                    </div>
-                  ) : (
-                    <div
-                      className="prose max-w-none text-base  md:text-2xl text-slate-200 mb-12 leading-8"
-                      dangerouslySetInnerHTML={{ __html: news.content }}
-                      style={{
-                        color: 'rgb(226 232 240)',
-                        lineHeight: '3rem',
-                        '--tw-prose-body': 'rgb(226 232 240)',
-                        '--tw-prose-headings': 'rgb(255 255 255)',
-                        '--tw-prose-lead': 'rgb(226 232 240)',
-                        '--tw-prose-links': 'rgb(06 182 212)',
-                        '--tw-prose-bold': 'rgb(255 255 255)',
-                        '--tw-prose-counters': 'rgb(100 116 139)',
-                        '--tw-prose-bullets': 'rgb(71 85 105)',
-                        '--tw-prose-hr': 'rgb(71 85 105)',
-                        '--tw-prose-quote-borders': 'rgb(100 116 139)',
-                        '--tw-prose-captions': 'rgb(148 163 184)',
-                        '--tw-prose-code': 'rgb(226 232 240)',
-                        '--tw-prose-code-bg': 'rgb(30 41 59)',
-                        '--tw-prose-pre-code': 'rgb(226 232 240)',
-                        '--tw-prose-pre-bg': 'rgb(15 23 42)',
-                      } as any}
-                    />
-                  )}
+                  {/* Article Content - Raw HTML */}
+                  <DescriptionDisplay html={news.content || ''} className="mb-12" />
 
-                 
-
-                  
                   {/* Related Articles */}
                   {displayRelated && displayRelated.length > 0 && (
                     <div className="pt-12 border-t border-slate-700/50">

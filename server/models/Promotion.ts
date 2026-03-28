@@ -8,7 +8,7 @@ interface IPromotion extends Document {
   minOrderValue?: number                           // order >= 1M mới áp dụng
   applicableProducts?: mongoose.Types.ObjectId[]   // specific products
   applicableCategories?: mongoose.Types.ObjectId[]
-  applicableBrands?: mongoose.Types.ObjectId[]
+  applicablePlatforms?: mongoose.Types.ObjectId[]
   excludeProducts?: mongoose.Types.ObjectId[]      // không áp dụng cho sản phẩm này
   usageLimit: number                               // tối đa dùng 100 lần
   usedCount: number                                // đã dùng bao nhiêu lần
@@ -69,10 +69,10 @@ const promotionSchema = new Schema<IPromotion>(
         ref: 'Category',
       },
     ],
-    applicableBrands: [
+    applicablePlatforms: [
       {
         type: Schema.Types.ObjectId,
-        ref: 'Brand',
+        ref: 'Platform',
       },
     ],
     excludeProducts: [

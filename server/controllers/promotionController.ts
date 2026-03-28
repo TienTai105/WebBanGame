@@ -3,7 +3,133 @@ import Promotion from '../models/Promotion'
 import User from '../models/User'
 import Product from '../models/Product'
 import Category from '../models/Category'
-import Brand from '../models/Brand'
+import Platform from '../models/Platform'
+
+/**
+ * GET /api/promotions/admin/all
+ * Admin: Lấy tất cả promotions (kể cả inactive/expired) với phân trang, search, filter
+ */
+export const adminGetAllPromotions = async (req: Request, res: Response) => {
+  try {
+    const {
+      page = '1',
+      limit = '10',
+      search = '',
+      type,
+      status,
+      sort = 'newest',
+    } = req.query
+
+    const pageNum = Math.max(1, parseInt(page as string))
+    const limitNum = Math.max(1, Math.min(50, parseInt(limit as string)))
+    const skip = (pageNum - 1) * limitNum
+
+    // Build filter
+    const filter: any = {}
+
+    if (search) {
+      filter.code = { $regex: search, $options: 'i' }
+    }
+
+    if (type && type !== 'all') {
+      filter.type = type
+    }
+
+    const now = new Date()
+    if (status && status !== 'all') {
+      if (status === 'active') {
+        filter.isActive = true
+        filter.startDate = { $lte: now }
+        filter.endDate = { $gte: now }
+      } else if (status === 'expired') {
+        filter.$or = [
+          { endDate: { $lt: now } },
+          { isActive: false },
+        ]
+      } else if (status === 'scheduled') {
+        filter.isActive = true
+        filter.startDate = { $gt: now }
+      }
+    }
+
+    // Build sort
+    let sortQuery: any = { createdAt: -1 }
+    if (sort === 'oldest') sortQuery = { createdAt: 1 }
+    else if (sort === 'code') sortQuery = { code: 1 }
+    else if (sort === 'value') sortQuery = { value: -1 }
+    else if (sort === 'usage') sortQuery = { usedCount: -1 }
+
+    const [promotions, total] = await Promise.all([
+      Promotion.find(filter)
+        .select('-usedByUsers')
+        .sort(sortQuery)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Promotion.countDocuments(filter),
+    ])
+
+    // Stats
+    const allPromos = await Promotion.find().select('isActive startDate endDate type value usedCount usageLimit').lean()
+    const activeCount = allPromos.filter(p => p.isActive && p.startDate <= now && p.endDate >= now).length
+    const totalRedemptions = allPromos.reduce((sum, p) => sum + (p.usedCount || 0), 0)
+
+    // Add computed status to each promotion
+    const enriched = promotions.map(p => {
+      let computedStatus: 'active' | 'expired' | 'scheduled' = 'expired'
+      if (p.isActive && p.startDate <= now && p.endDate >= now) {
+        computedStatus = 'active'
+      } else if (p.isActive && p.startDate > now) {
+        computedStatus = 'scheduled'
+      }
+      return { ...p, computedStatus }
+    })
+
+    res.json({
+      success: true,
+      data: enriched,
+      stats: {
+        activeCount,
+        totalRedemptions,
+        total: allPromos.length,
+      },
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+      },
+    })
+  } catch (error) {
+    console.error('Admin get promotions error:', error)
+    res.status(500).json({ success: false, error: 'Failed to fetch promotions' })
+  }
+}
+
+/**
+ * GET /api/promotions/admin/:id
+ * Admin: Lấy chi tiết promotion by ID
+ */
+export const adminGetPromotionById = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params
+    const promotion = await Promotion.findById(id)
+      .populate('applicableProducts', 'name slug images')
+      .populate('applicableCategories', 'name slug')
+      .populate('applicablePlatforms', 'name slug logo')
+      .populate('excludeProducts', 'name slug images')
+      .populate('usedByUsers', 'name email avatar')
+      .lean()
+
+    if (!promotion) {
+      return res.status(404).json({ success: false, error: 'Promotion not found' })
+    }
+
+    res.json({ success: true, data: promotion })
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch promotion' })
+  }
+}
 
 /**
  * GET /api/promotions
@@ -156,7 +282,7 @@ export const validatePromotion = async (req: Request, res: Response) => {
       cartItems.length > 0 &&
       (promotion.applicableProducts?.length ||
         promotion.applicableCategories?.length ||
-        promotion.applicableBrands?.length)
+        promotion.applicablePlatforms?.length)
     ) {
       const isApplicable = await checkProductApplicability(
         promotion,
@@ -257,14 +383,14 @@ export const applyPromotion = async (req: Request, res: Response) => {
  */
 async function checkProductApplicability(
   promotion: any,
-  cartItems: { productId?: string; categoryId?: string; brandId?: string }[]
+  cartItems: { productId?: string; categoryId?: string; platformId?: string }[]
 ) {
   // Nếu không có giới hạn specific products/categories, áp dụng cho tất cả
   if (
     (!promotion.applicableProducts || promotion.applicableProducts.length === 0) &&
     (!promotion.applicableCategories ||
       promotion.applicableCategories.length === 0) &&
-    (!promotion.applicableBrands || promotion.applicableBrands.length === 0)
+    (!promotion.applicablePlatforms || promotion.applicablePlatforms.length === 0)
   ) {
     return true
   }
@@ -304,15 +430,15 @@ async function checkProductApplicability(
       }
     }
 
-    // Kiểm tra applicable brands
+    // Kiểm tra applicable platforms
     if (
       !isItemApplicable &&
-      promotion.applicableBrands &&
-      promotion.applicableBrands.length > 0 &&
-      item.brandId
+      promotion.applicablePlatforms &&
+      promotion.applicablePlatforms.length > 0 &&
+      item.platformId
     ) {
       if (
-        promotion.applicableBrands.some((id: any) => id.toString() === item.brandId)
+        promotion.applicablePlatforms.some((id: any) => id.toString() === item.platformId)
       ) {
         isItemApplicable = true
       }

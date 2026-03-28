@@ -7,6 +7,7 @@ import OTPVerification from '../models/OTPVerification.js'
 import AuditLog from '../models/AuditLog.js'
 import * as otpService from '../services/otpService.js'
 import * as productController from './productController.js'
+import { getOnlineUserIds, getOnlineCount } from '../socket.js'
 
 interface AdminRequest extends Request {
   user?: {
@@ -515,27 +516,48 @@ export const verifyOTP = async (req: AdminRequest, res: Response): Promise<void>
  */
 export const getAuditLogs = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const { page = 1, limit = 20, action, entity, userId } = req.query
+    const { page = 1, limit = 20, action, entity, userId, adminOnly } = req.query
 
     const query: any = {}
 
     if (action) query.action = action
     if (entity) query.entity = entity
-    if (userId) query.admin_id = userId
+    if (userId) query.userId = userId
+
+    // Filter: only show logs where actor != target (exclude self-login/self-update)
+    if (adminOnly === 'true') {
+      query.$expr = { $ne: ['$userId', '$entityId'] }
+    }
 
     const skip = ((Number(page) || 1) - 1) * (Number(limit) || 20)
     const logs = await AuditLog.find(query)
-      .populate('admin_id', 'name email')
-      .sort({ timestamp: -1 })
+      .populate('userId', 'name email')
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit) || 20)
+
+    // Resolve target entity names for User entity logs
+    const logsData = logs.map((l) => l.toObject())
+    const userEntityIds = logsData
+      .filter((l) => l.entity === 'User' && l.entityId)
+      .map((l) => l.entityId)
+    if (userEntityIds.length > 0) {
+      const targetUsers = await User.find({ _id: { $in: userEntityIds } }).select('name email').lean()
+      const targetMap = new Map(targetUsers.map((u) => [u._id.toString(), u]))
+      for (const log of logsData) {
+        if (log.entity === 'User' && log.entityId) {
+          const target = targetMap.get(log.entityId.toString())
+          if (target) (log as any).targetUser = { name: target.name, email: target.email }
+        }
+      }
+    }
 
     const total = await AuditLog.countDocuments(query)
 
     res.status(200).json({
       success: true,
       data: {
-        logs,
+        logs: logsData,
         pagination: {
           current: Number(page) || 1,
           limit: Number(limit) || 20,
@@ -559,18 +581,29 @@ export const getAuditLogs = async (req: AdminRequest, res: Response): Promise<vo
  */
 export const getAdminUsers = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const { page = 1, limit = 20, role, status } = req.query
+    const { page = 1, limit = 20, role, status, scope, search } = req.query
 
-    const query: any = {
-      role: { $in: ['admin', 'staff'] },
+    const query: any = {}
+
+    // scope=all returns all users, default returns only admin/staff
+    if (scope !== 'all') {
+      query.role = { $in: ['admin', 'staff'] }
     }
 
     if (role) query.role = role
     if (status) query.isActive = status === 'active'
+    if (search) {
+      const s = String(search).trim()
+      query.$or = [
+        { name: { $regex: s, $options: 'i' } },
+        { email: { $regex: s, $options: 'i' } },
+        { phone: { $regex: s, $options: 'i' } },
+      ]
+    }
 
     const skip = ((Number(page) || 1) - 1) * (Number(limit) || 20)
     const users = await User.find(query)
-      .select('name email phone role isActive createdAt updatedAt lastLogin')
+      .select('name email phone role isActive avatar createdAt updatedAt lastLogin lastActivity')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit) || 20)
@@ -599,6 +632,80 @@ export const getAdminUsers = async (req: AdminRequest, res: Response): Promise<v
 }
 
 /**
+ * GET /api/admin/users/stats
+ * Get user statistics
+ */
+export const getUserStats = async (_req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const [totalUsers, totalAdmins, totalStaff, activeUsers] = await Promise.all([
+      User.countDocuments(),
+      User.countDocuments({ role: 'admin' }),
+      User.countDocuments({ role: 'staff' }),
+      User.countDocuments({ isActive: true }),
+    ])
+
+    // Real-time online count from Socket.IO
+    const onlineUsers = getOnlineCount()
+    const onlineUserIds = getOnlineUserIds()
+
+    res.status(200).json({
+      success: true,
+      data: { totalUsers, totalAdmins, totalStaff, activeUsers, onlineUsers, onlineUserIds },
+    })
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+/**
+ * PUT /api/admin/users/:id/toggle-active
+ * Toggle user active status
+ */
+export const toggleUserActive = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params
+    const user = await User.findById(id)
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' })
+      return
+    }
+
+    // Prevent disabling yourself
+    if (user._id.toString() === req.user?._id) {
+      res.status(400).json({ success: false, message: 'Không thể vô hiệu hóa chính mình' })
+      return
+    }
+
+    // Prevent disabling admin accounts
+    if (user.role === 'admin') {
+      res.status(403).json({ success: false, message: 'Không thể vô hiệu hóa tài khoản Admin' })
+      return
+    }
+
+    const oldActive = user.isActive
+    user.isActive = !user.isActive
+    await user.save()
+
+    await AuditLog.create({
+      action: 'STATUS_CHANGE',
+      entity: 'User',
+      entityId: id,
+      changes: { isActive: { old: oldActive, new: user.isActive } },
+      userId: req.user?._id,
+      ipAddress: req.ip,
+    })
+
+    res.status(200).json({
+      success: true,
+      data: { user },
+      message: user.isActive ? 'Đã kích hoạt tài khoản' : 'Đã vô hiệu hóa tài khoản',
+    })
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+/**
  * PUT /api/admin/users/:id/role
  * Change user role (ADMIN only)
  */
@@ -607,7 +714,7 @@ export const changeUserRole = async (req: AdminRequest, res: Response): Promise<
     const { id } = req.params
     const { role } = req.body
 
-    if (!['admin', 'staff'].includes(role)) {
+    if (!['admin', 'staff', 'customer'].includes(role)) {
       res.status(400).json({ success: false, message: 'Invalid role' })
       return
     }
@@ -618,20 +725,26 @@ export const changeUserRole = async (req: AdminRequest, res: Response): Promise<
       return
     }
 
+    // Prevent changing admin role
+    if (user.role === 'admin') {
+      res.status(403).json({ success: false, message: 'Không thể thay đổi vai trò của tài khoản Admin' })
+      return
+    }
+
     const oldRole = user.role
     user.role = role
     await user.save()
 
     // Log to audit
     await AuditLog.create({
-      admin_id: req.user?._id,
+      userId: req.user?._id,
       action: 'UPDATE',
       entity: 'User',
       entityId: id,
       changes: {
         role: {
-          oldValue: oldRole,
-          newValue: role,
+          old: oldRole,
+          new: role,
         },
       },
       ipAddress: req.ip,
@@ -691,6 +804,60 @@ export const resetUserPassword = async (req: AdminRequest, res: Response): Promi
       success: false,
       message: error.message || 'Failed to reset password',
     })
+  }
+}
+
+/**
+ * POST /api/admin/users
+ * Create a new user (ADMIN only)
+ */
+export const createUser = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const { name, email, password, role, phone } = req.body
+
+    if (!name || !email || !password) {
+      res.status(400).json({ success: false, message: 'Tên, email và mật khẩu là bắt buộc' })
+      return
+    }
+
+    if (!['customer', 'staff', 'admin'].includes(role || 'customer')) {
+      res.status(400).json({ success: false, message: 'Vai trò không hợp lệ' })
+      return
+    }
+
+    const existingUser = await User.findOne({ email: email.toLowerCase() })
+    if (existingUser) {
+      res.status(409).json({ success: false, message: 'Email đã được sử dụng' })
+      return
+    }
+
+    const user = await User.create({
+      name,
+      email: email.toLowerCase(),
+      password,
+      role: role || 'customer',
+      phone: phone || null,
+      isActive: true,
+      emailVerified: true,
+    })
+
+    await AuditLog.create({
+      userId: req.user?._id,
+      action: 'CREATE',
+      entity: 'User',
+      entityId: user._id,
+      newValue: { name, email, role: role || 'customer' },
+      ipAddress: req.ip,
+    })
+
+    res.status(201).json({
+      success: true,
+      data: { user: { _id: user._id, name: user.name, email: user.email, role: user.role, isActive: user.isActive } },
+      message: 'Tạo tài khoản thành công',
+    })
+  } catch (error: any) {
+    console.error('Error creating user:', error)
+    res.status(500).json({ success: false, message: error.message || 'Không thể tạo tài khoản' })
   }
 }
 

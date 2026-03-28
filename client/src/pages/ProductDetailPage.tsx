@@ -1,16 +1,16 @@
 import { FC, useState, useMemo, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import Breadcrumb from '../atomic/Breadcrumb'
-import { Button } from '../atomic'
-import { useProduct, useProducts } from '../../hooks/queries/useProducts'
-import { useCart, CartItem } from '../../context/CartContext'
-import { RadioGroup, RadioGroupItem } from '../ui/radio'
-import { cn } from '../../utils/cn'
-import { successToast, errorToast } from '../../utils/toast'
-import { useInventory } from '../../hooks/useInventory'
-import { ProductResponse } from '../../services/index'
-import DOMPurify from 'dompurify'
+import Breadcrumb from '../components/atomic/Breadcrumb'
+import { Button } from '../components/atomic'
+import { useProduct, useProducts } from '../hooks/queries/useProducts'
+import { useCart, CartItem } from '../context/CartContext'
+import { RadioGroup, RadioGroupItem } from '../components/ui/radio'
+import { cn } from '../utils/cn'
+import { successToast, errorToast } from '../utils/toast'
+import { useInventory } from '../hooks/useInventory'
+import { ProductResponse } from '../services/index'
+import DescriptionDisplay from '../components/sections/DescriptionDisplay'
 
 interface SelectedState {
   variantIndex: number | null
@@ -422,10 +422,7 @@ const ProductDetailPage: FC = () => {
         <div className="border-2 border-indigo-500/30 rounded-lg p-6 bg-gradient-to-br from-indigo-950/20 to-slate-900/20 mt-12">
           <h3 className="font-bold text-white mb-3">MÔ TẢ</h3>
           {product.description && (
-            <div
-              className="text-sm text-slate-300 prose prose-invert prose-sm max-w-none [&_img]:rounded-lg [&_img]:max-w-full [&_a]:text-cyan-400 [&_a]:underline"
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(product.description) }}
-            />
+            <DescriptionDisplay html={product.description} className="text-sm" />
           )}
         </div>
 

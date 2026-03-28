@@ -414,7 +414,7 @@ const AdminOrders: React.FC = () => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-1 focus:ring-indigo-400 text-sm"
+              className="w-full pl-12 pr-4 py-3 bg-slate-50 border-none rounded-xl outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 text-sm"
               placeholder="Tìm theo tên, SĐT hoặc mã đơn..."
             />
           </div>

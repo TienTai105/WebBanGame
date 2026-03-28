@@ -1,4 +1,5 @@
 import express, { Express, Request, Response, NextFunction } from 'express'
+import { createServer } from 'http'
 import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
@@ -7,6 +8,7 @@ import dotenv from 'dotenv'
 import connectDB from './config/db.js'
 import { errorHandler } from './middleware/auth.js'
 import { startCronJobs } from './utils/cronJobs.js'
+import { initSocket } from './socket.js'
 
 // Routes
 import authRoutes from './routes/auth.js'
@@ -88,12 +90,16 @@ app.use((req: Request, res: Response) => {
 app.use(errorHandler)
 
 const PORT = process.env.PORT || 5000
-const server = app.listen(PORT, () => {
+const httpServer = createServer(app)
+initSocket(httpServer)
+
+const server = httpServer.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════╗
 ║  🎮 WebBanGame Server                      ║
 ║  ✓ Running on http://localhost:${PORT}      ║
 ║  ✓ Environment: ${process.env.NODE_ENV || 'development'}           ║
+║  ✓ Socket.IO enabled                       ║
 ╚════════════════════════════════════════════╝
   `)
 })

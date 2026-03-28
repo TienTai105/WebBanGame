@@ -36,11 +36,20 @@ router.post('/otp/verify', asyncHandler(adminController.verifyOTP))
 router.get('/audit-logs', adminOnlyStrict, asyncHandler(adminController.getAuditLogs))
 
 // ==================== USER MANAGEMENT ====================
-// GET /api/admin/users - Get list of admin/staff users
+// GET /api/admin/users/stats - Get user statistics
+router.get('/users/stats', adminOnlyStrict, asyncHandler(adminController.getUserStats))
+
+// GET /api/admin/users - Get list of users
 router.get('/users', adminOnlyStrict, asyncHandler(adminController.getAdminUsers))
+
+// POST /api/admin/users - Create new user (ADMIN only)
+router.post('/users', adminOnlyStrict, asyncHandler(adminController.createUser))
 
 // PUT /api/admin/users/:id/role - Change user role (ADMIN only)
 router.put('/users/:id/role', adminOnlyStrict, asyncHandler(adminController.changeUserRole))
+
+// PUT /api/admin/users/:id/toggle-active - Toggle user active status
+router.put('/users/:id/toggle-active', adminOnlyStrict, asyncHandler(adminController.toggleUserActive))
 
 // POST /api/admin/users/:id/reset-password - Send password reset email (ADMIN only)
 router.post('/users/:id/reset-password', adminOnlyStrict, asyncHandler(adminController.resetUserPassword))

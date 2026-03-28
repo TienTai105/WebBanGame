@@ -142,6 +142,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
             border-top-right-radius: 0.5rem;
             background: #f8fafc;
             border: 1px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
           }
           .ql-toolbar.ql-snow button:hover,
           .ql-toolbar.ql-snow button:focus,
@@ -156,7 +159,9 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
             border-top: none;
           }
           .ql-editor {
-            min-height: ${height};
+            min-height: 250px;
+            max-height: ${height};
+            overflow-y: auto;
             padding: 1rem;
             font-family: inherit;
           }

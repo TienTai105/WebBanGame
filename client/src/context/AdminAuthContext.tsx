@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react'
+import { connectSocket, disconnectSocket } from '../utils/socket'
 
 interface AdminUser {
   _id: string
@@ -63,6 +64,12 @@ export const AdminAuthProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   }, [])
 
+  // Reconnect socket if admin token exists on mount
+  useEffect(() => {
+    const token = localStorage.getItem('adminToken')
+    if (token) connectSocket(token)
+  }, [])
+
   const login = async (email: string, password: string) => {
     setIsLoading(true)
     try {
@@ -88,6 +95,7 @@ export const AdminAuthProvider: React.FC<{ children: ReactNode }> = ({ children 
       localStorage.setItem('adminToken', data.data.accessToken)
       localStorage.setItem('adminUser', JSON.stringify(userData))
       setUser(userData)
+      connectSocket(data.data.accessToken)
     } finally {
       setIsLoading(false)
     }
@@ -96,9 +104,9 @@ export const AdminAuthProvider: React.FC<{ children: ReactNode }> = ({ children 
   const logout = () => {
     localStorage.removeItem('adminToken')
     localStorage.removeItem('adminUser')
-    // Also clear user data if exists
     localStorage.removeItem('user')
     localStorage.removeItem('accessToken')
+    disconnectSocket()
     setUser(null)
     // Notify other components
     window.dispatchEvent(new Event('userLoggedOut'))

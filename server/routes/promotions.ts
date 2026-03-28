@@ -7,19 +7,23 @@ import {
   createPromotion,
   updatePromotion,
   deletePromotion,
+  adminGetAllPromotions,
+  adminGetPromotionById,
 } from '../controllers/promotionController'
 
 const router: Router = express.Router()
 
-// Public routes
-router.get('/', getAllPromotions) // Lấy tất cả active promotions
-router.get('/:code', getPromotionByCode) // Lấy chi tiết promotion
-router.post('/validate', validatePromotion) // Validate coupon code
-router.post('/apply', applyPromotion) // Record promotion usage
+// Admin routes (must be before /:code to avoid conflicts)
+router.get('/admin/all', adminGetAllPromotions)
+router.get('/admin/:id', adminGetPromotionById)
+router.post('/', createPromotion)
+router.put('/:id', updatePromotion)
+router.delete('/:id', deletePromotion)
 
-// Admin routes (có thể thêm auth middleware sau)
-router.post('/', createPromotion) // Tạo promotion
-router.put('/:id', updatePromotion) // Cập nhật promotion
-router.delete('/:id', deletePromotion) // Xóa promotion
+// Public routes
+router.get('/', getAllPromotions)
+router.get('/:code', getPromotionByCode)
+router.post('/validate', validatePromotion)
+router.post('/apply', applyPromotion)
 
 export default router

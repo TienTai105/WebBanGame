@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect, ReactNode, FC } from 'react'
 import { authService } from '../services/index'
+import { connectSocket, disconnectSocket } from '../utils/socket'
 
 interface User {
   _id: string
@@ -40,6 +41,13 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(false)
   }, [])
 
+  // Reconnect socket if token exists on mount
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken')
+    if (token) connectSocket(token)
+    return () => { disconnectSocket() }
+  }, [])
+
   const login = async (email: string, password: string) => {
     setError(null)
     try {
@@ -48,6 +56,7 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('accessToken', accessToken)
       localStorage.setItem('user', JSON.stringify(user))
       setUser(user)
+      connectSocket(accessToken)
       return response.data
     } catch (err: any) {
       const message = err.response?.data?.message || 'Login failed'
@@ -69,6 +78,7 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
       localStorage.setItem('accessToken', accessToken)
       localStorage.setItem('user', JSON.stringify(user))
       setUser(user)
+      connectSocket(accessToken)
       return response.data
     } catch (err: any) {
       const message = err.response?.data?.message || 'Registration failed'
@@ -82,6 +92,7 @@ export const AuthProvider: FC<AuthProviderProps> = ({ children }) => {
       await authService.logout()
       localStorage.removeItem('accessToken')
       localStorage.removeItem('user')
+      disconnectSocket()
       setUser(null)
     } catch (err) {
       console.error('Logout error:', err)
