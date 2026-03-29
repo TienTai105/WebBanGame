@@ -4,18 +4,28 @@ import { useAdminAuth } from '../../context/AdminAuthContext'
 
 const AdminSidebar: React.FC = () => {
   const location = useLocation()
-  const { logout } = useAdminAuth()
+  const { logout, user, hasPermission } = useAdminAuth()
 
   const menuItems = [
-    { label: 'Dashboard', icon: 'dashboard', path: '/admin/dashboard' },
-    { label: 'Products', icon: 'inventory_2', path: '/admin/products' },
-    { label: 'Orders', icon: 'shopping_cart', path: '/admin/orders' },
-    { label: 'News', icon: 'newspaper', path: '/admin/news' },
-    { label: 'Settings', icon: 'settings', path: '/admin/settings' },
-    { label: 'Users', icon: 'group', path: '/admin/users' },
-    { label: 'Promotions', icon: 'sell', path: '/admin/promotions' },
-    { label: 'Reviews', icon: 'rate_review', path: '/admin/reviews' },
+    { label: 'Dashboard', icon: 'dashboard', path: '/admin/dashboard', permission: 'dashboard' },
+    { label: 'Products', icon: 'inventory_2', path: '/admin/products', permission: 'products' },
+    { label: 'Orders', icon: 'shopping_cart', path: '/admin/orders', permission: 'orders' },
+    { label: 'Inventory', icon: 'warehouse', path: '/admin/inventory', permission: 'inventory' },
+    { label: 'News', icon: 'newspaper', path: '/admin/news', permission: 'news' },
+    { label: 'Settings', icon: 'settings', path: '/admin/settings', permission: 'settings' },
+    { label: 'Users', icon: 'group', path: '/admin/users', adminOnly: true },
+    { label: 'Promotions', icon: 'sell', path: '/admin/promotions', permission: 'promotions' },
+    { label: 'Reviews', icon: 'rate_review', path: '/admin/reviews', permission: 'reviews' },  { label: 'Comments', icon: 'chat', path: '/admin/comments', permission: 'comments' },
+  { label: 'Contacts', icon: 'contact_mail', path: '/admin/contacts', permission: 'contacts' },    { label: 'Audit Log', icon: 'history', path: '/admin/audit-log', adminOnly: true },
   ]
+
+  const filteredMenuItems = menuItems.filter((item) => {
+    // Admin-only items are visible only to admins
+    if (item.adminOnly) return user?.role === 'admin'
+    // Permission-based items
+    if (item.permission) return hasPermission(item.permission)
+    return true
+  })
 
   const isActive = (path: string) => location.pathname === path
 
@@ -36,7 +46,7 @@ const AdminSidebar: React.FC = () => {
 
       {/* Navigation Menu */}
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-        {menuItems.map((item) => {
+        {filteredMenuItems.map((item) => {
           const active = isActive(item.path)
           return (
             <Link
@@ -66,13 +76,15 @@ const AdminSidebar: React.FC = () => {
         {/* Admin Profile */}
         <div className="flex items-center gap-3 px-4 py-3 bg-slate-100 rounded-lg">
           <div className="w-8 h-8 rounded-full bg-indigo-200 flex items-center justify-center text-indigo-600 font-bold text-sm">
-            A
+            {user?.name?.charAt(0)?.toUpperCase() || 'A'}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-slate-900 leading-none truncate">
-              Admin Panel
+              {user?.name || 'Admin Panel'}
             </p>
-            <p className="text-[10px] text-slate-400 truncate">Level 4 Access</p>
+            <p className="text-[10px] text-slate-400 truncate">
+              {user?.role === 'admin' ? 'Administrator' : 'Staff'}
+            </p>
           </div>
           <button
             onClick={logout}

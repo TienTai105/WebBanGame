@@ -4,6 +4,7 @@ import User from '../models/User'
 import Product from '../models/Product'
 import Category from '../models/Category'
 import Platform from '../models/Platform'
+import AuditLog from '../models/AuditLog'
 
 /**
  * GET /api/promotions/admin/all
@@ -478,6 +479,16 @@ export const createPromotion = async (req: Request, res: Response) => {
     const promotion = new Promotion(req.body)
     await promotion.save()
 
+    // Audit log
+    await AuditLog.create({
+      action: 'CREATE',
+      entity: 'Promotion',
+      entityId: promotion._id,
+      newValue: { code: promotion.code, type: promotion.type, value: promotion.value },
+      userId: (req as any).user?._id,
+      ipAddress: req.ip,
+    }).catch(() => {})
+
     res.status(201).json({
       success: true,
       data: promotion,
@@ -497,6 +508,7 @@ export const createPromotion = async (req: Request, res: Response) => {
 export const updatePromotion = async (req: Request, res: Response) => {
   try {
     const { id } = req.params
+    const oldPromo = await Promotion.findById(id).lean()
     const promotion = await Promotion.findByIdAndUpdate(id, req.body, {
       new: true,
       runValidators: true,
@@ -508,6 +520,17 @@ export const updatePromotion = async (req: Request, res: Response) => {
         error: 'Promotion not found',
       })
     }
+
+    // Audit log
+    await AuditLog.create({
+      action: 'UPDATE',
+      entity: 'Promotion',
+      entityId: promotion._id,
+      oldValue: oldPromo ? { code: oldPromo.code, type: oldPromo.type, value: oldPromo.value, isActive: oldPromo.isActive } : null,
+      newValue: { code: promotion.code, type: promotion.type, value: promotion.value, isActive: promotion.isActive },
+      userId: (req as any).user?._id,
+      ipAddress: req.ip,
+    }).catch(() => {})
 
     res.json({
       success: true,
@@ -536,6 +559,16 @@ export const deletePromotion = async (req: Request, res: Response) => {
         error: 'Promotion not found',
       })
     }
+
+    // Audit log
+    await AuditLog.create({
+      action: 'DELETE',
+      entity: 'Promotion',
+      entityId: id,
+      oldValue: { code: promotion.code, type: promotion.type, value: promotion.value },
+      userId: (req as any).user?._id,
+      ipAddress: req.ip,
+    }).catch(() => {})
 
     res.json({
       success: true,

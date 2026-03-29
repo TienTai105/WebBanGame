@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import News from '../models/News.js'
 import User from '../models/User.js'
+import AuditLog from '../models/AuditLog.js'
 
 interface AuthRequest extends Request {
   user?: any
@@ -299,6 +300,16 @@ export const createNews = async (req: AuthRequest, res: Response): Promise<void>
     await news.save()
     await news.populate('author', 'name email avatar')
 
+    // Audit log
+    await AuditLog.create({
+      action: 'CREATE',
+      entity: 'News',
+      entityId: news._id,
+      newValue: { title: news.title, status: news.status, category: news.category },
+      userId: userId,
+      ipAddress: req.ip,
+    }).catch(() => {})
+
     res.status(201).json({
       success: true,
       message: 'Article created successfully',
@@ -382,6 +393,16 @@ export const updateNews = async (req: AuthRequest, res: Response): Promise<void>
     await news.save()
     await news.populate('author', 'name email avatar')
 
+    // Audit log
+    await AuditLog.create({
+      action: 'UPDATE',
+      entity: 'News',
+      entityId: news._id,
+      newValue: { title: news.title, status: news.status },
+      userId: req.user?._id,
+      ipAddress: req.ip,
+    }).catch(() => {})
+
     res.status(200).json({
       success: true,
       message: 'Article updated successfully',
@@ -413,6 +434,16 @@ export const deleteNews = async (req: AuthRequest, res: Response): Promise<void>
       })
       return
     }
+
+    // Audit log
+    await AuditLog.create({
+      action: 'DELETE',
+      entity: 'News',
+      entityId: id,
+      oldValue: { title: news.title, category: news.category },
+      userId: req.user?._id,
+      ipAddress: req.ip,
+    }).catch(() => {})
 
     res.status(200).json({
       success: true,
@@ -448,6 +479,16 @@ export const publishNews = async (req: AuthRequest, res: Response): Promise<void
 
     news.status = published ? 'published' : 'draft'
     await news.save()
+
+    // Audit log
+    await AuditLog.create({
+      action: 'STATUS_CHANGE',
+      entity: 'News',
+      entityId: news._id,
+      changes: { status: { old: published ? 'draft' : 'published', new: news.status } },
+      userId: req.user?._id,
+      ipAddress: req.ip,
+    }).catch(() => {})
 
     res.status(200).json({
       success: true,

@@ -1,12 +1,16 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import DatePicker from 'react-datepicker'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import 'react-datepicker/dist/react-datepicker.css'
 import '../../styles/datepicker.css'
 import AdminLayout from '../../components/admin/AdminLayout'
 import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
+import ActionMenu from '../../components/admin/ActionMenu'
 import { errorToast } from '../../utils/toast'
 import adminApiCall from '../../utils/adminApi'
+
+const ORDERS_PER_PAGE = 6
 
 interface DashboardStats {
   revenue: {
@@ -171,8 +175,10 @@ const AdminDashboard: React.FC = () => {
     return null
   }
 
+  const navigate = useNavigate()
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [orderPage, setOrderPage] = useState(1)
   const comparisonType = 'previousPeriod' // Default comparison type
   const [dateRange, setDateRange] = useState({
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1), // First day of month
@@ -182,9 +188,10 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        // Format dates as ISO string for API
-        const startDate = dateRange.startDate.toISOString().split('T')[0]
-        const endDate = dateRange.endDate.toISOString().split('T')[0]
+        // Format dates in local timezone (not UTC) to avoid date shift
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const startDate = `${dateRange.startDate.getFullYear()}-${pad(dateRange.startDate.getMonth() + 1)}-${pad(dateRange.startDate.getDate())}`
+        const endDate = `${dateRange.endDate.getFullYear()}-${pad(dateRange.endDate.getMonth() + 1)}-${pad(dateRange.endDate.getDate())}`
 
         const { data, error } = await adminApiCall<DashboardStats>(
           `/admin/dashboard/stats?startDate=${startDate}&endDate=${endDate}&comparisonType=${comparisonType}`
@@ -614,7 +621,7 @@ const AdminDashboard: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {stats.recentOrders.map((order) => {
+                      {stats.recentOrders.slice((orderPage - 1) * ORDERS_PER_PAGE, orderPage * ORDERS_PER_PAGE).map((order) => {
                         const getStatusColor = (status: string) => {
                           switch(status) {
                             case 'completed':
@@ -662,9 +669,16 @@ const AdminDashboard: React.FC = () => {
                               </span>
                             </td>
                             <td className="px-6 py-5 text-right">
-                              <button className="text-slate-400 hover:text-slate-600 transition-colors">
-                                <span className="material-symbols-outlined">more_vert</span>
-                              </button>
+                              <ActionMenu
+                                items={[
+                                  {
+                                    icon: 'visibility',
+                                    label: 'Xem chi tiết',
+                                    color: 'indigo',
+                                    onClick: () => navigate(`/admin/orders/${order._id}`),
+                                  },
+                                ]}
+                              />
                             </td>
                           </tr>
                         )
@@ -679,6 +693,43 @@ const AdminDashboard: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+                {/* Pagination */}
+                {stats.recentOrders.length > ORDERS_PER_PAGE && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100">
+                    <p className="text-xs text-slate-500">
+                      Showing {(orderPage - 1) * ORDERS_PER_PAGE + 1}-{Math.min(orderPage * ORDERS_PER_PAGE, stats.recentOrders.length)} of {stats.recentOrders.length}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setOrderPage(p => Math.max(1, p - 1))}
+                        disabled={orderPage === 1}
+                        className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-lg">chevron_left</span>
+                      </button>
+                      {Array.from({ length: Math.ceil(stats.recentOrders.length / ORDERS_PER_PAGE) }, (_, i) => (
+                        <button
+                          key={i + 1}
+                          onClick={() => setOrderPage(i + 1)}
+                          className={`w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
+                            orderPage === i + 1
+                              ? 'bg-indigo-600 text-white'
+                              : 'text-slate-500 hover:bg-slate-100'
+                          }`}
+                        >
+                          {i + 1}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setOrderPage(p => Math.min(Math.ceil(stats.recentOrders.length / ORDERS_PER_PAGE), p + 1))}
+                        disabled={orderPage === Math.ceil(stats.recentOrders.length / ORDERS_PER_PAGE)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-lg">chevron_right</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 

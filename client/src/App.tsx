@@ -36,6 +36,10 @@ import AdminSettings from './pages/Admin/AdminSettings'
 import AdminUsers from './pages/Admin/AdminUsers'
 import AdminPromotions from './pages/Admin/AdminPromotions'
 import AdminReviews from './pages/Admin/AdminReviews'
+import AdminInventory from './pages/Admin/AdminInventory'
+import AdminComments from './pages/Admin/AdminComments'
+import AdminContacts from './pages/Admin/AdminContacts'
+import AdminAuditLog from './pages/Admin/AdminAuditLog'
 
 // Global Cart Modal Component - Handles navigation
 function GlobalCartModal() {
@@ -81,14 +85,13 @@ function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
 function AdminAppContent() {
   return (
     <Routes>  
-      {/* Catch-all redirect to dashboard */}
-      <Route path="/admin/*" element={<Navigate to="/admin/dashboard" replace />} />
       {/* Admin Routes */}
       <Route path="/admin/dashboard" element={<ProtectedAdminRoute><AdminDashboard /></ProtectedAdminRoute>} />
       <Route path="/admin/products" element={<ProtectedAdminRoute><AdminProducts /></ProtectedAdminRoute>} />
       <Route path="/admin/products/create" element={<ProtectedAdminRoute><ProductCreate /></ProtectedAdminRoute>} />
       <Route path="/admin/products/:productId" element={<ProtectedAdminRoute><ProductDetail /></ProtectedAdminRoute>} />
       <Route path="/admin/orders" element={<ProtectedAdminRoute><AdminOrders /></ProtectedAdminRoute>} />
+      <Route path="/admin/inventory" element={<ProtectedAdminRoute><AdminInventory /></ProtectedAdminRoute>} />
       <Route path="/admin/news" element={<ProtectedAdminRoute><AdminNews /></ProtectedAdminRoute>} />
       <Route path="/admin/news/create" element={<ProtectedAdminRoute><NewsCreate /></ProtectedAdminRoute>} />
       <Route path="/admin/news/:newsId" element={<ProtectedAdminRoute><NewsDetail /></ProtectedAdminRoute>} />
@@ -96,8 +99,11 @@ function AdminAppContent() {
       <Route path="/admin/users" element={<ProtectedAdminRoute><AdminUsers /></ProtectedAdminRoute>} />
       <Route path="/admin/promotions" element={<ProtectedAdminRoute><AdminPromotions /></ProtectedAdminRoute>} />
       <Route path="/admin/reviews" element={<ProtectedAdminRoute><AdminReviews /></ProtectedAdminRoute>} />
-      
-    
+      <Route path="/admin/comments" element={<ProtectedAdminRoute><AdminComments /></ProtectedAdminRoute>} />
+      <Route path="/admin/contacts" element={<ProtectedAdminRoute><AdminContacts /></ProtectedAdminRoute>} />
+      <Route path="/admin/audit-log" element={<ProtectedAdminRoute><AdminAuditLog /></ProtectedAdminRoute>} />
+      {/* Catch-all redirect to dashboard */}
+      <Route path="/admin/*" element={<Navigate to="/admin/dashboard" replace />} />
     </Routes>
   )
 }

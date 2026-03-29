@@ -7,7 +7,22 @@ interface AdminUser {
   email: string
   role: 'admin' | 'staff'
   avatar?: string
+  permissions?: string[]
 }
+
+// All available staff permissions
+export const STAFF_PERMISSIONS = [
+  { key: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { key: 'products', label: 'Sản phẩm', icon: 'inventory_2' },
+  { key: 'orders', label: 'Đơn hàng', icon: 'shopping_cart' },
+  { key: 'inventory', label: 'Kho hàng', icon: 'warehouse' },
+  { key: 'news', label: 'Tin tức', icon: 'newspaper' },
+  { key: 'comments', label: 'Bình luận', icon: 'chat' },
+  { key: 'contacts', label: 'Liên hệ', icon: 'contact_mail' },
+  { key: 'promotions', label: 'Khuyến mãi', icon: 'sell' },
+  { key: 'reviews', label: 'Đánh giá', icon: 'rate_review' },
+  { key: 'settings', label: 'Cài đặt', icon: 'settings' },
+] as const
 
 interface AdminAuthContextType {
   user: AdminUser | null
@@ -15,8 +30,9 @@ interface AdminAuthContextType {
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
-  generateOTP: (action: string) => Promise<{ otpId: string; expiresAt: string }>
+  generateOTP: (action: string) => Promise<{ otpId: string; expiresAt: string; useDefaultOTP?: boolean }>
   verifyOTP: (otpId: string, code: string) => Promise<{ otpToken: string }>
+  hasPermission: (permission: string) => boolean
 }
 
 const AdminAuthContext = createContext<AdminAuthContextType | undefined>(undefined)
@@ -154,6 +170,14 @@ export const AdminAuthProvider: React.FC<{ children: ReactNode }> = ({ children 
     return data.data
   }
 
+  const hasPermission = (permission: string): boolean => {
+    if (!user) return false
+    // Admin has all permissions
+    if (user.role === 'admin') return true
+    // Staff checks permissions array
+    return user.permissions?.includes(permission) ?? false
+  }
+
   return (
     <AdminAuthContext.Provider
       value={{
@@ -164,6 +188,7 @@ export const AdminAuthProvider: React.FC<{ children: ReactNode }> = ({ children 
         logout,
         generateOTP,
         verifyOTP,
+        hasPermission,
       }}
     >
       {children}

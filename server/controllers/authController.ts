@@ -88,18 +88,20 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
     const isPasswordValid = await user.matchPassword(password)
     if (!isPasswordValid) {
-      // Log failed login attempt
-      await AuditLog.create({
-        action: 'UPDATE',
-        entity: 'User',
-        entityId: user._id,
-        userId: user._id,
-        userEmail: user.email,
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        status: 'failed',
-        errorMessage: 'Invalid password',
-      })
+      // Log failed login attempt (admin/staff only)
+      if (user.role === 'admin' || user.role === 'staff') {
+        await AuditLog.create({
+          action: 'LOGIN',
+          entity: 'User',
+          entityId: user._id,
+          userId: user._id,
+          userEmail: user.email,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          status: 'failed',
+          errorMessage: 'Invalid password',
+        })
+      }
       res.status(401).json({ success: false, message: 'Invalid credentials' })
       return
     }
@@ -108,17 +110,19 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     user.lastLogin = new Date()
     await user.save()
 
-    // Log successful login
-    await AuditLog.create({
-      action: 'UPDATE',
-      entity: 'User',
-      entityId: user._id,
-      userId: user._id,
-      userEmail: user.email,
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-      status: 'success',
-    })
+    // Log successful login (admin/staff only)
+    if (user.role === 'admin' || user.role === 'staff') {
+      await AuditLog.create({
+        action: 'LOGIN',
+        entity: 'User',
+        entityId: user._id,
+        userId: user._id,
+        userEmail: user.email,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        status: 'success',
+      })
+    }
 
     const { accessToken, refreshToken } = await generateTokens({
       _id: user._id as string,
@@ -144,6 +148,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
           phone: user.phone,
           avatar: user.avatar,
           role: user.role,
+          permissions: user.role === 'staff' ? user.permissions : undefined,
           lastLogin: user.lastLogin,
           shippingAddresses: user.shippingAddresses || [],
           createdAt: user.createdAt,
@@ -214,6 +219,7 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
           phone: user?.phone,
           avatar: user?.avatar,
           role: user?.role,
+          permissions: user?.role === 'staff' ? user?.permissions : undefined,
           shippingAddresses: user?.shippingAddresses || [],
           createdAt: user?.createdAt,
           updatedAt: user?.updatedAt,

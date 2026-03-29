@@ -1,4 +1,6 @@
 import express, { Router } from 'express'
+import { protect } from '../middleware/auth'
+import { staffOnly, requirePermission, requireOTPVerification } from '../middleware/adminAuth'
 import {
   getAllPromotions,
   getPromotionByCode,
@@ -14,11 +16,11 @@ import {
 const router: Router = express.Router()
 
 // Admin routes (must be before /:code to avoid conflicts)
-router.get('/admin/all', adminGetAllPromotions)
-router.get('/admin/:id', adminGetPromotionById)
-router.post('/', createPromotion)
-router.put('/:id', updatePromotion)
-router.delete('/:id', deletePromotion)
+router.get('/admin/all', protect, staffOnly, requirePermission('promotions'), adminGetAllPromotions)
+router.get('/admin/:id', protect, staffOnly, requirePermission('promotions'), adminGetPromotionById)
+router.post('/', protect, staffOnly, requirePermission('promotions'), createPromotion)
+router.put('/:id', protect, staffOnly, requirePermission('promotions'), updatePromotion)
+router.delete('/:id', protect, staffOnly, requirePermission('promotions'), requireOTPVerification, deletePromotion)
 
 // Public routes
 router.get('/', getAllPromotions)

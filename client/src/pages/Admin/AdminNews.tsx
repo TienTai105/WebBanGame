@@ -4,6 +4,7 @@ import AdminLayout from '../../components/admin/AdminLayout'
 import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import ActionMenu, { ActionMenuItem } from '../../components/admin/ActionMenu'
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal'
+import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
 import { errorToast, successToast } from '../../utils/toast'
 
 // ── Types ──────────────────────────────────────────────────
@@ -168,11 +169,23 @@ const AdminNews: React.FC = () => {
   useEffect(() => { fetchStats() }, [fetchStats])
 
   // ── Handlers ─────────────────────────────────────────────
+  const [otpModal, setOtpModal] = useState(false)
+
   const handleDelete = async () => {
+    if (!deleteTarget) return
+    // Show OTP modal for staff
+    setOtpModal(true)
+  }
+
+  const handleDeleteOTPVerified = async (otpToken: string) => {
+    setOtpModal(false)
     if (!deleteTarget) return
     setIsDeleting(true)
     try {
-      await adminFetch(`/api/news/admin/${deleteTarget._id}`, { method: 'DELETE' })
+      await adminFetch(`/api/news/admin/${deleteTarget._id}`, {
+        method: 'DELETE',
+        headers: otpToken ? { otpToken } : {},
+      })
       successToast('Đã xóa bài viết')
       setDeleteTarget(null)
       fetchArticles()
@@ -576,6 +589,13 @@ const AdminNews: React.FC = () => {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         isDeleting={isDeleting}
+      />
+
+      <OTPVerificationModal
+        isOpen={otpModal}
+        onClose={() => setOtpModal(false)}
+        onVerified={handleDeleteOTPVerified}
+        actionDescription="Xóa bài viết"
       />
     </AdminLayout>
   )

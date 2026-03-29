@@ -1,6 +1,7 @@
 import { Request, Response } from 'express'
 import Comment from '../models/Comment.js'
 import News from '../models/News.js'
+import AuditLog from '../models/AuditLog.js'
 
 interface AuthRequest extends Request {
   user?: any
@@ -168,6 +169,15 @@ export const deleteComment = async (req: AuthRequest, res: Response): Promise<vo
       return
     }
 
+    await AuditLog.create({
+      action: 'DELETE',
+      entity: 'Comment',
+      entityId: commentId,
+      oldValue: comment.toObject(),
+      userId: req.user?._id,
+      ipAddress: req.ip,
+    })
+
     res.status(200).json({
       success: true,
       message: 'Comment deleted successfully',
@@ -198,13 +208,8 @@ export const updateCommentStatus = async (req: AuthRequest, res: Response): Prom
       return
     }
 
-    const comment = await Comment.findByIdAndUpdate(
-      commentId,
-      { status },
-      { new: true, runValidators: true }
-    )
-
-    if (!comment) {
+    const oldComment = await Comment.findById(commentId)
+    if (!oldComment) {
       res.status(404).json({
         success: false,
         message: 'Comment not found',
@@ -212,10 +217,23 @@ export const updateCommentStatus = async (req: AuthRequest, res: Response): Prom
       return
     }
 
+    const oldStatus = oldComment.status
+    oldComment.status = status
+    await oldComment.save()
+
+    await AuditLog.create({
+      action: 'STATUS_CHANGE',
+      entity: 'Comment',
+      entityId: commentId,
+      changes: { status: { old: oldStatus, new: status } },
+      userId: req.user?._id,
+      ipAddress: req.ip,
+    })
+
     res.status(200).json({
       success: true,
       message: 'Comment status updated successfully',
-      data: comment,
+      data: oldComment,
     })
   } catch (error: any) {
     res.status(500).json({
@@ -245,18 +263,21 @@ export const getAllComments = async (req: AuthRequest, res: Response): Promise<v
       .skip(skip)
       .limit(Number(limit))
       .populate('newsId', 'title slug')
+      .populate('userId', 'name email avatar')
       .lean()
 
     const total = await Comment.countDocuments(filter)
 
     res.status(200).json({
       success: true,
-      data: comments,
-      pagination: {
-        total,
-        page: Number(page),
-        limit: Number(limit),
-        pages: Math.ceil(total / Number(limit)),
+      data: {
+        comments,
+        pagination: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          pages: Math.ceil(total / Number(limit)),
+        },
       },
     })
   } catch (error: any) {
@@ -265,5 +286,32 @@ export const getAllComments = async (req: AuthRequest, res: Response): Promise<v
       message: 'Error fetching comments',
       error: error.message,
     })
+  }
+}
+
+/**
+ * GET /admin/comments/stats
+ * Get comment stats (Admin/Staff)
+ */
+export const getCommentStats = async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const [stats] = await Comment.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+          approved: { $sum: { $cond: [{ $eq: ['$status', 'approved'] }, 1, 0] } },
+          rejected: { $sum: { $cond: [{ $eq: ['$status', 'rejected'] }, 1, 0] } },
+        },
+      },
+    ])
+
+    res.json({
+      success: true,
+      data: stats || { total: 0, pending: 0, approved: 0, rejected: 0 },
+    })
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message })
   }
 }

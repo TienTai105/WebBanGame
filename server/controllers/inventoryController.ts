@@ -10,6 +10,143 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
   }
 
 /**
+ * GET /api/inventory/admin/all?page=1&limit=20&status=low|out|normal&search=
+ * Admin: Get all inventory with pagination and product info
+ */
+export const getAllInventory = asyncHandler(async (req: Request, res: Response) => {
+  const page = parseInt((req.query.page as string) || '1')
+  const limit = parseInt((req.query.limit as string) || '20')
+  const status = req.query.status as string
+  const search = req.query.search as string
+
+  const matchFilter: any = {}
+  if (status === 'out') matchFilter.available = { $eq: 0 }
+  else if (status === 'low') matchFilter.available = { $gt: 0, $lte: 5 }
+  else if (status === 'normal') matchFilter.available = { $gt: 5 }
+
+  const pipeline: any[] = [
+    ...(Object.keys(matchFilter).length ? [{ $match: matchFilter }] : []),
+    {
+      $lookup: {
+        from: 'products',
+        localField: 'productId',
+        foreignField: '_id',
+        as: 'product',
+      },
+    },
+    { $unwind: { path: '$product', preserveNullAndEmptyArrays: false } },
+  ]
+
+  if (search?.trim()) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { 'product.name': { $regex: search.trim(), $options: 'i' } },
+          { variantSku: { $regex: search.trim(), $options: 'i' } },
+        ],
+      },
+    })
+  }
+
+  // Count total
+  const countPipeline = [...pipeline, { $count: 'total' }]
+  const countResult = await Inventory.aggregate(countPipeline)
+  const total = countResult[0]?.total || 0
+
+  // Get paginated data
+  pipeline.push(
+    {
+      $project: {
+        productId: 1,
+        variantSku: 1,
+        available: 1,
+        reserved: 1,
+        sold: 1,
+        damaged: 1,
+        lastUpdated: 1,
+        productName: '$product.name',
+        productImage: { $arrayElemAt: ['$product.images', 0] },
+        productSku: '$product.sku',
+      },
+    },
+    { $sort: { available: 1, lastUpdated: -1 } },
+    { $skip: (page - 1) * limit },
+    { $limit: limit },
+  )
+
+  const items = await Inventory.aggregate(pipeline)
+
+  res.json({
+    success: true,
+    data: {
+      items,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    },
+  })
+})
+
+/**
+ * GET /api/inventory/admin/stats
+ * Admin: Get inventory overview stats
+ */
+export const getInventoryStats = asyncHandler(async (_req: Request, res: Response) => {
+  const [stats] = await Inventory.aggregate([
+    {
+      $group: {
+        _id: null,
+        totalItems: { $sum: 1 },
+        totalAvailable: { $sum: '$available' },
+        totalReserved: { $sum: '$reserved' },
+        totalSold: { $sum: '$sold' },
+        totalDamaged: { $sum: '$damaged' },
+        outOfStock: { $sum: { $cond: [{ $eq: ['$available', 0] }, 1, 0] } },
+        lowStock: { $sum: { $cond: [{ $and: [{ $gt: ['$available', 0] }, { $lte: ['$available', 5] }] }, 1, 0] } },
+      },
+    },
+  ])
+
+  res.json({
+    success: true,
+    data: stats || {
+      totalItems: 0, totalAvailable: 0, totalReserved: 0,
+      totalSold: 0, totalDamaged: 0, outOfStock: 0, lowStock: 0,
+    },
+  })
+})
+
+/**
+ * GET /api/inventory/admin/movements?page=1&limit=20&type=IN|OUT|ADJUST...&productId=
+ * Admin: Get stock movements with pagination
+ */
+export const getStockMovements = asyncHandler(async (req: Request, res: Response) => {
+  const page = parseInt((req.query.page as string) || '1')
+  const limit = parseInt((req.query.limit as string) || '20')
+  const type = req.query.type as string
+  const productId = req.query.productId as string
+
+  const filter: any = {}
+  if (type && type !== 'all') filter.type = type
+  if (productId) filter.productId = new mongoose.Types.ObjectId(productId)
+
+  const total = await StockMovement.countDocuments(filter)
+  const movements = await StockMovement.find(filter)
+    .sort({ createdAt: -1 })
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .populate('productId', 'name sku')
+    .populate('createdBy', 'name email')
+    .lean()
+
+  res.json({
+    success: true,
+    data: {
+      movements,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    },
+  })
+})
+
+/**
  * GET /api/inventory/check-stock/:productId/:variantSku?quantity=1
  * Check if enough stock available for a given product variant
  */

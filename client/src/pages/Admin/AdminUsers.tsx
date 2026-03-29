@@ -4,6 +4,7 @@ import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import ActionMenu, { ActionMenuItem } from '../../components/admin/ActionMenu'
 import { errorToast, successToast } from '../../utils/toast'
 import { getSocket } from '../../utils/socket'
+import { STAFF_PERMISSIONS } from '../../context/AdminAuthContext'
 
 // ── Types ──────────────────────────────────────────────────
 interface User {
@@ -12,6 +13,7 @@ interface User {
   email: string
   phone?: string
   role: 'customer' | 'staff' | 'admin'
+  permissions?: string[]
   isActive: boolean
   avatar?: string
   lastLogin?: string
@@ -97,6 +99,10 @@ const AdminUsers: React.FC = () => {
   const [editingRole, setEditingRole] = useState(false)
   const [newRole, setNewRole] = useState<RoleType>('customer')
   const [updating, setUpdating] = useState(false)
+  const [editingPermissions, setEditingPermissions] = useState(false)
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
+  const [savingPermissions, setSavingPermissions] = useState(false)
+  const [defaultOTP, setDefaultOTP] = useState('')
 
   // Audit Log Modal
   const [showAllLogs, setShowAllLogs] = useState(false)
@@ -279,6 +285,33 @@ const AdminUsers: React.FC = () => {
     }
   }
 
+  // ── Save permissions ─────────────────────────────────────
+  const handleSavePermissions = async () => {
+    if (!selectedUser) return
+    setSavingPermissions(true)
+    try {
+      await adminFetch(`/api/admin/users/${selectedUser._id}/permissions`, {
+        method: 'PUT',
+        body: JSON.stringify({ permissions: selectedPermissions, defaultOTP: defaultOTP || null }),
+      })
+      successToast('Cập nhật quyền thành công')
+      setEditingPermissions(false)
+      setSelectedUser(null)
+      fetchUsers()
+      fetchAuditLogs()
+    } catch (err: any) {
+      errorToast(err.message || 'Không thể cập nhật quyền')
+    } finally {
+      setSavingPermissions(false)
+    }
+  }
+
+  const togglePermission = (key: string) => {
+    setSelectedPermissions((prev) =>
+      prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]
+    )
+  }
+
   // ── Reset password ───────────────────────────────────────
   const handleResetPassword = async (user: User) => {
     try {
@@ -329,7 +362,15 @@ const AdminUsers: React.FC = () => {
         icon: 'swap_horiz',
         label: 'Đổi vai trò',
         color: 'indigo',
-        onClick: () => { setSelectedUser(user); setNewRole(user.role); setEditingRole(true) },
+        onClick: () => { setSelectedUser(user); setNewRole(user.role); setEditingRole(true); setEditingPermissions(false) },
+      })
+    }
+    if (user.role === 'staff') {
+      items.push({
+        icon: 'shield_person',
+        label: 'Quản lý quyền',
+        color: 'indigo',
+        onClick: () => { setSelectedUser(user); setSelectedPermissions(user.permissions || []); setDefaultOTP(''); setEditingPermissions(true); setEditingRole(false) },
       })
     }
     items.push({ icon: 'lock_reset', label: 'Đặt lại mật khẩu', color: 'default', onClick: () => handleResetPassword(user) })
@@ -442,12 +483,13 @@ const AdminUsers: React.FC = () => {
       </section>
 
       {/* ── Bento Grid Stats ─────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         {[
           { label: 'Tổng User', value: stats.totalUsers, icon: 'group', textColor: 'text-slate-900', borderColor: 'border-indigo-500' },
-          { label: 'Quản Trị Viên', value: stats.totalAdmins + stats.totalStaff, icon: 'admin_panel_settings', textColor: 'text-indigo-600', borderColor: 'border-indigo-400' },
+          { label: 'Quản Trị Viên', value: stats.totalAdmins, icon: 'admin_panel_settings', textColor: 'text-indigo-600', borderColor: 'border-indigo-400' },
+          { label: 'Nhân Viên', value: stats.totalStaff, icon: 'badge', textColor: 'text-amber-600', borderColor: 'border-amber-400' },
           { label: 'Đang Trực Tuyến', value: stats.onlineUsers, icon: 'radio_button_checked', textColor: 'text-emerald-600', borderColor: 'border-emerald-400', pulse: true },
-          { label: 'Khách Hàng', value: stats.totalUsers - stats.totalAdmins - stats.totalStaff, icon: 'person', textColor: 'text-amber-600', borderColor: 'border-amber-400' },
+          { label: 'Khách Hàng', value: stats.totalUsers - stats.totalAdmins - stats.totalStaff, icon: 'person', textColor: 'text-sky-600', borderColor: 'border-sky-400' },
         ].map((card) => (
           <div key={card.label} className={`p-6 bg-white rounded-xl border-l-4 ${card.borderColor} shadow-sm flex flex-col justify-between h-32 relative overflow-hidden transition-all hover:-translate-y-0.5`}>
             <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-6xl text-slate-100 opacity-30">{card.icon}</span>
@@ -723,7 +765,7 @@ const AdminUsers: React.FC = () => {
 
       {/* ── User Detail / Role Edit Modal ────────────── */}
       {selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => { setSelectedUser(null); setEditingRole(false) }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={() => { setSelectedUser(null); setEditingRole(false); setEditingPermissions(false) }}>
           <div
             className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
@@ -732,10 +774,10 @@ const AdminUsers: React.FC = () => {
             <div className="flex items-center justify-between px-8 py-6 border-b border-slate-100">
               <div>
                 <h2 className="text-2xl font-extrabold text-slate-900">
-                  {editingRole ? 'Đổi Vai Trò' : 'Chi Tiết Người Dùng'}
+                  {editingRole ? 'Đổi Vai Trò' : editingPermissions ? 'Quản Lý Quyền' : 'Chi Tiết Người Dùng'}
                 </h2>
               </div>
-              <button onClick={() => { setSelectedUser(null); setEditingRole(false) }} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
+              <button onClick={() => { setSelectedUser(null); setEditingRole(false); setEditingPermissions(false) }} className="p-2 hover:bg-slate-100 rounded-xl transition-colors">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
@@ -817,6 +859,97 @@ const AdminUsers: React.FC = () => {
                     </button>
                   </div>
                 </>
+              ) : editingPermissions ? (
+                <>
+                  {/* Permissions editor for staff */}
+                  <div>
+                    <label className="block text-xs uppercase font-bold text-slate-400 tracking-wider mb-3">
+                      Phân quyền truy cập cho Staff
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {STAFF_PERMISSIONS.map((perm) => {
+                        const isChecked = selectedPermissions.includes(perm.key)
+                        return (
+                          <button
+                            key={perm.key}
+                            onClick={() => togglePermission(perm.key)}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all text-left ${
+                              isChecked
+                                ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                                : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-lg">{perm.icon}</span>
+                            <span className="text-sm font-bold">{perm.label}</span>
+                            {isChecked && (
+                              <span className="material-symbols-outlined text-sm ml-auto" style={{ fontVariationSettings: "'FILL' 1" }}>
+                                check_circle
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Default OTP setting */}
+                  <div>
+                    <label className="block text-xs uppercase font-bold text-slate-400 tracking-wider mb-3">
+                      Mã OTP Mặc Định
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        value={defaultOTP}
+                        onChange={(e) => {
+                          const v = e.target.value.replace(/\D/g, '').slice(0, 6)
+                          setDefaultOTP(v)
+                        }}
+                        maxLength={6}
+                        placeholder="Để trống = gửi OTP qua email"
+                        className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-1 focus:ring-indigo-400 focus:border-indigo-400 text-sm font-mono tracking-widest"
+                      />
+                      {defaultOTP && (
+                        <button
+                          onClick={() => setDefaultOTP('')}
+                          className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                          title="Xóa mã mặc định"
+                        >
+                          <span className="material-symbols-outlined text-lg">close</span>
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-2">
+                      {defaultOTP
+                        ? `Staff sẽ dùng mã "${defaultOTP}" thay vì OTP qua email.`
+                        : 'Nếu để trống, OTP sẽ được gửi qua email khi thao tác nguy hiểm.'}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <p className="text-xs text-slate-500">
+                      <span className="font-bold text-slate-700">{selectedPermissions.length}/{STAFF_PERMISSIONS.length}</span> module được cấp quyền.
+                      Staff sẽ chỉ thấy các mục trong sidebar tương ứng với quyền được cấp.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      onClick={() => setEditingPermissions(false)}
+                      className="flex-1 px-6 py-3 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-all"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      onClick={handleSavePermissions}
+                      disabled={savingPermissions}
+                      className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {savingPermissions && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                      Lưu quyền
+                    </button>
+                  </div>
+                </>
               ) : (
                 <>
                   {/* View mode details */}
@@ -853,15 +986,46 @@ const AdminUsers: React.FC = () => {
                     )}
                   </div>
 
+                  {/* Staff permissions display */}
+                  {selectedUser.role === 'staff' && (
+                    <div>
+                      <h4 className="text-xs uppercase font-bold text-slate-400 tracking-wider mb-2">Quyền truy cập</h4>
+                      {selectedUser.permissions && selectedUser.permissions.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {selectedUser.permissions.map((p) => {
+                            const perm = STAFF_PERMISSIONS.find((sp) => sp.key === p)
+                            return (
+                              <span key={p} className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-full border border-indigo-200">
+                                <span className="material-symbols-outlined text-xs">{perm?.icon || 'check'}</span>
+                                {perm?.label || p}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-400 italic">Chưa được cấp quyền nào</p>
+                      )}
+                    </div>
+                  )}
+
                   {/* Quick actions */}
-                  <div className="flex items-center gap-3 pt-2">
+                  <div className="flex items-center gap-3 pt-2 flex-wrap">
                     {selectedUser.role !== 'admin' && (
                       <button
-                        onClick={() => { setNewRole(selectedUser.role); setEditingRole(true) }}
+                        onClick={() => { setNewRole(selectedUser.role); setEditingRole(true); setEditingPermissions(false) }}
                         className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all"
                       >
                         <span className="material-symbols-outlined text-base">swap_horiz</span>
                         Đổi vai trò
+                      </button>
+                    )}
+                    {selectedUser.role === 'staff' && (
+                      <button
+                        onClick={() => { setSelectedPermissions(selectedUser.permissions || []); setDefaultOTP(''); setEditingPermissions(true); setEditingRole(false) }}
+                        className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-600 transition-all"
+                      >
+                        <span className="material-symbols-outlined text-base">shield_person</span>
+                        Quản lý quyền
                       </button>
                     )}
                     {selectedUser.role !== 'admin' && (

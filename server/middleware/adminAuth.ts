@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import OTPVerification from '../models/OTPVerification.js'
+import User from '../models/User.js'
+import { STAFF_PERMISSIONS, type StaffPermission } from '../models/User.js'
 
 interface AdminRequest extends Request {
   user?: {
@@ -39,6 +41,37 @@ export const adminOnlyStrict = async (
     return
   }
   next()
+}
+
+/**
+ * Middleware factory to check staff permissions
+ * Admin always has all permissions, staff must have the specific permission
+ */
+export const requirePermission = (permission: StaffPermission) => {
+  return async (req: AdminRequest, res: Response, next: NextFunction): Promise<void> => {
+    // Admin bypasses all permission checks
+    if (req.user?.role === 'admin') {
+      next()
+      return
+    }
+
+    // Staff must have the specific permission
+    if (req.user?.role === 'staff') {
+      const user = await User.findById(req.user._id).select('permissions')
+      if (!user || !user.permissions.includes(permission)) {
+        res.status(403).json({
+          success: false,
+          message: `Bạn không có quyền truy cập module "${permission}"`,
+          code: 'PERMISSION_DENIED',
+        })
+        return
+      }
+      next()
+      return
+    }
+
+    res.status(403).json({ success: false, message: 'Staff access required' })
+  }
 }
 
 /**

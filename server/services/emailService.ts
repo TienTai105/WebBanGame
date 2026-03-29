@@ -1,3 +1,37 @@
+/**
+ * Send reply to contact email
+ */
+export const sendContactReplyEmail = async (to: string, replyMessage: string, contact: { fullName: string; subject: string; message: string }) => {
+  const htmlBody = `
+    <div style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 32px;">
+      <div style="max-width: 600px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; overflow: hidden;">
+        <div style="background: #2c3e50; color: #fff; padding: 24px 32px; border-bottom: 4px solid #3498db;">
+          <h2 style="margin: 0; font-size: 22px; font-weight: 700;">Phản hồi liên hệ từ VOLTRIX</h2>
+        </div>
+        <div style="padding: 32px;">
+          <p style="font-size: 15px; color: #333;">Xin chào <strong>${contact.fullName}</strong>,</p>
+          <p style="font-size: 15px; color: #333;">Chúng tôi đã nhận được liên hệ của bạn với chủ đề: <strong>${contact.subject}</strong></p>
+          <div style="margin: 18px 0 28px 0; padding: 18px; background: #f8f9fa; border-left: 4px solid #3498db; border-radius: 4px;">
+            <div style="font-size: 14px; color: #666;">Nội dung liên hệ của bạn:</div>
+            <div style="font-size: 15px; color: #222; margin-top: 6px; white-space: pre-line;">${contact.message}</div>
+          </div>
+          <div style="margin: 18px 0 28px 0; padding: 18px; background: #f0fdf4; border-left: 4px solid #27ae60; border-radius: 4px;">
+            <div style="font-size: 14px; color: #15803d; font-weight: 600;">Phản hồi từ Admin:</div>
+            <div style="font-size: 15px; color: #222; margin-top: 6px; white-space: pre-line;">${replyMessage}</div>
+          </div>
+          <p style="font-size: 14px; color: #888; margin-top: 32px;">Nếu bạn có thêm câu hỏi, vui lòng phản hồi email này hoặc liên hệ lại với chúng tôi qua website.</p>
+        </div>
+        <div style="background: #f8f9fa; color: #888; text-align: center; font-size: 13px; padding: 18px 0; border-top: 1px solid #e0e0e0;">&copy; ${new Date().getFullYear()} VOLTRIX</div>
+      </div>
+    </div>
+  `;
+  await transporter.sendMail({
+    from: process.env.GMAIL_USER,
+    to,
+    subject: `[VOLTRIX] Phản hồi liên hệ của bạn`,
+    html: htmlBody,
+  });
+};
 import nodemailer from 'nodemailer'
 import dotenv from 'dotenv'
 

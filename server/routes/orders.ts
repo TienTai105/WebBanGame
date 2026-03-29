@@ -8,7 +8,8 @@ import {
   cancelOrder,
   confirmOrderPayment,
 } from '../controllers/orderController.js'
-import { protect, adminOnly } from '../middleware/auth.js'
+import { protect } from '../middleware/auth.js'
+import { staffOnly, requirePermission, requireOTPVerification } from '../middleware/adminAuth.js'
 
 const router = express.Router()
 
@@ -20,7 +21,7 @@ router.put('/:id/cancel', protect, cancelOrder)
 router.put('/:id/confirm-payment', protect, confirmOrderPayment)
 
 // Admin routes
-router.get('/admin/all', protect, adminOnly, getAllOrders)
-router.put('/:id', protect, adminOnly, updateOrder)
+router.get('/admin/all', protect, staffOnly, requirePermission('orders'), getAllOrders)
+router.put('/:id', protect, staffOnly, requirePermission('orders'), requireOTPVerification, updateOrder)
 
 export default router

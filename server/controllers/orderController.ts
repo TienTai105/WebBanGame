@@ -299,6 +299,22 @@ export const updateOrder = asyncHandler(async (req: Request, res: Response) => {
     })
   }
 
+  // Audit log for order status change
+  try {
+    const AuditLog = (await import('../models/AuditLog.js')).default
+    await AuditLog.create({
+      action: 'STATUS_CHANGE',
+      entity: 'Order',
+      entityId: order._id,
+      changes: {
+        orderStatus: { old: existingOrder.orderStatus, new: order.orderStatus },
+        ...(order.paymentStatus !== existingOrder.paymentStatus ? { paymentStatus: { old: existingOrder.paymentStatus, new: order.paymentStatus } } : {}),
+      },
+      userId: (req as any).user?._id,
+      ipAddress: req.ip,
+    })
+  } catch {}
+
   res.status(200).json({
     success: true,
     data: order,
@@ -382,6 +398,19 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
 
   order.orderStatus = 'cancelled'
   await order.save()
+
+  // Audit log for order cancellation
+  try {
+    const AuditLog = (await import('../models/AuditLog.js')).default
+    await AuditLog.create({
+      action: 'STATUS_CHANGE',
+      entity: 'Order',
+      entityId: order._id,
+      changes: { orderStatus: { old: 'pending', new: 'cancelled' } },
+      userId: (req as any).user?._id,
+      ipAddress: req.ip,
+    })
+  } catch {}
 
   console.log(`✔️ Order cancelled successfully: ${order._id}`)
 

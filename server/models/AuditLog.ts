@@ -1,8 +1,8 @@
 import mongoose, { Schema, Document, Model } from 'mongoose'
 
 interface IAuditLog extends Document {
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE' | 'EXPORT' | 'IMPORT'
-  entity: 'Product' | 'Order' | 'Inventory' | 'User' | 'Promotion' | 'Shipment'
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE' | 'EXPORT' | 'IMPORT' | 'LOGIN'
+  entity: 'Product' | 'Order' | 'Inventory' | 'User' | 'Promotion' | 'Shipment' | 'News' | 'Review' | 'Comment' | 'Contact'
   entityId: mongoose.Types.ObjectId | string
   oldValue?: any                                    // toàn bộ document cũ
   newValue?: any                                    // toàn bộ document mới
@@ -21,13 +21,13 @@ const auditLogSchema = new Schema<IAuditLog>(
   {
     action: {
       type: String,
-      enum: ['CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', 'EXPORT', 'IMPORT'],
+      enum: ['CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', 'EXPORT', 'IMPORT', 'LOGIN'],
       required: [true, 'Action required'],
       index: true,
     },
     entity: {
       type: String,
-      enum: ['Product', 'Order', 'Inventory', 'User', 'Promotion', 'Shipment'],
+      enum: ['Product', 'Order', 'Inventory', 'User', 'Promotion', 'Shipment', 'News', 'Review', 'Comment', 'Contact'],
       required: [true, 'Entity required'],
       index: true,
     },

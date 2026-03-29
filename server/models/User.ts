@@ -1,12 +1,30 @@
 import mongoose, { Schema, Document, Model } from 'mongoose'
 import bcryptjs from 'bcryptjs'
 
+// All available staff permissions
+export const STAFF_PERMISSIONS = [
+  'dashboard',
+  'products',
+  'orders',
+  'inventory',
+  'news',
+  'comments',
+  'contacts',
+  'promotions',
+  'reviews',
+  'settings',
+] as const
+
+export type StaffPermission = (typeof STAFF_PERMISSIONS)[number]
+
 interface IUser extends Document {
   name: string
   email: string
   emailVerified: boolean                           // Email confirmation status
   password: string
   role: 'customer' | 'staff' | 'admin'             // customer | staff (warehouse) | admin
+  permissions: StaffPermission[]                   // Staff permissions (admin has all by default)
+  defaultOTP?: string                               // Admin-set default OTP (skip email)
   phone?: string
   shippingAddresses?: Array<{
     name: string
@@ -57,6 +75,16 @@ const userSchema = new Schema<IUser>(
       type: String,
       enum: ['customer', 'staff', 'admin'],
       default: 'customer',
+    },
+    permissions: {
+      type: [String],
+      enum: ['dashboard', 'products', 'orders', 'inventory', 'news', 'comments', 'contacts', 'promotions', 'reviews', 'settings'],
+      default: [],
+    },
+    defaultOTP: {
+      type: String,
+      default: null,
+      select: false,
     },
     phone: {
       type: String,

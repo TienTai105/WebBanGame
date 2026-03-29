@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import ActionMenu, { ActionMenuItem } from '../../components/admin/ActionMenu'
+import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
 import { errorToast, successToast } from '../../utils/toast'
 
 // ── Types ──────────────────────────────────────────────────
@@ -116,6 +117,8 @@ const AdminOrders: React.FC = () => {
   const [editPaymentStatus, setEditPaymentStatus] = useState<PaymentStatus>('unpaid')
   const [editTrackingNumber, setEditTrackingNumber] = useState('')
   const [updating, setUpdating] = useState(false)
+  const [otpModal, setOtpModal] = useState(false)
+  const [pendingAction, setPendingAction] = useState<{ type: 'status'; orderId: string; status: OrderStatus } | { type: 'edit' } | null>(null)
 
   // ── Authenticated fetch with auto token refresh ──────────
   const adminFetch = useCallback(async (url: string, options?: RequestInit) => {
@@ -207,29 +210,42 @@ const AdminOrders: React.FC = () => {
 
   // ── Update order status ──────────────────────────────────
   const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {
-    try {
-      await adminFetch(`/api/orders/${orderId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ orderStatus: newStatus }),
-      })
-      successToast('Cập nhật trạng thái thành công')
-      fetchOrders()
-      fetchStatusCounts()
-      // Update selectedOrder if it's the same order
-      if (selectedOrder && selectedOrder._id === orderId) {
-        setSelectedOrder((prev) => {
-          if (!prev) return null
-          const updated = { ...prev, orderStatus: newStatus }
-          // COD orders: auto-set payment to paid when completed
-          if (newStatus === 'completed' && prev.paymentMethod === 'COD') {
-            updated.paymentStatus = 'paid'
-          }
-          return updated
+    setPendingAction({ type: 'status', orderId, status: newStatus })
+    setOtpModal(true)
+  }
+
+  const handleOTPVerified = async (otpToken: string) => {
+    setOtpModal(false)
+    if (!pendingAction) return
+    const headers: Record<string, string> = otpToken ? { otpToken } : {}
+
+    if (pendingAction.type === 'status') {
+      try {
+        await adminFetch(`/api/orders/${pendingAction.orderId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ orderStatus: pendingAction.status }),
+          headers,
         })
+        successToast('Cập nhật trạng thái thành công')
+        fetchOrders()
+        fetchStatusCounts()
+        if (selectedOrder && selectedOrder._id === pendingAction.orderId) {
+          setSelectedOrder((prev) => {
+            if (!prev) return null
+            const updated = { ...prev, orderStatus: pendingAction.status }
+            if (pendingAction.status === 'completed' && prev.paymentMethod === 'COD') {
+              updated.paymentStatus = 'paid'
+            }
+            return updated
+          })
+        }
+      } catch (err: any) {
+        errorToast(err.message || 'Không thể cập nhật trạng thái')
       }
-    } catch (err: any) {
-      errorToast(err.message || 'Không thể cập nhật trạng thái')
+    } else if (pendingAction.type === 'edit') {
+      await executeEditSave(headers)
     }
+    setPendingAction(null)
   }
 
   // ── Open edit modal ──────────────────────────────────────
@@ -244,6 +260,22 @@ const AdminOrders: React.FC = () => {
   // ── Save full edit ───────────────────────────────────────
   const handleSaveEdit = async () => {
     if (!selectedOrder) return
+    const body: Record<string, string> = {}
+    if (editOrderStatus !== selectedOrder.orderStatus) body.orderStatus = editOrderStatus
+    if (editPaymentStatus !== selectedOrder.paymentStatus) body.paymentStatus = editPaymentStatus
+    if (editTrackingNumber !== (selectedOrder.trackingNumber || '')) body.trackingNumber = editTrackingNumber
+
+    if (Object.keys(body).length === 0) {
+      setEditingStatus(false)
+      return
+    }
+
+    setPendingAction({ type: 'edit' })
+    setOtpModal(true)
+  }
+
+  const executeEditSave = async (headers: Record<string, string>) => {
+    if (!selectedOrder) return
     setUpdating(true)
     try {
       const body: Record<string, string> = {}
@@ -251,14 +283,10 @@ const AdminOrders: React.FC = () => {
       if (editPaymentStatus !== selectedOrder.paymentStatus) body.paymentStatus = editPaymentStatus
       if (editTrackingNumber !== (selectedOrder.trackingNumber || '')) body.trackingNumber = editTrackingNumber
 
-      if (Object.keys(body).length === 0) {
-        setEditingStatus(false)
-        return
-      }
-
       await adminFetch(`/api/orders/${selectedOrder._id}`, {
         method: 'PUT',
         body: JSON.stringify(body),
+        headers,
       })
 
       successToast('Cập nhật đơn hàng thành công')
@@ -793,6 +821,13 @@ const AdminOrders: React.FC = () => {
           </div>
         </div>
       )}
+
+      <OTPVerificationModal
+        isOpen={otpModal}
+        onClose={() => { setOtpModal(false); setPendingAction(null) }}
+        onVerified={handleOTPVerified}
+        actionDescription={pendingAction?.type === 'edit' ? 'Cập nhật đơn hàng' : 'Thay đổi trạng thái đơn hàng'}
+      />
     </AdminLayout>
   )
 }

@@ -3,6 +3,7 @@ import AdminLayout from '../../components/admin/AdminLayout'
 import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import ActionMenu, { ActionMenuItem } from '../../components/admin/ActionMenu'
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal'
+import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
 import PromotionModal from '../../components/admin/PromotionModal'
 import { errorToast, successToast } from '../../utils/toast'
 
@@ -156,12 +157,23 @@ const AdminPromotions: React.FC = () => {
     return () => clearTimeout(timer)
   }, [searchInput])
 
-  // ── Delete ─────────────────────────────────────────────
+  const [otpModal, setOtpModal] = useState(false)
+
+  // ── Delete ─────────────────────────────────────────────────
   const handleDelete = async () => {
+    if (!deleteTarget) return
+    setOtpModal(true)
+  }
+
+  const handleDeleteOTPVerified = async (otpToken: string) => {
+    setOtpModal(false)
     if (!deleteTarget) return
     setIsDeleting(true)
     try {
-      await adminFetch(`/api/promotions/${deleteTarget._id}`, { method: 'DELETE' })
+      await adminFetch(`/api/promotions/${deleteTarget._id}`, {
+        method: 'DELETE',
+        headers: otpToken ? { otpToken } : {},
+      })
       successToast('Đã xóa khuyến mãi')
       setDeleteTarget(null)
       fetchPromotions()
@@ -514,6 +526,13 @@ const AdminPromotions: React.FC = () => {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
         isDeleting={isDeleting}
+      />
+
+      <OTPVerificationModal
+        isOpen={otpModal}
+        onClose={() => setOtpModal(false)}
+        onVerified={handleDeleteOTPVerified}
+        actionDescription="Xóa khuyến mãi"
       />
 
       {/* Promotion modal (create/edit/view) */}

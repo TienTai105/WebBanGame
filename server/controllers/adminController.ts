@@ -31,17 +31,17 @@ export const getDashboardStats = async (req: AdminRequest, res: Response): Promi
     let filterEndDate: Date
 
     if (startDate && endDate) {
-      // Use provided date range
-      filterStartDate = new Date(startDate as string)
-      filterEndDate = new Date(endDate as string)
-      // Set end date to end of day
-      filterEndDate.setHours(23, 59, 59, 999)
+      // Parse as Vietnam timezone (UTC+7)
+      filterStartDate = new Date((startDate as string) + 'T00:00:00+07:00')
+      filterEndDate = new Date((endDate as string) + 'T23:59:59.999+07:00')
     } else {
-      // Default: current month
-      const now = new Date()
-      filterStartDate = new Date(now.getFullYear(), now.getMonth(), 1)
-      filterEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-      filterEndDate.setHours(23, 59, 59, 999)
+      // Default: current month in Vietnam time
+      const vnNow = new Date(Date.now() + 7 * 60 * 60 * 1000)
+      const y = vnNow.getUTCFullYear()
+      const m = String(vnNow.getUTCMonth() + 1).padStart(2, '0')
+      const d = String(vnNow.getUTCDate()).padStart(2, '0')
+      filterStartDate = new Date(`${y}-${m}-01T00:00:00+07:00`)
+      filterEndDate = new Date(`${y}-${m}-${d}T23:59:59.999+07:00`)
     }
 
     // Calculate comparison period based on selected type
@@ -181,7 +181,7 @@ export const getDashboardStats = async (req: AdminRequest, res: Response): Promi
       {
         $group: {
           _id: {
-            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: '+07:00' },
           },
           revenue: { $sum: '$finalPrice' },
         },
@@ -200,7 +200,7 @@ export const getDashboardStats = async (req: AdminRequest, res: Response): Promi
       {
         $group: {
           _id: {
-            $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+            $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: '+07:00' },
           },
           revenue: { $sum: '$finalPrice' },
         },
@@ -229,10 +229,10 @@ export const getDashboardStats = async (req: AdminRequest, res: Response): Promi
       { $limit: 5 },
     ])
 
-    // Recent orders (last 10 orders, any period)
+    // Recent orders (last 30 orders, any period)
     const recentOrders = await Order.find()
       .sort({ createdAt: -1 })
-      .limit(10)
+      .limit(30)
       .populate('user', 'firstName lastName email')
       .lean()
       .then(orders => orders.map((order: any) => ({
@@ -325,17 +325,31 @@ export const getDashboardStats = async (req: AdminRequest, res: Response): Promi
           revenue: item.totalRevenue,
         })),
         recentOrders: recentOrders,
-        revenueChart: {
-          comparisonType: comparisonTypeStr,
-          current: currentPeriodDailyRevenue.map((item: any) => ({
-            date: item._id,
-            revenue: item.revenue,
-          })),
-          previous: previousPeriodDailyRevenue.map((item: any) => ({
-            date: item._id,
-            revenue: item.revenue,
-          })),
-        },
+        revenueChart: (() => {
+          // Helper: generate all date strings in Vietnam timezone between two UTC dates
+          const VN_MS = 7 * 60 * 60 * 1000
+          const allDatesVN = (start: Date, end: Date): string[] => {
+            const result: string[] = []
+            const d = new Date(start.getTime() + VN_MS)
+            const e = new Date(end.getTime() + VN_MS)
+            d.setUTCHours(0, 0, 0, 0)
+            e.setUTCHours(0, 0, 0, 0)
+            while (d <= e) {
+              result.push(d.toISOString().slice(0, 10))
+              d.setUTCDate(d.getUTCDate() + 1)
+            }
+            return result
+          }
+          const currentMap = new Map(currentPeriodDailyRevenue.map((r: any) => [r._id, r.revenue]))
+          const previousMap = new Map(previousPeriodDailyRevenue.map((r: any) => [r._id, r.revenue]))
+          const currentDates = allDatesVN(filterStartDate, filterEndDate)
+          const previousDates = allDatesVN(previousStartDate, previousEndDate)
+          return {
+            comparisonType: comparisonTypeStr,
+            current: currentDates.map(date => ({ date, revenue: currentMap.get(date) || 0 })),
+            previous: previousDates.map(date => ({ date, revenue: previousMap.get(date) || 0 })),
+          }
+        })(),
         products: {
           total: totalProducts,
           active: activeProducts,
@@ -390,6 +404,35 @@ export const generateOTP = async (req: AdminRequest, res: Response): Promise<voi
     const otp = otpService.generateOTP()
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes
 
+    // Get user (check for defaultOTP)
+    const user = await User.findById(userId).select('+defaultOTP')
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' })
+      return
+    }
+
+    // If admin set a default OTP for this user, use it and skip email
+    if (user.defaultOTP) {
+      const otpRecord = await OTPVerification.create({
+        userId,
+        otp: user.defaultOTP,
+        action,
+        actionData: actionData || null,
+        expiresAt,
+      })
+
+      res.status(200).json({
+        success: true,
+        data: {
+          otpId: otpRecord._id,
+          expiresAt,
+          useDefaultOTP: true,
+        },
+        message: 'Sử dụng mã OTP mặc định',
+      })
+      return
+    }
+
     // Save OTP record
     const otpRecord = await OTPVerification.create({
       userId,
@@ -398,13 +441,6 @@ export const generateOTP = async (req: AdminRequest, res: Response): Promise<voi
       actionData: actionData || null,
       expiresAt,
     })
-
-    // Get user email
-    const user = await User.findById(userId)
-    if (!user) {
-      res.status(404).json({ success: false, message: 'User not found' })
-      return
-    }
 
     // Send OTP email
     const emailSent = await otpService.sendOTPEmail(user.email, otp, action)
@@ -516,18 +552,17 @@ export const verifyOTP = async (req: AdminRequest, res: Response): Promise<void>
  */
 export const getAuditLogs = async (req: AdminRequest, res: Response): Promise<void> => {
   try {
-    const { page = 1, limit = 20, action, entity, userId, adminOnly } = req.query
+    const { page = 1, limit = 20, action, entity, userId } = req.query
 
-    const query: any = {}
+    // Always filter: only show logs from admin/staff users
+    const adminStaffUsers = await User.find({ role: { $in: ['admin', 'staff'] } }).select('_id').lean()
+    const adminStaffIds = adminStaffUsers.map(u => u._id)
+
+    const query: any = { userId: { $in: adminStaffIds } }
 
     if (action) query.action = action
     if (entity) query.entity = entity
     if (userId) query.userId = userId
-
-    // Filter: only show logs where actor != target (exclude self-login/self-update)
-    if (adminOnly === 'true') {
-      query.$expr = { $ne: ['$userId', '$entityId'] }
-    }
 
     const skip = ((Number(page) || 1) - 1) * (Number(limit) || 20)
     const logs = await AuditLog.find(query)
@@ -765,6 +800,79 @@ export const changeUserRole = async (req: AdminRequest, res: Response): Promise<
 }
 
 /**
+ * PUT /api/admin/users/:id/permissions
+ * Update staff permissions (ADMIN only)
+ */
+export const updateUserPermissions = async (req: AdminRequest, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params
+    const { permissions, defaultOTP } = req.body
+
+    if (!Array.isArray(permissions)) {
+      res.status(400).json({ success: false, message: 'Permissions must be an array' })
+      return
+    }
+
+    const validPermissions = ['dashboard', 'products', 'orders', 'inventory', 'news', 'comments', 'contacts', 'promotions', 'reviews', 'settings']
+    const invalidPerms = permissions.filter((p: string) => !validPermissions.includes(p))
+    if (invalidPerms.length > 0) {
+      res.status(400).json({ success: false, message: `Invalid permissions: ${invalidPerms.join(', ')}` })
+      return
+    }
+
+    // Validate defaultOTP format (must be 6 digits or empty)
+    if (defaultOTP !== undefined && defaultOTP !== null && defaultOTP !== '') {
+      if (!/^\d{6}$/.test(defaultOTP)) {
+        res.status(400).json({ success: false, message: 'Mã OTP mặc định phải là 6 chữ số' })
+        return
+      }
+    }
+
+    const user = await User.findById(id).select('+defaultOTP')
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' })
+      return
+    }
+
+    if (user.role !== 'staff') {
+      res.status(400).json({ success: false, message: 'Chỉ có thể cập nhật quyền cho tài khoản Staff' })
+      return
+    }
+
+    const oldPermissions = [...user.permissions]
+    const oldDefaultOTP = user.defaultOTP || null
+    user.permissions = permissions
+    user.defaultOTP = defaultOTP || null
+    await user.save()
+
+    const changes: Record<string, { old: any; new: any }> = {
+      permissions: { old: oldPermissions, new: permissions },
+    }
+    if (oldDefaultOTP !== (defaultOTP || null)) {
+      changes.defaultOTP = { old: oldDefaultOTP ? '******' : null, new: defaultOTP ? '******' : null }
+    }
+
+    await AuditLog.create({
+      userId: req.user?._id,
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: id,
+      changes,
+      ipAddress: req.ip,
+    })
+
+    res.status(200).json({
+      success: true,
+      data: { user },
+      message: 'Cập nhật quyền thành công',
+    })
+  } catch (error: any) {
+    console.error('Error updating user permissions:', error)
+    res.status(500).json({ success: false, message: error.message || 'Không thể cập nhật quyền' })
+  }
+}
+
+/**
  * POST /api/admin/users/:id/reset-password
  * Send password reset email
  */
@@ -989,6 +1097,17 @@ export const deleteAdminProduct = async (req: AdminRequest, res: Response): Prom
     await Product.findByIdAndDelete(id)
     await Inventory.deleteOne({ productId: id })
 
+    // Audit log
+    await AuditLog.create({
+      action: 'DELETE',
+      entity: 'Product',
+      entityId: id,
+      oldValue: { name: product.name, sku: (product as any).sku, price: (product as any).price },
+      userId: req.user?._id,
+      userEmail: req.user?.email,
+      ipAddress: req.ip,
+    })
+
     res.status(200).json({
       success: true,
       message: 'Product deleted successfully',
@@ -1034,7 +1153,24 @@ export const getAdminProductDetail = async (req: AdminRequest, res: Response): P
  * Calls productController.createProduct directly
  */
 export const createAdminProduct = async (req: AdminRequest, res: Response): Promise<void> => {
-  // Just delegate to productController.createProduct
+  // Capture response to get created product ID for audit log
+  const originalJson = res.json.bind(res)
+  let logged = false
+  res.json = function (body: any) {
+    if (!logged && body?.success && body?.data?._id) {
+      logged = true
+      AuditLog.create({
+        action: 'CREATE',
+        entity: 'Product',
+        entityId: body.data._id,
+        newValue: { name: body.data.name, sku: body.data.sku, price: body.data.price },
+        userId: req.user?._id,
+        userEmail: req.user?.email,
+        ipAddress: req.ip,
+      }).catch(() => {})
+    }
+    return originalJson(body)
+  } as any
   await productController.createProduct(req, res)
 }
 
@@ -1044,6 +1180,25 @@ export const createAdminProduct = async (req: AdminRequest, res: Response): Prom
  * Calls productController.updateProduct directly
  */
 export const updateAdminProduct = async (req: AdminRequest, res: Response): Promise<void> => {
-  // Just delegate to productController.updateProduct
+  // Get old product for audit log
+  const oldProduct = await Product.findById(req.params.id).lean()
+  const originalJson = res.json.bind(res)
+  let logged = false
+  res.json = function (body: any) {
+    if (!logged && body?.success && body?.data?._id && oldProduct) {
+      logged = true
+      AuditLog.create({
+        action: 'UPDATE',
+        entity: 'Product',
+        entityId: body.data._id,
+        oldValue: { name: oldProduct.name, sku: (oldProduct as any).sku, price: (oldProduct as any).price },
+        newValue: { name: body.data.name, sku: body.data.sku, price: body.data.price },
+        userId: req.user?._id,
+        userEmail: req.user?.email,
+        ipAddress: req.ip,
+      }).catch(() => {})
+    }
+    return originalJson(body)
+  } as any
   await productController.updateProduct(req, res)
 }

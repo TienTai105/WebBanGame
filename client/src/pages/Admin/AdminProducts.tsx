@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import AdminLayout from '../../components/admin/AdminLayout'
 import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal'
+import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
 import VariantManagementModal, { ProductVariant } from '../../components/admin/VariantManagementModal'
 import ActionMenu from '../../components/admin/ActionMenu'
 import adminApiCall from '../../utils/adminApi'
@@ -61,6 +62,8 @@ const AdminProducts: React.FC = () => {
     isDeleting: false,
     isBulkDelete: false,
   })
+  const [otpModal, setOtpModal] = useState(false)
+  const [pendingOtpToken, setPendingOtpToken] = useState<string | null>(null)
 
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set())
   const [variantModal, setVariantModal] = useState<{ isOpen: boolean; productId: string; productName: string; variants: ProductVariant[] }>({
@@ -220,12 +223,28 @@ const AdminProducts: React.FC = () => {
   }
 
   const confirmDelete = async () => {
-    setDeleteModal({ ...deleteModal, isDeleting: true })
+    // Show OTP modal first (for staff users)
+    if (pendingOtpToken === null) {
+      setOtpModal(true)
+      return
+    }
+    await executeDelete(pendingOtpToken)
+  }
+
+  const handleOTPVerified = async (otpToken: string) => {
+    setOtpModal(false)
+    setPendingOtpToken(otpToken)
+    await executeDelete(otpToken)
+  }
+
+  const executeDelete = async (otpToken: string) => {
+    setDeleteModal((prev) => ({ ...prev, isDeleting: true }))
+    const headers: Record<string, string> = otpToken ? { otpToken } : {}
     try {
       if (deleteModal.isBulkDelete) {
         // Bulk delete
         const deletePromises = Array.from(selectedProducts).map((productId) =>
-          adminApiCall(`/admin/products/${productId}`, { method: 'DELETE' })
+          adminApiCall(`/admin/products/${productId}`, { method: 'DELETE', headers })
         )
         const results = await Promise.all(deletePromises)
         const errors = results.filter((r) => r.error)
@@ -243,6 +262,7 @@ const AdminProducts: React.FC = () => {
         // Single delete
         const { error } = await adminApiCall(`/admin/products/${deleteModal.productId}`, {
           method: 'DELETE',
+          headers,
         })
         if (error) throw error
         successToast('Xóa sản phẩm thành công')
@@ -251,12 +271,15 @@ const AdminProducts: React.FC = () => {
       }
     } catch (err) {
       errorToast(err instanceof Error ? err.message : 'Không thể xóa sản phẩm')
-      setDeleteModal({ ...deleteModal, isDeleting: false })
+      setDeleteModal((prev) => ({ ...prev, isDeleting: false }))
+    } finally {
+      setPendingOtpToken(null)
     }
   }
 
   const cancelDelete = () => {
     setDeleteModal({ isOpen: false, isDeleting: false, isBulkDelete: false })
+    setPendingOtpToken(null)
   }
 
   const getStockStatus = (stock?: number) => {
@@ -847,6 +870,13 @@ const AdminProducts: React.FC = () => {
         onCancel={cancelDelete}
         isDeleting={deleteModal.isDeleting}
         isBulkDelete={deleteModal.isBulkDelete}
+      />
+
+      <OTPVerificationModal
+        isOpen={otpModal}
+        onClose={() => { setOtpModal(false); setPendingOtpToken(null) }}
+        onVerified={handleOTPVerified}
+        actionDescription={deleteModal.isBulkDelete ? 'Xóa nhiều sản phẩm' : 'Xóa sản phẩm'}
       />
 
       <VariantManagementModal
