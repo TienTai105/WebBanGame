@@ -111,6 +111,8 @@ interface FormData {
   price: number
   cost?: number
   discount: number
+  minPrice?: number
+  maxPrice?: number
   categoryId: string
   isActive: boolean
   stock?: number
@@ -228,6 +230,8 @@ const ProductDetail: React.FC = () => {
         price: productData.price || 0,
         cost: productData.cost || 0,
         discount: productData.discount || 0,
+        minPrice: productData.minPrice || 0,
+        maxPrice: productData.maxPrice || 0,
         categoryId:
           typeof productData.categoryId === 'object'
             ? productData.categoryId._id
@@ -694,29 +698,60 @@ const ProductDetail: React.FC = () => {
       updated[variantModal.index] = variantModal.data
       setVariants(updated)
 
-      // Update inventory if available stock changed
-      const oldAvailable = variantsWithInventory[variantModal.index]?.available || 0
-      if (variantModal.available !== oldAvailable && product) {
-        ;(async () => {
-          const variantSku = variantModal.data!.sku
-          const { error } = await adminApiCall(
-            `/inventory/${product._id}/${variantSku}`,
-            {
-              method: 'PUT',
-              body: JSON.stringify({
-                available: variantModal.available,
-                reason: 'Updated from variant editor'
-              })
-            }
-          )
-          if (error) throw error
+      // Update inventory if available stock changed - match by SKU not index
+      const variantSku = variantModal.data!.sku
+      const oldInventory = variantsWithInventory.find(v => (v as any).sku === variantSku)
+      const oldAvailable = oldInventory?.available || 0
+      const newAvailable = variantModal.available ? Math.max(0, Number(variantModal.available)) : 0
+      
+      console.log('🔄 VARIANT UPDATE - BEFORE API:', {
+        variantSku,
+        oldAvailable,
+        newAvailable,
+        variantModalAvailable: variantModal.available,
+        hasChanged: newAvailable !== oldAvailable,
+        typeOfNewAvailable: typeof newAvailable,
+      })
 
-          setVariantsWithInventory(prev =>
-            prev.map((v, i) =>
-              i === variantModal.index ? { ...v, available: variantModal.available } : v
+      if (newAvailable !== oldAvailable && product) {
+        ;(async () => {
+          try {
+            console.log('📤 Sending to API:', {
+              url: `/inventory/${product._id}/${variantSku}`,
+              payload: {
+                available: newAvailable,
+                reason: 'Updated from variant editor'
+              }
+            })
+
+            const { error } = await adminApiCall(
+              `/inventory/${product._id}/${variantSku}`,
+              {
+                method: 'PUT',
+                body: JSON.stringify({
+                  available: newAvailable,
+                  reason: 'Updated from variant editor'
+                })
+              }
             )
-          )
+            if (error) throw error
+
+            console.log('✅ API response success, updating local state')
+            setVariantsWithInventory(prev =>
+              prev.map((v) => {
+                const isMatch = (v as any).sku === variantSku
+                console.log(`Checking inventory: sku=${(v as any).sku}, searching=${variantSku}, match=${isMatch}`)
+                return isMatch ? { ...v, available: newAvailable } : v
+              })
+            )
+            console.log('✅ Local state updated successfully')
+          } catch (err) {
+            console.error('❌ Error updating inventory:', err)
+            errorToast('Lỗi cập nhật tồn kho: ' + (err instanceof Error ? err.message : 'Unknown error'))
+          }
         })()
+      } else if (newAvailable === oldAvailable) {
+        console.log('ℹ️ Available stock unchanged, skipping API call')
       }
 
       closeVariantModal()
@@ -764,11 +799,28 @@ const ProductDetail: React.FC = () => {
 
   const openEditVariantModal = (idx: number) => {
     const variant = { ...variants[idx] }
-    // Ensure attributes are included and is an object
     if (!variant.attributes || typeof variant.attributes !== 'object') {
       variant.attributes = {}
     }
-    const available = variantsWithInventory[idx]?.available || 0
+    
+    // Get available from variantsWithInventory matching by SKU
+    const variantSku = (variant as any).sku || `variant-${variant.name}`
+    const inventoryForVariant = variantsWithInventory.find(
+      (v) => (v as any).sku === variantSku
+    )
+    const available = inventoryForVariant?.available || (variant as any).available || 0
+    
+    console.log('🔍 OPENING EDIT VARIANT MODAL:', {
+      idx,
+      variantSku,
+      inventoryFound: !!inventoryForVariant,
+      inventoryAvailable: inventoryForVariant?.available,
+      variantAvailable: (variant as any).available,
+      finalAvailable: available,
+      variantName: variant.name,
+      allInventorySkus: variantsWithInventory.map(v => ({ sku: (v as any).sku, available: v.available })),
+    })
+    
     setVariantModal({ isOpen: true, index: idx, data: variant, available, isAddMode: false })
     setEditingVariantIdx(null)
   }
@@ -787,6 +839,11 @@ const ProductDetail: React.FC = () => {
   }
 
   const handleVariantAvailableChange = (value: number) => {
+    console.log('✏️ AVAILABLE STOCK CHANGED:', {
+      oldValue: variantModal.available,
+      newValue: value,
+      typeOfNewValue: typeof value,
+    })
     setVariantModal({ ...variantModal, available: value })
   }
 
@@ -1297,6 +1354,49 @@ const ProductDetail: React.FC = () => {
                     {formData.cost ? formatVND(finalPrice - formData.cost) : 'N/A'}
                   </div>
                 </div>
+
+                <div>
+    <label className="block text-xs font-bold uppercase tracking-widest text-slate-600 mb-2">
+      Stock (units)
+    </label>
+    <input
+      type="number"
+      name="stock"
+      value={formData.stock || ''}
+      onChange={handleInputChange}
+      className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all hover:border-slate-300"
+      min="0"
+    />
+  </div>
+
+  <div className="grid grid-cols-2 gap-6">
+    <div>
+      <label className="block text-xs font-bold uppercase tracking-widest text-slate-600 mb-2">
+        Min Price (₫)
+      </label>
+      <input
+        type="number"
+        name="minPrice"
+        value={formData.minPrice || ''}
+        onChange={handleInputChange}
+        className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all hover:border-slate-300"
+        min="0"
+      />
+    </div>
+    <div>
+      <label className="block text-xs font-bold uppercase tracking-widest text-slate-600 mb-2">
+        Max Price (₫)
+      </label>
+      <input
+        type="number"
+        name="maxPrice"
+        value={formData.maxPrice || ''}
+        onChange={handleInputChange}
+        className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all hover:border-slate-300"
+        min="0"
+      />
+    </div>
+  </div>
               </div>
               </>
               )}

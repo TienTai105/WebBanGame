@@ -1,4 +1,5 @@
-import { FC, useState, useRef } from 'react'
+import { FC, useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import Breadcrumb from '../atomic/Breadcrumb'
 import Pagination from '../modules/Pagination'
 import ProductCard from '../small/ProductCard'
@@ -17,6 +18,9 @@ interface FilterState {
   platforms: string[]
   priceRange: PriceRange
   categoryId?: string
+  onSale: boolean // Filter sản phẩm có discount > 0
+  isNew: boolean // Filter sản phẩm tạo trong 30 ngày
+  isBestseller: boolean // Filter sản phẩm bán chạy (sales > 0)
   sortBy: 'newest' | 'priceAsc' | 'priceDesc' | 'bestSellers'
   page: number
 }
@@ -28,6 +32,9 @@ interface FilterState {
  * @component
  */
 const ProductListPage: FC = () => {
+  // Get URL query params
+  const [searchParams] = useSearchParams()
+  
   // Fetch platforms and categories from API
   const { data: platformsData = [] } = usePlatforms()
   const { data: categoriesData = [] } = useCategories()
@@ -39,15 +46,106 @@ const ProductListPage: FC = () => {
     platforms: [], // Now stores IDs, not names
     priceRange: { min: 0, max: 50000000 },
     categoryId: undefined,
+    onSale: false,
+    isNew: false,
+    isBestseller: false,
     sortBy: 'newest',
     page: 1,
   })
+
+  // Apply filter from URL query params on mount and when data changes
+  useEffect(() => {
+    const platformParam = searchParams.get('platform')
+    const categoryParam = searchParams.get('category')
+    let sortParam = searchParams.get('sort')
+    const isNewParam = searchParams.get('isNew')
+    const onSaleParam = searchParams.get('onSale')
+    const isBestsellerParam = searchParams.get('isBestseller')
+
+    // Normalize sort param: best-sellers → bestSellers
+    if (sortParam === 'best-sellers') {
+      sortParam = 'bestSellers'
+    }
+
+    // Apply isNew filter from URL
+    if (isNewParam === 'true') {
+      setFilters((prev) => ({
+        ...prev,
+        isNew: true,
+      }))
+    }
+
+    // Apply onSale filter from URL
+    if (onSaleParam === 'true') {
+      setFilters((prev) => ({
+        ...prev,
+        onSale: true,
+      }))
+    }
+
+    // Apply isBestseller filter from URL
+    if (isBestsellerParam === 'true') {
+      setFilters((prev) => ({
+        ...prev,
+        isBestseller: true,
+      }))
+    }
+
+    if (platformParam && platformsData.length > 0) {
+      // Find platform ID by _id, name, or slug
+      const matchedPlatform = platformsData.find(
+        (p) => 
+          p._id === platformParam || 
+          p.name?.toLowerCase() === platformParam.toLowerCase() ||
+          p.slug?.toLowerCase() === platformParam.toLowerCase()
+      )
+      console.log('platformParam:', platformParam, 'platformsData:', platformsData, 'matched:', matchedPlatform)
+      if (matchedPlatform && !filters.platforms.includes(matchedPlatform._id)) {
+        setFilters((prev) => ({
+          ...prev,
+          platforms: [matchedPlatform._id],
+        }))
+      }
+    }
+
+    if (categoryParam && categoriesData.length > 0) {
+      // Find category ID by _id, name, or slug
+      const matchedCategory = categoriesData.find(
+        (c) => 
+          c._id === categoryParam || 
+          c.name?.toLowerCase() === categoryParam.toLowerCase() ||
+          c.slug?.toLowerCase() === categoryParam.toLowerCase()
+      )
+      console.log('categoryParam:', categoryParam, 'categoriesData:', categoriesData, 'matched:', matchedCategory)
+      if (matchedCategory && filters.categoryId !== matchedCategory._id) {
+        setFilters((prev) => ({
+          ...prev,
+          categoryId: matchedCategory._id,
+        }))
+      }
+    }
+
+    if (sortParam) {
+      const validSorts = ['newest', 'priceAsc', 'priceDesc', 'bestSellers']
+      if (validSorts.includes(sortParam as any)) {
+        setFilters((prev) => ({
+          ...prev,
+          sortBy: sortParam as any,
+          // Auto-enable bestseller filter when sorting by best sellers
+          isBestseller: sortParam === 'bestSellers' ? true : prev.isBestseller,
+        }))
+      }
+    }
+  }, [searchParams, platformsData, categoriesData])
 
   // Fetch products with current filters (server-side filtering)
   const queryFilters: ProductListFilters = {
     ...(filters.brands.length > 0 && { brand: filters.brands }),
     ...(filters.platforms.length > 0 && { platforms: filters.platforms }),
     ...(filters.categoryId && { category: filters.categoryId }),
+    ...(filters.onSale && { hasDiscount: 'true' }),
+    ...(filters.isNew && { isNew: 'true' }),
+    ...(filters.isBestseller && { isBestseller: 'true' }),
     // Only send price filter if user explicitly changed it from defaults
     ...(filters.priceRange.min > 0 || filters.priceRange.max < 50000000 ? { 
       minPrice: filters.priceRange.min,
@@ -103,8 +201,71 @@ const ProductListPage: FC = () => {
 
               {/* Filters Wrapper */}
               <div className="space-y-7">
-                {/* Brand Filter */}
-                
+                {/* Product Type Filter */}
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-widest bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent mb-4">
+                    Loại Sản Phẩm
+                  </h3>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() =>
+                        setFilters({
+                          ...filters,
+                          onSale: !filters.onSale,
+                          page: 1,
+                        })
+                      }
+                      className={cn(
+                        'w-full flex items-center justify-between p-3 rounded-lg',
+                        'transition-all duration-200 text-left text-sm font-medium',
+                        filters.onSale
+                          ? 'bg-gradient-to-r from-red-500/30 to-orange-500/20 text-orange-300 border border-orange-400/50 shadow-lg shadow-red-500/20'
+                          : 'hover:bg-indigo-500/10 text-slate-300 hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
+                      )}
+                    >
+                      <span> Giảm Giá</span>
+                      <span className="material-symbols-outlined text-base text-orange-400">local_fire_department</span>
+                    </button>
+                    <button
+                      onClick={() =>
+                        setFilters({
+                          ...filters,
+                          isNew: !filters.isNew,
+                          page: 1,
+                        })
+                      }
+                      className={cn(
+                        'w-full flex items-center justify-between p-3 rounded-lg',
+                        'transition-all duration-200 text-left text-sm font-medium',
+                        filters.isNew
+                          ? 'bg-gradient-to-r from-yellow-500/30 to-amber-500/20 text-yellow-300 border border-yellow-400/50 shadow-lg shadow-yellow-500/20'
+                          : 'hover:bg-indigo-500/10 text-slate-300 hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
+                      )}
+                    >
+                      <span>Mới</span>
+                      <span className="material-symbols-outlined text-base text-yellow-400">stars</span>
+                    </button>
+                    <button
+                      onClick={() =>
+                        setFilters({
+                          ...filters,
+                          isBestseller: !filters.isBestseller,
+                          page: 1,
+                        })
+                      }
+                      className={cn(
+                        'w-full flex items-center justify-between p-3 rounded-lg',
+                        'transition-all duration-200 text-left text-sm font-medium',
+                        filters.isBestseller
+                          ? 'bg-gradient-to-r from-purple-500/30 to-pink-500/20 text-pink-300 border border-pink-400/50 shadow-lg shadow-purple-500/20'
+                          : 'hover:bg-indigo-500/10 text-slate-300 hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
+                      )}
+                    >
+                      <span>Bán Chạy</span>
+                      <span className="material-symbols-outlined text-base text-pink-400">trending_up</span>
+                    </button>
+                  </div>
+                </div>
 
                 {/* Platform Filter */}
                 <div>
@@ -192,6 +353,8 @@ const ProductListPage: FC = () => {
                     ))}
                   </div>
                 </div>
+
+                
               </div>
             </div>
           </div>

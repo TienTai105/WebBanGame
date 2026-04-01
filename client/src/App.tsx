@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navig
 import { useEffect } from 'react'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
+import './styles/print.css'
 import { Header, Footer, Navigation } from './components/modules'
 import CartModal from './components/modules/CartModal'
 import { CartProvider, useCart } from './context/CartContext'

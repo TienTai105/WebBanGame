@@ -28,7 +28,19 @@ const Home: FC<{ setCartCount?: (count: number | ((prev: number) => number)) => 
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div style={{
+      backgroundImage: `
+        radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
+        linear-gradient(135deg, 
+          rgba(15, 23, 42, 1) 0%,
+          rgba(30, 27, 75, 0.5) 25%,
+          rgba(15, 23, 42, 1) 50%,
+          rgba(30, 27, 75, 0.5) 75%,
+          rgba(15, 23, 42, 1) 100%)
+      `,
+      backgroundAttachment: 'fixed',
+    }}>
       {/* ==================== HERO SLIDER ==================== */}
       <HeroSlider
         onExplore={() => navigate('/products')}

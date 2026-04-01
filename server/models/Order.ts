@@ -49,6 +49,7 @@ interface IOrder extends Document {
   holdId?: string
   momoRequestId?: string
   momoTransactionId?: string
+  stockConfirmedAt?: Date          // Track when stock was confirmed (prevent double-confirm)
   statusHistory?: IOrderStatusHistory[]
   createdAt: Date
   updatedAt: Date
@@ -161,6 +162,10 @@ const orderSchema = new Schema<IOrder>(
     holdId: String,
     momoRequestId: String,
     momoTransactionId: String,
+    stockConfirmedAt: {
+      type: Date,
+      default: null,
+    },
     statusHistory: [
       {
         oldStatus: String,

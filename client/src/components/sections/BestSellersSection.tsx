@@ -13,7 +13,19 @@ const BestSellersSection: FC<BestSellersProps> = ({ limit = 8 }) => {
   const displayProducts = data?.products || []
 
   return (
-    <section className="py-20 bg-gradient-to-b from-slate-950 to-slate-900 border-t border-slate-700">
+    <section className="py-15" style={{
+      backgroundImage: `
+        radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
+        linear-gradient(135deg, 
+          rgba(15, 23, 42, 1) 0%,
+          rgba(30, 27, 75, 0.5) 25%,
+          rgba(15, 23, 42, 1) 50%,
+          rgba(30, 27, 75, 0.5) 75%,
+          rgba(15, 23, 42, 1) 100%)
+      `,
+      backgroundAttachment: 'fixed',
+    }}>
       <div className="px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
         {/* Header */}
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between mb-12">
@@ -29,7 +41,7 @@ const BestSellersSection: FC<BestSellersProps> = ({ limit = 8 }) => {
             </p>
           </div>
           <Link
-            to="/products?sort=best-sellers"
+            to="/products?isBestseller=true"
             variant="primary"
             className="mt-6 lg:mt-0 font-bold text-lg"
           >

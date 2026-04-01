@@ -139,6 +139,9 @@ const CheckoutPage: FC = () => {
     console.log('  - Should show form?', isEditingAddress || savedAddresses.length === 0)
   }, [isEditingAddress, savedAddresses.length])
 
+  // ── Payment Method & Hold ──────────────────────────────────────────────
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
+
   // ── Checkout Hold (15-min stock reservation) ──────────────────────────
   const [holdId, setHoldId] = useState<string | null>(null)
   const [holdExpiresAt, setHoldExpiresAt] = useState<Date | null>(null)
@@ -158,17 +161,29 @@ const CheckoutPage: FC = () => {
       })
       setHoldId(res.data.data.holdId)
       setHoldExpiresAt(new Date(res.data.data.reservedUntil))
+      console.log('✅ Checkout hold created:', res.data.data.holdId)
     } catch (err: any) {
       const msg = err?.response?.data?.message || 'Không thể giữ hàng'
+      const status = err?.response?.status
+      console.log('⚠️ Hold creation failed:', { status, msg })
+      
+      // For 401 (auth error), log but don't interrupt checkout - user might not have valid token yet
+      if (status === 401) {
+        console.log('ℹ️ Auth error on hold creation - continuing without hold')
+        return
+      }
+      
+      // Show warning toast for other errors
       warningToast(msg)
-      // If stock check failed, go back to cart
-      if (err?.response?.status === 409) {
+      
+      // If stock check failed (409), go back to cart
+      if (status === 409) {
         navigate('/cart')
       }
     }
   }, [items, navigate])
 
-  // Create hold once items + user are loaded
+  // Create hold once items + user are loaded (ONLY for Momo, NOT for COD)
   useEffect(() => {
     // If coming back from failed payment, reset holdCreated to allow new hold
     const fromFailedPayment = sessionStorage.getItem('paymentFailed')
@@ -178,17 +193,42 @@ const CheckoutPage: FC = () => {
       console.log('🔄 Reset hold tracking after failed payment')
     }
     
-    if (user && items.length > 0 && !holdCreated.current) {
+    // ONLY create hold if these 3 conditions are ALL true:
+    // 1. User logged in (have data)
+    // 2. Cart has items
+    // 3. Hold not already created
+    // 4. Payment method is MOMO (not COD)
+    if (user && items.length > 0 && !holdCreated.current && paymentMethod === 'momo') {
+      console.log('📦 Creating checkout hold for Momo payment...')
       createCheckoutHold()
+    } else if (paymentMethod === 'cash') {
+      // COD: Clear any existing hold from previous Momo selection
+      console.log('💵 COD payment selected - clearing any hold from previous selection')
+      if (holdId) {
+        console.log('🧹 Clearing holdId:', holdId)
+        setHoldId(null)
+        setHoldExpiresAt(null)
+        setHoldSecondsLeft(null)
+      }
+      holdCreated.current = false
     }
-  }, [user, items, createCheckoutHold])
+  }, [user, items, createCheckoutHold, paymentMethod])
+
+  // When user switches from COD to Momo, allow creating a new hold
+  useEffect(() => {
+    if (paymentMethod === 'momo' && !holdId) {
+      // Reset flag so next effect will create a new hold
+      holdCreated.current = false
+    }
+  }, [paymentMethod, holdId])
 
   // Release hold when user leaves checkout without placing order
   useEffect(() => {
     return () => {
       if (holdId) {
-        navigator.sendBeacon(`/api/checkout/hold/${holdId}`, '') // best-effort on unmount
-        api.delete(`/checkout/hold/${holdId}`).catch(() => {})
+        console.log('🧹 [CLEANUP] Unmounting - releasing hold:', holdId)
+        // Try best-effort release via sendBeacon (most reliable for unmount)
+        navigator.sendBeacon(`/api/checkout/hold/${holdId}`, '')
       }
     }
   }, [holdId])
@@ -212,7 +252,6 @@ const CheckoutPage: FC = () => {
   }
   // ─────────────────────────────────────────────────────────────────────
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('momo')
   const [appliedCodes, setAppliedCodes] = useState<{ code: string; amount: number; type: 'discount' | 'shipping' }[]>([])
 
   // Calculate totals
@@ -294,6 +333,7 @@ const CheckoutPage: FC = () => {
         formDataEmail: formData.email,
         shippingAddressEmail: formData.email || 'EMPTY',
         orderItems: orderItems.length,
+        holdId: holdId || 'NONE',
       })
       
       const res = await api.post('/orders', {
@@ -304,7 +344,8 @@ const CheckoutPage: FC = () => {
         shippingFee: shippingAmt,
         finalPrice: totalPriceCalc - discountAmt + shippingAmt,
         paymentMethod: paymentMethodMap[paymentMethod],
-        holdId: holdId ?? undefined, // pass hold so backend inherits reserved time
+        // Only send holdId for Momo payments (COD never uses hold)
+        holdId: paymentMethod === 'momo' ? (holdId ?? undefined) : undefined,
         shippingAddress: {
           name: formData.fullName,
           address: formData.address,

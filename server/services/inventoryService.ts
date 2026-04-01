@@ -25,7 +25,12 @@ class InventoryService {
     variantSku: string | null | undefined,
     quantity: number
   ): Promise<StockCheckResult> {
-    const inventory = await Inventory.findOne({ productId, variantSku: variantSku || null })
+    // For base product (no variant), query with variantSku field as null or missing
+    const query = variantSku ? 
+      { productId, variantSku } : 
+      { productId, $or: [{ variantSku: null }, { variantSku: { $exists: false } }] }
+
+    const inventory = await Inventory.findOne(query)
 
     if (!inventory) {
       return { available: 0, reserved: 0, canBuy: false, message: 'Inventory not found' }
@@ -51,8 +56,12 @@ class InventoryService {
       const variantSku = item.variantSku || null
 
       // Atomic: only update if available >= quantity (prevents oversell)
+      const query = variantSku ? 
+        { productId, variantSku } : 
+        { productId, $or: [{ variantSku: null }, { variantSku: { $exists: false } }] }
+      
       const inventory = await Inventory.findOneAndUpdate(
-        { productId, variantSku, available: { $gte: item.quantity } },
+        { ...query, available: { $gte: item.quantity } },
         {
           $inc: { available: -item.quantity, reserved: item.quantity },
           $set: { lastUpdated: new Date() },
@@ -62,7 +71,7 @@ class InventoryService {
 
       if (!inventory) {
         // Get current stock to form helpful error message
-        const current = await Inventory.findOne({ productId, variantSku })
+        const current = await Inventory.findOne(query)
         const availableQty = current ? current.available : 0
 
         // Rollback already-reserved items
@@ -105,8 +114,12 @@ class InventoryService {
       const productId = item.product.toString()
       const variantSku = item.variantSku || null
 
+      const query = variantSku ? 
+        { productId, variantSku } : 
+        { productId, $or: [{ variantSku: null }, { variantSku: { $exists: false } }] }
+
       const inventory = await Inventory.findOneAndUpdate(
-        { productId, variantSku, reserved: { $gte: item.quantity } },
+        { ...query, reserved: { $gte: item.quantity } },
         {
           $inc: { reserved: -item.quantity, available: item.quantity },
           $set: { lastUpdated: new Date() },
@@ -136,14 +149,50 @@ class InventoryService {
    * Release stock when cancelling order - handles both reserved and sold inventory
    * (In case order was confirmed/paid before cancellation)
    */
-  async releaseStockOnCancel(items: OrderItem[], orderId: string): Promise<void> {
+  async releaseStockOnCancel(items: OrderItem[], orderId: string, isConfirmed: boolean = false): Promise<void> {
     for (const item of items) {
       const productId = item.product.toString()
       const variantSku = item.variantSku || null
 
+      const query = variantSku ? 
+        { productId, variantSku } : 
+        { productId, $or: [{ variantSku: null }, { variantSku: { $exists: false } }] }
+
+      // If order was confirmed/paid (Momo), stock is in SOLD pool - release ONLY from SOLD
+      if (isConfirmed) {
+        console.log(`💳 [CONFIRMED MOMO] Releasing ${item.quantity} from SOLD pool for ${variantSku || productId}`)
+        const inventory = await Inventory.findOneAndUpdate(
+          { ...query, sold: { $gte: item.quantity } },
+          {
+            $inc: { sold: -item.quantity, available: item.quantity },
+            $set: { lastUpdated: new Date() },
+          },
+          { new: true }
+        )
+
+        if (inventory) {
+          console.log(`✅ [CONFIRMED] Released ${item.quantity} from SOLD pool for ${variantSku || productId}`)
+          await StockMovement.create({
+            inventoryId: inventory._id,
+            productId: new mongoose.Types.ObjectId(productId),
+            variantSku,
+            type: 'REFUNDED',
+            quantity: item.quantity,
+            reason: 'Hoàn lại hàng do huỷ đơn (thanh toán Momo)',
+            reference: { type: 'Order', id: orderId },
+            notes: `Refunded from sold (confirmed order): ${orderId}`,
+          })
+          continue
+        } else {
+          console.error(`❌ [CONFIRMED] Cannot find ${item.quantity} in SOLD pool - stock inconsistency!`)
+          continue
+        }
+      }
+
+      // If order is unpaid (COD), stock is in RESERVED pool - try RESERVED first
       // First try: release from reserved pool (for unpaid orders)
       let inventory = await Inventory.findOneAndUpdate(
-        { productId, variantSku, reserved: { $gte: item.quantity } },
+        { ...query, reserved: { $gte: item.quantity } },
         {
           $inc: { reserved: -item.quantity, available: item.quantity },
           $set: { lastUpdated: new Date() },
@@ -152,23 +201,23 @@ class InventoryService {
       )
 
       if (inventory) {
-        console.log(`Released ${item.quantity} from RESERVED pool for ${variantSku || productId}`)
+        console.log(`✅ [UNPAID COD] Released ${item.quantity} from RESERVED pool for ${variantSku || productId}`)
         await StockMovement.create({
           inventoryId: inventory._id,
           productId: new mongoose.Types.ObjectId(productId),
           variantSku,
           type: 'UNRESERVED',
           quantity: item.quantity,
-          reason: 'Huỷ đơn hàng',
+          reason: 'Huỷ đơn hàng (COD)',
           reference: { type: 'Order', id: orderId },
-          notes: `Released from reserved: ${orderId}`,
+          notes: `Released from reserved (unpaid order): ${orderId}`,
         })
         continue
       }
 
-      // Second try: release from sold pool (for paid/confirmed orders)
+      // Second try: release from sold pool (fallback if stock was accidentally confirmed)
       inventory = await Inventory.findOneAndUpdate(
-        { productId, variantSku, sold: { $gte: item.quantity } },
+        { ...query, sold: { $gte: item.quantity } },
         {
           $inc: { sold: -item.quantity, available: item.quantity },
           $set: { lastUpdated: new Date() },
@@ -177,16 +226,16 @@ class InventoryService {
       )
 
       if (inventory) {
-        console.log(`✅ Released ${item.quantity} from SOLD pool for ${variantSku || productId}`)
+        console.log(`⚠️ [FALLBACK] Released ${item.quantity} from SOLD pool for ${variantSku || productId}`)
         await StockMovement.create({
           inventoryId: inventory._id,
           productId: new mongoose.Types.ObjectId(productId),
           variantSku,
           type: 'REFUNDED',
           quantity: item.quantity,
-          reason: 'Hoàn lại hàng do huỷ đơn',
+          reason: 'Hoàn lại hàng - fallback release',
           reference: { type: 'Order', id: orderId },
-          notes: `Refunded from sold: ${orderId}`,
+          notes: `Fallback release from sold: ${orderId}`,
         })
         continue
       }
@@ -204,8 +253,12 @@ class InventoryService {
       const productId = item.product.toString()
       const variantSku = item.variantSku || null
 
+      const query = variantSku ? 
+        { productId, variantSku } : 
+        { productId, $or: [{ variantSku: null }, { variantSku: { $exists: false } }] }
+
       const inventory = await Inventory.findOneAndUpdate(
-        { productId, variantSku, reserved: { $gte: item.quantity } },
+        { ...query, reserved: { $gte: item.quantity } },
         {
           $inc: { reserved: -item.quantity, sold: item.quantity },
           $set: { lastUpdated: new Date() },

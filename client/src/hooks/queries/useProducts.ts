@@ -20,6 +20,9 @@ export interface ProductListFilters {
   minPrice?: number
   maxPrice?: number
   sort?: 'newest' | 'priceAsc' | 'priceDesc' | 'bestSellers' | 'trending'
+  hasDiscount?: string
+  isNew?: string
+  isBestseller?: string
 }
 
 // Hook for getting all products with pagination and advanced filters

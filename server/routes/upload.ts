@@ -1,43 +1,23 @@
 import express, { Router, Request, Response } from 'express'
-import multer, { StorageEngine } from 'multer'
-import path from 'path'
-import fs from 'fs'
-import { fileURLToPath } from 'url'
+import multer from 'multer'
+import { v2 as cloudinary } from 'cloudinary'
+import dotenv from 'dotenv'
 import { asyncHandler, protect } from '../middleware/auth.js'
 import { staffOnly } from '../middleware/adminAuth.js'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+dotenv.config()
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+})
 
 const router = Router()
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, '../../client/public/images')
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true })
-}
-
-// Configure multer storage
-const storage: StorageEngine = multer.diskStorage({
-  destination: (_req: any, _file: any, cb: any) => {
-    cb(null, uploadsDir)
-  },
-  filename: (_req: any, file: any, cb: any) => {
-    // Generate unique filename: Game-resident-evil-requiem-1234567890.png
-    const timestamp = Date.now()
-    const randomStr = Math.random().toString(36).substring(2, 8)
-    const originalName = file.originalname
-      .toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace(/[^\w-]/g, '')
-    
-    const ext = path.extname(originalName) || '.png'
-    const nameWithoutExt = path.basename(originalName, ext)
-    
-    const filename = `${nameWithoutExt}-${timestamp}-${randomStr}${ext}`
-    cb(null, filename)
-  }
-})
+// Use memory storage since we're uploading to Cloudinary
+const storage = multer.memoryStorage()
 
 const fileFilter = (_req: any, file: any, cb: any) => {
   // Accept image files only
@@ -58,11 +38,16 @@ const upload = multer({
 
 /**
  * POST /api/upload
- * Upload multiple product images
- * Returns array of URLs: ['/images/filename.png', ...]
+ * Upload multiple product images to Cloudinary
+ * Returns array of URLs from Cloudinary
  */
 router.post(
   '/upload',
+  (req: any, res: any, next: any) => {
+    console.log('📤 Upload endpoint hit')
+    console.log('🔑 Auth header:', req.headers.authorization ? 'EXISTS' : 'MISSING')
+    next()
+  },
   protect,
   staffOnly,
   upload.array('images', 10),
@@ -76,18 +61,59 @@ router.post(
       })
     }
 
-    const imageUrls = files.map(file => ({
-      url: `/images/${file.filename}`,
-      filename: file.filename,
-      size: file.size
-    }))
+    try {
+      // Upload all files to Cloudinary in parallel
+      const uploadPromises = files.map((file) => {
+        return new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            {
+              folder: 'web-ban-game/products',
+              resource_type: 'auto',
+              quality: 'auto',
+              fetch_format: 'auto',
+            },
+            (error, result) => {
+              if (error) {
+                console.error('Cloudinary upload error:', error)
+                reject(error)
+              } else {
+                resolve({
+                  url: result?.secure_url,
+                  publicId: result?.public_id,
+                  filename: file.originalname,
+                })
+              }
+            }
+          )
+          
+          stream.end(file.buffer)
+        })
+      })
 
-    res.status(200).json({
-      success: true,
-      data: imageUrls,
-      message: 'Images uploaded successfully'
-    })
+      const uploadedFiles = await Promise.all(uploadPromises)
+
+      const imageUrls = uploadedFiles.map((file: any) => ({
+        url: file.url,
+        publicId: file.publicId,
+        filename: file.filename,
+      }))
+
+      console.log('✅ Successfully uploaded', imageUrls.length, 'files to Cloudinary')
+
+      res.status(200).json({
+        success: true,
+        data: imageUrls,
+        message: 'Images uploaded successfully to Cloudinary'
+      })
+    } catch (err: any) {
+      console.error('❌ Upload error:', err.message)
+      res.status(500).json({
+        success: false,
+        message: 'Failed to upload images: ' + (err.message || 'Unknown error')
+      })
+    }
   })
 )
 
 export default router
+

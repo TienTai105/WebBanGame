@@ -727,7 +727,387 @@ export const sendVerificationEmail = async (to: string, verificationToken: strin
   }
 }
 
+/**
+ * Send order status update email
+ */
+export const sendOrderStatusUpdateEmail = async (emailData: {
+  to: string
+  orderCode: string
+  oldStatus: string
+  newStatus: string
+  trackingNumber?: string
+  totalPrice: number
+  discountAmount: number
+  shippingFee: number
+  finalPrice: number
+  orderItems: Array<{
+    name: string
+    quantity: number
+    priceAtPurchase: number
+  }>
+  shippingAddress?: {
+    name: string
+    address: string
+    city: string
+    phone: string
+    ward?: string
+    district?: string
+  }
+}) => {
+  try {
+    // Status translation map
+    const statusMap: { [key: string]: string } = {
+      pending: 'Chờ xử lý',
+      processing: 'Đang xử lý',
+      shipped: 'Đã gửi đi',
+      completed: 'Đã hoàn thành',
+      cancelled: 'Đã hủy',
+      refunded: 'Đã hoàn tiền',
+      failed: 'Thất bại',
+    }
+
+    const oldStatusLabel = statusMap[emailData.oldStatus] || emailData.oldStatus
+    const newStatusLabel = statusMap[emailData.newStatus] || emailData.newStatus
+
+    // Status color based on new status
+    const statusColorMap: { [key: string]: string } = {
+      pending: '#f39c12',
+      processing: '#3498db',
+      shipped: '#9b59b6',
+      completed: '#27ae60',
+      cancelled: '#e74c3c',
+      refunded: '#e74c3c',
+      failed: '#e74c3c',
+    }
+
+    const statusColor = statusColorMap[emailData.newStatus] || '#95a5a6'
+
+    // Get status change message
+    const getStatusMessage = (newStatus: string): string => {
+      const messages: { [key: string]: string } = {
+        processing: 'Đơn hàng của bạn đang được xử lý',
+        shipped: 'Đơn hàng của bạn đã được gửi đi. Bạn có thể theo dõi qua số vận đơn bên dưới',
+        completed: 'Đơn hàng của bạn đã được giao thành công. Cảm ơn bạn!',
+        cancelled: 'Đơn hàng của bạn đã bị hủy',
+        refunded: 'Đơn hàng của bạn đã hoàn tiền',
+        failed: 'Đơn hàng của bạn không thành công',
+      }
+      return messages[newStatus] || 'Trạng thái đơn hàng đã được cập nhật'
+    }
+
+    const itemsHtml = emailData.orderItems
+      .map(
+        (item) => `
+      <tr>
+        <td style="padding: 12px; border-bottom: 1px solid #ecf0f1;">
+          <span style="color: #2c3e50; font-weight: 600;">${item.name}</span><br>
+          <span style="color: #7f8c8d; font-size: 12px;">Số lượng: ${item.quantity}</span>
+        </td>
+        <td style="padding: 12px; border-bottom: 1px solid #ecf0f1; text-align: right; width: 120px;">
+          <span style="color: #2c3e50; font-weight: 600;">${(item.priceAtPurchase * item.quantity).toLocaleString('vi-VN')}₫</span>
+        </td>
+      </tr>
+    `
+      )
+      .join('')
+
+    const trackingHtml = emailData.trackingNumber
+      ? `
+      <div style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #ecf0f1;">
+        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 3px;">
+          <p style="color: #7f8c8d; font-size: 12px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px;">Số vận đơn</p>
+          <p style="color: #3498db; font-size: 16px; font-weight: 600; font-family: 'Courier New', monospace;">${emailData.trackingNumber}</p>
+        </div>
+      </div>
+    `
+      : ''
+
+    const htmlBody = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f8f9fa;
+    }
+    .wrapper {
+      background-color: #f8f9fa;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 4px;
+      overflow: hidden;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .header {
+      background-color: #2c3e50;
+      color: white;
+      padding: 40px 30px;
+      text-align: center;
+      border-bottom: 4px solid ${statusColor};
+    }
+    .logo {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+    }
+    .header-subtitle {
+      font-size: 14px;
+      font-weight: 300;
+      color: #ecf0f1;
+      letter-spacing: 0.5px;
+    }
+    .status-banner {
+      background-color: ${statusColor};
+      color: white;
+      padding: 20px 30px;
+      text-align: center;
+    }
+    .status-banner h2 {
+      font-size: 22px;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+    .status-banner p {
+      font-size: 14px;
+      color: rgba(255,255,255,0.9);
+    }
+    .content {
+      padding: 40px 30px;
+    }
+    .order-code {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 3px;
+      margin-bottom: 25px;
+      text-align: center;
+      border-left: 4px solid ${statusColor};
+    }
+    .order-code-label {
+      font-size: 12px;
+      color: #7f8c8d;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 5px;
+    }
+    .order-code-value {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2c3e50;
+      font-family: 'Courier New', monospace;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-top: 30px;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #ecf0f1;
+    }
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    .items-table tr:first-child td {
+      border-bottom: 2px solid #3498db;
+      font-weight: 700;
+      color: #2c3e50;
+      padding: 12px;
+      background-color: #ecf0f1;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #ecf0f1;
+      font-size: 14px;
+    }
+    .summary-row.total {
+      background-color: #f8f9fa;
+      padding: 15px;
+      margin-top: 15px;
+      border-radius: 3px;
+      font-weight: 700;
+      font-size: 16px;
+      color: #2c3e50;
+      border-bottom: none;
+    }
+    .summary-label {
+      color: #7f8c8d;
+    }
+    .summary-value {
+      color: #2c3e50;
+      font-weight: 600;
+    }
+    .shipping-info {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 3px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .shipping-label {
+      color: #7f8c8d;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    .shipping-text {
+      color: #2c3e50;
+    }
+    .footer {
+      text-align: center;
+      padding: 30px 30px;
+      border-top: 1px solid #ecf0f1;
+      background-color: #f8f9fa;
+    }
+    .footer-text {
+      font-size: 12px;
+      color: #95a5a6;
+      margin-bottom: 8px;
+    }
+    .footer-text:last-child {
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <!-- Header -->
+      <div class="header">
+        <div class="logo">VOLTRIX</div>
+        <div class="header-subtitle">Cập nhật trạng thái đơn hàng</div>
+      </div>
+
+      <!-- Status Banner -->
+      <div class="status-banner">
+        <h2>${newStatusLabel}</h2>
+        <p>${getStatusMessage(emailData.newStatus)}</p>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <!-- Order Code -->
+        <div class="order-code">
+          <div class="order-code-label">Mã đơn hàng</div>
+          <div class="order-code-value">${emailData.orderCode}</div>
+        </div>
+
+        <!-- Status Update Info -->
+        <div style="background-color: #f0f7ff; padding: 15px; border-radius: 3px; margin-bottom: 25px; border-left: 4px solid #3498db;">
+          <p style="color: #2c3e50; font-size: 13px; line-height: 1.8;">
+            <strong>Cập nhật trạng thái:</strong><br>
+            ${oldStatusLabel} → <span style="color: ${statusColor}; font-weight: 700;">${newStatusLabel}</span>
+          </p>
+        </div>
+
+        <!-- Items Section -->
+        <h3 class="section-title">Chi tiết đơn hàng</h3>
+        <table class="items-table">
+          <tr>
+            <td>Sản phẩm</td>
+            <td>Giá</td>
+          </tr>
+          ${itemsHtml}
+        </table>
+
+        <!-- Summary -->
+        <div style="margin-top: 20px;">
+          <div class="summary-row">
+            <span class="summary-label">Tổng tiền hàng:</span>
+            <span class="summary-value">${emailData.totalPrice.toLocaleString('vi-VN')}₫</span>
+          </div>
+          ${emailData.discountAmount > 0 ? `
+            <div class="summary-row">
+              <span class="summary-label">Chiết khấu:</span>
+              <span class="summary-value">-${emailData.discountAmount.toLocaleString('vi-VN')}₫</span>
+            </div>
+          ` : ''}
+          <div class="summary-row">
+            <span class="summary-label">Phí vận chuyển:</span>
+            <span class="summary-value">${emailData.shippingFee.toLocaleString('vi-VN')}₫</span>
+          </div>
+          <div class="summary-row total">
+            <span>Tổng thanh toán:</span>
+            <span style="color: #3498db;">${emailData.finalPrice.toLocaleString('vi-VN')}₫</span>
+          </div>
+        </div>
+
+        <!-- Shipping Address -->
+        ${emailData.shippingAddress ? `
+          <h3 class="section-title">Địa chỉ giao hàng</h3>
+          <div class="shipping-info">
+            <div class="shipping-label">Người nhận</div>
+            <div class="shipping-text">${emailData.shippingAddress.name}</div>
+            <div class="shipping-label" style="margin-top: 10px;">Địa chỉ</div>
+            <div class="shipping-text">
+              ${emailData.shippingAddress.address}<br>
+              ${emailData.shippingAddress.ward ? emailData.shippingAddress.ward + ', ' : ''}
+              ${emailData.shippingAddress.district ? emailData.shippingAddress.district + ', ' : ''}
+              ${emailData.shippingAddress.city}
+            </div>
+            <div class="shipping-label" style="margin-top: 10px;">Số điện thoại</div>
+            <div class="shipping-text">${emailData.shippingAddress.phone}</div>
+          </div>
+        ` : ''}
+
+        <!-- Tracking Number -->
+        ${trackingHtml}
+      </div>
+
+      <!-- Footer -->
+      <div class="footer">
+        <p class="footer-text">© 2026 VOLTRIX. Tất cả quyền được bảo lưu.</p>
+        <p class="footer-text">Đây là email tự động, vui lòng không trả lời email này.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+    `
+
+    const mailOptions = {
+      from: `${process.env.GMAIL_FROM_NAME} <${process.env.GMAIL_USER}>`,
+      to: emailData.to,
+      subject: `Cập nhật đơn hàng ${emailData.orderCode} - ${newStatusLabel}`,
+      html: htmlBody,
+    }
+
+    const result = await transporter.sendMail(mailOptions)
+    console.log(`✅ Order status update email sent to ${emailData.to} - Order: ${emailData.orderCode} - Status: ${newStatusLabel}`)
+    return result
+  } catch (error: any) {
+    console.error(`❌ Failed to send order status update email:`, {
+      message: error?.message,
+      code: error?.code,
+      stack: error?.stack,
+    })
+    throw error
+  }
+}
+
 export default {
   sendOrderConfirmationEmail,
   sendVerificationEmail,
+  sendOrderStatusUpdateEmail,
 }

@@ -64,7 +64,7 @@ const ProductDetailPage: FC = () => {
   const warrantyFee = selected.warranty === '12_months' ? 500000 : 0
   const totalPrice = (basePrice + warrantyFee) * selected.quantity
 
-  // Stock check for the currently selected variant (or product SKU if no variants)
+  // Stock check - use variant SKU if selected, otherwise product SKU
   const inventorySku = activeVariant?.sku ?? product?.sku ?? null
   const { data: inventoryData, isLoading: inventoryLoading } = useInventory(
     product?._id,
@@ -197,7 +197,7 @@ const ProductDetailPage: FC = () => {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-slate-950 to-slate-900">
-      <div className="w-full max-w-7xl mx-auto px-8 sm:px-12 lg:px-20 py-14">
+      <div className="w-full max-w-[1500px] mx-auto px-8 sm:px-12 lg:px-20 py-14">
         {/* Breadcrumb */}
         <Breadcrumb autoGenerate={false} items={[
           { label: 'Trang chủ', href: '/' },
@@ -265,7 +265,11 @@ const ProductDetailPage: FC = () => {
             {/* Title + SKU */}
             <div>
               <h1 className="text-4xl font-black text-white mb-3">{product.name}</h1>
-              <p className="text-base text-slate-400">SKU: {product.sku}</p>
+              <p className="text-base text-slate-400">
+                SKU: {selected.variantIndex !== null && product.variants && product.variants[selected.variantIndex]
+                  ? product.variants[selected.variantIndex].sku
+                  : product.sku}
+              </p>
             </div>
 
             {/* Price - Plain, No Box */}
@@ -363,6 +367,14 @@ const ProductDetailPage: FC = () => {
               <p className="text-slate-400 text-lg">{basePrice.toLocaleString('vi-VN')} ₫</p>
             </div>
 
+            {/* Warranty Fee Display */}
+            {!isGame && warrantyFee > 0 && (
+              <div className="flex justify-between items-center text-slate-400">
+                <span>BẢO HÀNH: 12 Tháng</span>
+                <span className="text-cyan-400 font-bold">{warrantyFee.toLocaleString('vi-VN')} ₫</span>
+              </div>
+            )}
+
             {/* Total Price */}
             <div className="flex justify-between items-center text-2xl font-bold">
               <span className="text-slate-300">Thành tiền:</span>
@@ -402,60 +414,70 @@ const ProductDetailPage: FC = () => {
           </div>
         </div>
 
-        {/* Section Below - Full Width Stack */}
-        {/* Payment Info Box */}
-        <div className="border-2 border-indigo-500/30 rounded-lg p-6 bg-gradient-to-br from-indigo-950/20 to-slate-900/20 mt-20">
-          <h3 className="font-bold text-white mb-3">THÀNH TOÁN</h3>
-          <ul className="space-y-2 text-sm text-slate-300">
-            <li>• Tiền mặt / Chuyển khoản: Miễn phí</li>
-            <li>• Thẻ ATM/Napas nội địa: + 2%</li>
-            <li>• Thẻ Visa / MasterCard / JCB / CUP / Amex:</li>
-            <li className="ml-4">  - Phát hành tại Việt Nam: + 3%</li>
-            <li className="ml-4">  - Phát hành quốc tế - nước ngoài: + 4%</li>
-            <li className="font-bold text-white mt-3">TRẢ GÓP</li>
-            <li>Trả Góp: Trả trước 10% + CCCD / Bằng lái <a href="#" className="text-cyan-400">(Xem chi tiết)</a></li>
-            <li>Trả Góp: Dùng thẻ tín dụng lãi suất 0% <a href="#" className="text-cyan-400">(Xem chi tiết)</a></li>
-          </ul>
-        </div>
-
-        {/* Description Box */}
-        <div className="border-2 border-indigo-500/30 rounded-lg p-6 bg-gradient-to-br from-indigo-950/20 to-slate-900/20 mt-12">
-          <h3 className="font-bold text-white mb-3">MÔ TẢ</h3>
-          {product.description && (
-            <DescriptionDisplay html={product.description} className="text-sm" />
-          )}
-        </div>
-
-        {/* Video Trailer Section - Full Width */}
-        {videoId && (
-          <div className="border-2 border-indigo-500/30 rounded-lg p-8 bg-gradient-to-br from-indigo-950/20 to-slate-900/20 mt-20">
-            <h3 className="font-bold text-white mb-6 text-xl">VIDEO TRAILER</h3>
-            <div className="relative w-full bg-black rounded-lg overflow-hidden" style={{ paddingBottom: '56.25%' }}>
-              <iframe
-                className="absolute top-0 left-0 w-full h-full"
-                src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
-                title="Product Trailer"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Specifications - Below accessories */}
-        {product.specifications && Object.keys(product.specifications).length > 0 && (
-          <div className="mt-20">
-            <h3 className="text-xl font-black text-white mb-6">Thông số kỹ thuật</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {Object.entries(product.specifications).map(([key, value]) => (
-                <div key={key} className="flex gap-4 p-3 border-b border-indigo-500/20">
-                  <span className="font-bold text-indigo-300 min-w-32 capitalize text-sm">{key}:</span>
-                  <span className="text-slate-300 text-sm">{String(value)}</span>
+        {/* Section Below - Two Column Layout - Left wider */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-20">
+          {/* LEFT COLUMN: Video Trailer & Description - 2/3 width */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Video Trailer Section */}
+            {videoId && (
+              <div className="border-2 border-indigo-500/30 rounded-lg p-8 bg-gradient-to-br from-indigo-950/20 to-slate-900/20">
+                <h3 className="font-bold text-white mb-6 text-xl">VIDEO TRAILER</h3>
+                <div className="relative w-full bg-black rounded-lg overflow-hidden" style={{ paddingBottom: '56.25%' }}>
+                  <iframe
+                    className="absolute top-0 left-0 w-full h-full"
+                    src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
+                    title="Product Trailer"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
                 </div>
-              ))}
+              </div>
+            )}
+
+            {/* Description Box */}
+            <div className="border-2 border-indigo-500/30 rounded-lg p-6 bg-gradient-to-br from-indigo-950/20 to-slate-900/20">
+              <h3 className="font-bold text-white mb-3">MÔ TẢ</h3>
+              {product.description && (
+                <DescriptionDisplay html={product.description} className="text-sm" />
+              )}
             </div>
           </div>
-        )}
+
+          {/* RIGHT COLUMN: Payment Info & Specifications - 1/3 width - Sticky */}
+          <div className="lg:col-span-1 space-y-8 sticky top-20 h-fit">
+            {/* Payment Info Box */}
+            <div className="border-2 border-indigo-500/30 rounded-lg p-6 bg-gradient-to-br from-indigo-950/20 to-slate-900/20">
+              <h3 className="font-bold text-white mb-3">THÀNH TOÁN</h3>
+              <ul className="space-y-2 text-sm text-slate-300">
+                <li>• Tiền mặt / Chuyển khoản: Miễn phí</li>
+                <li>• Thẻ ATM/Napas nội địa: + 2%</li>
+                <li>• Thẻ Visa / MasterCard / JCB / CUP / Amex:</li>
+                <li className="ml-4">  - Phát hành tại Việt Nam: + 3%</li>
+                <li className="ml-4">  - Phát hành quốc tế - nước ngoài: + 4%</li>
+                <li className="font-bold text-white mt-3">TRẢ GÓP</li>
+                <li>Trả Góp: Trả trước 10% + CCCD / Bằng lái <a href="#" className="text-cyan-400">(Xem chi tiết)</a></li>
+                <li>Trả Góp: Dùng thẻ tín dụng lãi suất 0% <a href="#" className="text-cyan-400">(Xem chi tiết)</a></li>
+              </ul>
+            </div>
+
+            {/* Specifications */}
+            {product.specifications && Object.keys(product.specifications).length > 0 && (
+              <div>
+                <h3 className="text-xl font-black text-white mb-6">Thông số kỹ thuật</h3>
+                <div className="border-2 border-indigo-500/30 rounded-lg p-6 bg-gradient-to-br from-indigo-950/20 to-slate-900/20">
+                  <div className="space-y-2">
+                    {Object.entries(product.specifications).map(([key, value]) => (
+                      <div key={key} className="flex gap-4 p-2 border-b border-indigo-500/20 last:border-b-0">
+                        <span className="font-bold text-indigo-300 min-w-32 capitalize text-sm">{key}:</span>
+                        <span className="text-slate-300 text-sm">{String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Related Products Carousel - For all products */}
         {relatedProducts.length > 0 && (
@@ -500,12 +522,20 @@ const ProductDetailPage: FC = () => {
 
                         {/* Price */}
                         <div className="flex items-center gap-2 mb-3">
-                          <span className="text-lg font-black text-cyan-400">
-                            {(relProduct.finalPrice ?? relProduct.price ?? 0).toLocaleString('vi-VN')} ₫
-                          </span>
-                          {relProduct.price && relProduct.finalPrice && relProduct.price > relProduct.finalPrice && (
-                            <span className="text-xs text-slate-400 line-through">
-                              {relProduct.price.toLocaleString('vi-VN')} ₫
+                          {relProduct.finalPrice || relProduct.price || relProduct.minPrice ? (
+                            <>
+                              <span className="text-lg font-black text-cyan-400">
+                                {(relProduct.finalPrice ?? relProduct.price ?? relProduct.minPrice ?? 0).toLocaleString('vi-VN')} ₫
+                              </span>
+                              {relProduct.price && relProduct.finalPrice && relProduct.price > relProduct.finalPrice && (
+                                <span className="text-xs text-slate-400 line-through">
+                                  {relProduct.price.toLocaleString('vi-VN')} ₫
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-lg font-black text-amber-400">
+                              Liên hệ
                             </span>
                           )}
                         </div>

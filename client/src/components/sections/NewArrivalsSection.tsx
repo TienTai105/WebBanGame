@@ -10,7 +10,19 @@ interface NewArrivalsProps {
 const NewArrivalsSection: FC<NewArrivalsProps> = ({ limit = 4 }) => {
   const { data, isLoading, isError } = useProductsByTag('New Product', limit)
   return (
-    <section className="py-20 bg-gradient-to-b from-slate-900 to-slate-950 border-t border-slate-700">
+    <section className="py-15" style={{
+      backgroundImage: `
+        radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
+        linear-gradient(135deg, 
+          rgba(15, 23, 42, 1) 0%,
+          rgba(30, 27, 75, 0.5) 25%,
+          rgba(15, 23, 42, 1) 50%,
+          rgba(30, 27, 75, 0.5) 75%,
+          rgba(15, 23, 42, 1) 100%)
+      `,
+      backgroundAttachment: 'fixed',
+    }} >
       <div className="px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
         {/* Header */}
         <div className="flex flex-col lg:flex-row items-start lg:items-end justify-between mb-12 gap-8">
@@ -26,11 +38,20 @@ const NewArrivalsSection: FC<NewArrivalsProps> = ({ limit = 4 }) => {
             </p>
           </div>
 
-          {/* Decorative Element */}
-          <div className="hidden lg:block">
-            <div className="text-7xl font-black text-cyan-500/10 select-none">NEW</div>
+          {/* Decorative Element + CTA dưới chữ NEW */}
+          <div className="hidden lg:flex flex-col items-center justify-end min-w-[120px]">
+            <div className="text-7xl font-black text-cyan-500/10 select-none mb-2">NEW</div>
+            <Link
+              to="/products?isNew=true"
+              variant="primary"
+              className="text-lg px-8 py-4 font-bold flex items-center gap-2 group mt-2"
+            >
+              Xem tất cả
+              <Icon name="arrow_forward" size="md" className="group-hover:translate-x-1 transition" />
+            </Link>
           </div>
         </div>
+        
 
         {/* Loading State */}
         {isLoading && (
@@ -61,17 +82,7 @@ const NewArrivalsSection: FC<NewArrivalsProps> = ({ limit = 4 }) => {
               ))}
             </div>
 
-            {/* CTA */}
-            <div className="mt-12 flex justify-center">
-              <Link
-                to="/products?filter=new"
-                variant="primary"
-                className="text-lg px-8 py-4 font-bold flex items-center gap-2 group"
-              >
-                Xem tất cả
-                <Icon name="arrow_forward" size="md" className="group-hover:translate-x-1 transition" />
-              </Link>
-            </div>
+            
           </>
         )}
 

@@ -29,6 +29,7 @@ import promotionRoutes from './routes/promotions.js'
 import adminRoutes from './routes/admin.js'
 import contactRoutes from './routes/contact.js'
 import uploadRoutes from './routes/upload.js'
+import packingSlipRoutes from './routes/packingslips.js'
 
 dotenv.config()
 
@@ -75,6 +76,7 @@ app.use('/api/news', newsRoutes)
 app.use('/api/contact', contactRoutes)
 app.use('/api', uploadRoutes)
 app.use('/api', commentRoutes)
+app.use('/api/packingslips', packingSlipRoutes)
 
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {

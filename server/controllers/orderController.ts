@@ -3,6 +3,15 @@ import Order from '../models/Order.js'
 import CheckoutHold from '../models/CheckoutHold.js'
 import inventoryService from '../services/inventoryService.js'
 import { sendOrderConfirmationEmail } from '../services/emailService.js'
+import packingSlipService from '../services/packingSlipService.js'
+
+// Type for populated user in order
+interface IPopulatedUser {
+  _id: string
+  email: string
+  name: string
+  role: string
+}
 
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) => 
   (req: Request, res: Response, next: NextFunction) => {
@@ -103,43 +112,77 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
 
 // Create order (with stock reservation)
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
-  const { orderItems, totalPrice, discountAmount, discountCode, shippingFee, finalPrice, paymentMethod, shippingAddress, holdId } = req.body
-  const userId = (req as any).user._id
+  try {
+    const { orderItems, totalPrice, discountAmount, discountCode, shippingFee, finalPrice, paymentMethod, shippingAddress, holdId: incomingHoldId } = req.body
+    const userId = (req as any).user._id
 
-  if (!orderItems || orderItems.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'Order items are required',
-    })
-  }
-
-  const isCOD = paymentMethod === 'COD'
-
-  // STEP 1: Try to use existing checkout hold (stock already reserved)
-  // If holdId provided, verify it belongs to this user and inherit the reserved time.
-  // Otherwise fall back to fresh stock reservation (COD or hold expired).
-  let reservationExpiresAt: Date | null
-  let consumedHold = false
-
-  if (holdId && !isCOD) {
-    const hold = await CheckoutHold.findOne({ holdId, userId, released: false })
-    if (hold && hold.reservedUntil > new Date()) {
-      // Inherit the remaining time from the hold window
-      reservationExpiresAt = hold.reservedUntil
-      // Mark hold as consumed so cron doesn't release it
-      hold.released = true
-      await hold.save()
-      consumedHold = true
-    } else {
-      // Hold expired or not found — fall through to fresh reservation below
-      if (hold) { hold.released = true; await hold.save() }
-      reservationExpiresAt = new Date(Date.now() + 15 * 60 * 1000)
+    if (!orderItems || orderItems.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order items are required',
+      })
     }
-  } else {
-    reservationExpiresAt = isCOD ? null : new Date(Date.now() + 15 * 60 * 1000)
-  }
 
-  const reservedAt = new Date()
+    console.log(`📋 [CREATE ORDER] Starting for user ${userId}, method: ${paymentMethod}, items: ${orderItems.length}`)
+
+    const isCOD = paymentMethod === 'COD'
+
+    // STEP 1: Try to use existing checkout hold (stock already reserved)
+    // If holdId provided, verify it belongs to this user and inherit the reserved time.
+    // Otherwise fall back to fresh stock reservation (COD or hold expired).
+    let reservationExpiresAt: Date | null
+    let consumedHold = false
+    let effectiveHoldId = incomingHoldId
+
+    // COD orders: release any holdId since they don't use checkout hold
+    if (isCOD && effectiveHoldId) {
+      console.log(`⏭️ [COD] Ignoring holdId for COD order - releasing hold ${effectiveHoldId}`)
+      try {
+        const hold = await CheckoutHold.findOne({ holdId: effectiveHoldId, userId, released: false })
+        if (hold) {
+          console.log(`📌 [RELEASE HOLD] Releasing ${hold.items.length} items from hold ${effectiveHoldId}`)
+          await inventoryService.releaseStock(
+            hold.items.map(i => ({
+              product: i.productId,
+              variantSku: i.variantSku || undefined,
+              quantity: i.quantity,
+            })),
+            `hold:${hold.holdId}`
+          )
+          hold.released = true
+          await hold.save()
+          console.log(`✅ [RELEASE HOLD] Hold released successfully`)
+        }
+      } catch (err: any) {
+        console.error('⚠️ Failed to release hold for COD order:', err.message)
+        // Don't fail order creation just because release failed
+      }
+      // Don't use this holdId
+      effectiveHoldId = undefined
+    }
+
+    if (effectiveHoldId && !isCOD) {
+      console.log(`🔍 [CHECKOUT HOLD] Checking for hold ${effectiveHoldId}`)
+      const hold = await CheckoutHold.findOne({ holdId: effectiveHoldId, userId, released: false })
+      if (hold && hold.reservedUntil > new Date()) {
+        // Inherit the remaining time from the hold window
+        reservationExpiresAt = hold.reservedUntil
+        // Mark hold as consumed so cron doesn't release it
+        hold.released = true
+        await hold.save()
+        consumedHold = true
+        console.log(`✅ [CHECKOUT HOLD] Hold consumed, ${hold.items.length} items reserved`)
+      } else {
+        // Hold expired or not found — fall through to fresh reservation below
+        if (hold) { hold.released = true; await hold.save() }
+        reservationExpiresAt = new Date(Date.now() + 15 * 60 * 1000)
+        console.log(`⏭️ [CHECKOUT HOLD] Hold not found or expired, will reserve fresh`)
+      }
+    } else {
+      reservationExpiresAt = isCOD ? null : new Date(Date.now() + 15 * 60 * 1000)
+    }
+
+    const reservedAt = new Date()
 
   // STEP 2: Create order
   let order = await Order.create({
@@ -157,7 +200,9 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     shippingAddress,
     reservedAt,
     reservationExpiresAt,
-    holdId: holdId || undefined,
+    // COD orders: NEVER save holdId (they don't use checkout hold)
+    // Online orders: save holdId only if consumed from checkout hold
+    holdId: (consumedHold ? effectiveHoldId : undefined),
   })
 
   // STEP 3: Reserve stock only if hold was NOT consumed (hold already reserved the stock)
@@ -245,11 +290,33 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
+  // Auto-generate packing slip for COD orders
+  if (isCOD) {
+    try {
+      await packingSlipService.generatePackingSlip(order._id.toString())
+    } catch (slipError: any) {
+      console.error('⚠️ Failed to generate packing slip for COD order:', slipError.message)
+    }
+  }
+
   res.status(201).json({
     success: true,
     data: order,
     reservedUntil: isCOD ? null : reservationExpiresAt,
   })
+  } catch (error: any) {
+    console.error('❌ [CREATE ORDER] Fatal error:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      details: error.details || 'No details',
+    })
+    return res.status(500).json({
+      success: false,
+      message: `Lỗi tạo đơn hàng: ${error.message || 'Unknown error'}`,
+      error: error.message,
+    })
+  }
 })
 
 // Update order status (admin only)
@@ -262,28 +329,49 @@ export const updateOrder = asyncHandler(async (req: Request, res: Response) => {
     return res.status(404).json({ success: false, message: 'Order not found' })
   }
 
-  // COD: when admin marks order as 'completed', auto-confirm stock (reserved → sold)
-  // and mark payment as paid (customer paid cash on delivery)
-  if (
-    orderStatus === 'completed' &&
-    existingOrder.paymentMethod === 'COD' &&
-    existingOrder.paymentStatus === 'unpaid'
-  ) {
+  console.log(`📝 [UPDATE ORDER] ${existingOrder.orderCode}:`, {
+    currentStatus: existingOrder.orderStatus,
+    currentPaymentStatus: existingOrder.paymentStatus,
+    paymentMethod: existingOrder.paymentMethod,
+    newStatus: orderStatus,
+    stockConfirmedAt: existingOrder.stockConfirmedAt,
+  })
+
+  // COD: when admin marks order as 'completed' ONLY, auto-confirm stock (reserved → sold)
+  // Hold stock until delivery complete, then deduct when marking as delivered/completed
+  // Safety: only confirm if paymentStatus is still unpaid AND stockConfirmedAt is not set (prevent double-confirm)
+  const isCODCompleting = orderStatus === 'completed' && existingOrder.paymentMethod === 'COD' && existingOrder.paymentStatus === 'unpaid' && !existingOrder.stockConfirmedAt
+  
+  if (isCODCompleting) {
     try {
+      console.log(`💳 [COD CONFIRM] Order ${existingOrder.orderCode}: Confirming ${existingOrder.orderItems.length} items to sold`)
       await inventoryService.confirmOrderStock(existingOrder.orderItems as any, existingOrder._id.toString())
+      console.log(`✅ [COD CONFIRM] Stock confirmed successfully`)
+      // After successful confirm, we'll set stockConfirmedAt in the update below
     } catch (err: any) {
-      console.error('⚠️ COD stock confirm failed:', err.message)
+      console.error('⚠️ [COD CONFIRM] Stock confirm failed:', err.message)
     }
+  } else if (orderStatus === 'completed' && existingOrder.paymentMethod === 'COD') {
+    if (existingOrder.stockConfirmedAt) {
+      console.log(`⏭️ [COD] Order ${existingOrder.orderCode} stock already confirmed at ${existingOrder.stockConfirmedAt}`)
+    }
+    if (existingOrder.paymentStatus === 'paid') {
+      console.log(`ℹ️ [COD] Order ${existingOrder.orderCode} already marked as paid`)
+    }
+  } else if (!isCODCompleting && orderStatus === 'completed') {
+    console.log(`ℹ️ [UPDATE] Order ${existingOrder.orderCode} marked as completed (${existingOrder.paymentMethod} payment)`)
   }
 
   const order = await Order.findByIdAndUpdate(
     req.params.id,
     {
       orderStatus: orderStatus || undefined,
-      // For COD completed orders, auto-set paymentStatus to paid
-      paymentStatus: orderStatus === 'completed' && existingOrder.paymentMethod === 'COD'
-        ? 'paid'
-        : (paymentStatus || undefined),
+      // Auto-set paymentStatus for COD when status changes to completed
+      paymentStatus: (
+        isCODCompleting ? 'paid' : (paymentStatus || undefined)
+      ),
+      // Set when stock is actually confirmed
+      stockConfirmedAt: isCODCompleting ? new Date() : undefined,
       trackingNumber: trackingNumber || undefined,
     },
     { new: true, runValidators: true }
@@ -298,6 +386,11 @@ export const updateOrder = asyncHandler(async (req: Request, res: Response) => {
       message: 'Order not found',
     })
   }
+
+  console.log(`✔️ [UPDATE ORDER] ${order.orderCode} updated:`, {
+    orderStatus: order.orderStatus,
+    paymentStatus: order.paymentStatus,
+  })
 
   // Audit log for order status change
   try {
@@ -314,6 +407,40 @@ export const updateOrder = asyncHandler(async (req: Request, res: Response) => {
       ipAddress: req.ip,
     })
   } catch {}
+
+  // Send email notification if order status changed
+  const userEmail = (order.user as unknown as IPopulatedUser)?.email
+  if (order.orderStatus !== existingOrder.orderStatus && userEmail) {
+    try {
+      const { sendOrderStatusUpdateEmail } = await import('../services/emailService.js')
+      
+      await sendOrderStatusUpdateEmail({
+        to: userEmail,
+        orderCode: order.orderCode,
+        oldStatus: existingOrder.orderStatus,
+        newStatus: order.orderStatus,
+        trackingNumber: order.trackingNumber,
+        totalPrice: order.totalPrice,
+        discountAmount: order.discountAmount,
+        shippingFee: order.shippingFee,
+        finalPrice: order.finalPrice,
+        orderItems: order.orderItems.map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          priceAtPurchase: item.priceAtPurchase,
+        })),
+        shippingAddress: order.shippingAddress,
+      })
+      console.log(`📧 [EMAIL] Order status update notification sent to ${userEmail}`)
+    } catch (emailError: any) {
+      console.error(`⚠️ [EMAIL ERROR] Failed to send order status update email:`, {
+        orderCode: order.orderCode,
+        email: userEmail,
+        message: emailError?.message,
+        code: emailError?.code,
+      })
+    }
+  }
 
   res.status(200).json({
     success: true,
@@ -386,9 +513,11 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
   // Release reserved or sold stock back to available
   if (order.orderStatus === 'pending' || order.orderStatus === 'processing') {
     try {
-      console.log(`💾 Releasing stock for ${order.orderItems.length} items...`)
-      await inventoryService.releaseStockOnCancel(order.orderItems as any, order._id.toString())
-      console.log(`✅ Stock released successfully`)
+      // Check if order is confirmed/paid (Momo) or unpaid (COD)
+      const isConfirmed = order.paymentStatus === 'paid' || !!order.stockConfirmedAt
+      console.log(`💾 Releasing stock for ${order.orderItems.length} items... (isConfirmed: ${isConfirmed})`)
+      await inventoryService.releaseStockOnCancel(order.orderItems as any, order._id.toString(), isConfirmed)
+      console.log(`✅ Stock released successfully from ${isConfirmed ? 'SOLD' : 'RESERVED'} pool`)
     } catch (err) {
       console.error('⚠️ Error releasing stock on cancel:', err)
     }
@@ -434,21 +563,50 @@ export const confirmOrderPayment = asyncHandler(async (req: Request, res: Respon
     return res.status(403).json({ success: false, message: 'Not authorized' })
   }
 
+  // COD orders should NOT use this endpoint - admin updates status instead
+  if (order.paymentMethod === 'COD') {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'COD orders: admin updates status to "completed" to deduct stock, no manual payment confirm needed' 
+    })
+  }
+
   if (order.paymentStatus === 'paid') {
     return res.status(400).json({ success: false, message: 'Order already paid' })
+  }
+
+  // Prevent double-confirm: check stockConfirmedAt
+  if (order.stockConfirmedAt) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Stock already confirmed for this order' 
+    })
+  }
+
+  // Only for online payments (Momo, etc)
+  if (order.paymentMethod !== 'Momo') {
+    return res.status(400).json({ 
+      success: false, 
+      message: `Payment confirmation not supported for ${order.paymentMethod}` 
+    })
   }
 
   // Move reserved → sold in inventory
   try {
     await inventoryService.confirmOrderStock(order.orderItems as any, order._id.toString())
   } catch (err: any) {
+    console.error('⚠️ Stock confirm failed:', err.message)
     return res.status(500).json({ success: false, message: err.message })
   }
 
   await Order.findByIdAndUpdate(order._id, {
     paymentStatus: 'paid',
-    orderStatus: 'processing',
+    orderStatus: order.orderStatus === 'pending' ? 'processing' : order.orderStatus,
+    stockConfirmedAt: new Date(),
   })
 
-  res.json({ success: true, message: 'Payment confirmed, stock deducted' })
+  res.json({ 
+    success: true, 
+    message: 'Online payment confirmed, stock deducted'
+  })
 })

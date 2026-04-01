@@ -24,18 +24,25 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 
   // Make sure token exists
   if (!token) {
-    console.log('❌ No token found in headers:', req.headers.authorization)
+    console.log('❌ [PROTECT] No token found in request:', {
+      endpoint: req.path,
+      method: req.method,
+      authHeader: req.headers.authorization ? '✓ exists' : '✗ missing',
+      userAgent: req.get('user-agent'),
+    })
     res.status(401).json({ success: false, message: 'Not authorized to access this route' })
     return
   }
 
   try {
     // Verify token
-    console.log('🔍 Verifying token:', token.substring(0, 20) + '...')
+    console.log('🔍 [PROTECT] Verifying token...', {
+      endpoint: req.path,
+      tokenPreview: token.substring(0, 20) + '...',
+    })
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any
-    console.log('✅ Token verified, payload:', {
+    console.log('✅ [PROTECT] Token verified successfully:', {
       _id: decoded._id,
-      userId: decoded.userId,
       email: decoded.email,
       role: decoded.role,
     })
@@ -53,7 +60,12 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
 
     next()
   } catch (error: any) {
-    console.log('❌ Token verification failed:', error.message)
+    console.error('❌ [PROTECT] Token verification failed:', {
+      endpoint: req.path,
+      errorType: error.name,
+      errorMessage: error.message,
+      tokenPreview: token ? token.substring(0, 20) + '...' : 'N/A',
+    })
     res.status(401).json({ success: false, message: 'Not authorized to access this route' })
   }
 }

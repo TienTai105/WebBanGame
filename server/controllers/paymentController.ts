@@ -3,6 +3,7 @@ import Order from '../models/Order.js'
 import momoService from '../services/momoService.js'
 import inventoryService from '../services/inventoryService.js'
 import { sendOrderConfirmationEmail } from '../services/emailService.js'
+import packingSlipService from '../services/packingSlipService.js'
 
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) =>
   (req: Request, res: Response, next: NextFunction) => {
@@ -127,11 +128,16 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
       return res.status(200).json({ success: true, message: 'Already processed' })
     }
 
-    // Confirm order stock (move reserved → sold)
-    try {
-      await inventoryService.confirmOrderStock(order.orderItems as any, order._id.toString())
-    } catch (err: any) {
-      console.error('⚠️ Stock confirm failed:', err.message)
+    // Confirm order stock (move reserved → sold) - ONLY if not already confirmed
+    if (!order.stockConfirmedAt) {
+      try {
+        await inventoryService.confirmOrderStock(order.orderItems as any, order._id.toString())
+        order.stockConfirmedAt = new Date()
+      } catch (err: any) {
+        console.error('⚠️ Stock confirm failed:', err.message)
+      }
+    } else {
+      console.log(`⏭️ [MOMO] Order ${order.orderCode} stock already confirmed at ${order.stockConfirmedAt}`)
     }
 
     // Mark order as paid
@@ -198,6 +204,13 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
         stack: emailError?.stack,
         code: emailError?.code,
       })
+    }
+
+    // Auto-generate packing slip for paid orders
+    try {
+      await packingSlipService.generatePackingSlip(order._id.toString())
+    } catch (slipError: any) {
+      console.error('⚠️ Failed to generate packing slip for Momo order:', slipError.message)
     }
 
     return res.status(200).json({ success: true, message: 'Payment confirmed' })
@@ -279,11 +292,16 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
       if (momoStatus.resultCode === 0) {
         console.log('✅ MOMO PAYMENT DETECTED VIA QUERY - Updating order to paid')
         
-        // Confirm order stock (move reserved → sold)
-        try {
-          await inventoryService.confirmOrderStock(order.orderItems as any, order._id.toString())
-        } catch (err: any) {
-          console.error('⚠️ Stock confirm failed:', err.message)
+        // Confirm order stock (move reserved → sold) - ONLY if not already confirmed
+        if (!order.stockConfirmedAt) {
+          try {
+            await inventoryService.confirmOrderStock(order.orderItems as any, order._id.toString())
+            order.stockConfirmedAt = new Date()
+          } catch (err: any) {
+            console.error('⚠️ Stock confirm failed:', err.message)
+          }
+        } else {
+          console.log(`⏭️ [MOMO QUERY] Order ${order.orderCode} stock already confirmed at ${order.stockConfirmedAt}`)
         }
 
         // Mark order as paid
@@ -346,6 +364,13 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
             stack: emailError?.stack,
             code: emailError?.code,
           })
+        }
+
+        // Auto-generate packing slip for paid orders (query mode)
+        try {
+          await packingSlipService.generatePackingSlip(order._id.toString())
+        } catch (slipError: any) {
+          console.error('⚠️ Failed to generate packing slip via query:', slipError.message)
         }
 
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
@@ -435,9 +460,18 @@ export const testMomoCallback = asyncHandler(async (req: Request, res: Response)
     return res.status(400).json({ success: false, message: 'Order already paid' })
   }
 
+  // Prevent double-confirm: check stockConfirmedAt
+  if (order.stockConfirmedAt) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Stock already confirmed for this order' 
+    })
+  }
+
   try {
     // Confirm order stock (move reserved → sold)
     await inventoryService.confirmOrderStock(order.orderItems as any, order._id.toString())
+    order.stockConfirmedAt = new Date()
 
     // Mark order as paid
     order.paymentStatus = 'paid'
@@ -483,6 +517,13 @@ export const testMomoCallback = asyncHandler(async (req: Request, res: Response)
       }
     } catch (emailError: any) {
       console.error('⚠️ Failed to send confirmation email in test callback:', emailError.message)
+    }
+
+    // Auto-generate packing slip for test payment
+    try {
+      await packingSlipService.generatePackingSlip(order._id.toString())
+    } catch (slipError: any) {
+      console.error('⚠️ Failed to generate packing slip for test payment:', slipError.message)
     }
 
     res.status(200).json({ success: true, message: 'Test payment confirmed' })

@@ -13,7 +13,19 @@ const NewsSection: FC<NewsSectionProps> = ({ articles: defaultArticles }) => {
   const articles = featuredData?.data || defaultArticles || []
 
   return (
-    <section className="py-20 bg-slate-950">
+    <section className="py-20 " style={{
+      backgroundImage: `
+        radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
+        linear-gradient(135deg, 
+          rgba(15, 23, 42, 1) 0%,
+          rgba(30, 27, 75, 0.5) 25%,
+          rgba(15, 23, 42, 1) 50%,
+          rgba(30, 27, 75, 0.5) 75%,
+          rgba(15, 23, 42, 1) 100%)
+      `,
+      backgroundAttachment: 'fixed',
+    }}>
       <div className="px-4 sm:px-8 lg:px-12 xl:px-16 2xl:px-20">
         {/* Header */}
         <div className="flex items-start justify-between mb-12 gap-8">
@@ -52,7 +64,7 @@ const NewsSection: FC<NewsSectionProps> = ({ articles: defaultArticles }) => {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 ">
               {articles.map((article) => (
                 <ArticleCard key={article._id} article={article} />
               ))}

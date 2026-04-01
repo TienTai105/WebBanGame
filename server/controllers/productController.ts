@@ -4,7 +4,7 @@ import Inventory from '../models/Inventory.js'
 
 export const getProducts = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { page = 1, limit = 12, category, search, brand, platforms, minPrice, maxPrice, sort = 'newest' } = req.query
+    const { page = 1, limit = 12, category, search, brand, platforms, minPrice, maxPrice, sort = 'newest', hasDiscount, isNew, isBestseller } = req.query
     const skip = ((Number(page) - 1) * Number(limit)) as number
 
     const filter: any = { isActive: true }
@@ -32,6 +32,23 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
     if (platforms) {
       const platformArray = Array.isArray(platforms) ? platforms : [platforms]
       filter.platforms = { $in: platformArray }
+    }
+
+    // Sale filter - products with discount > 0
+    if (hasDiscount === 'true') {
+      filter.discount = { $gt: 0 }
+    }
+
+    // New products filter - created within last 30 days
+    if (isNew === 'true') {
+      const thirtyDaysAgo = new Date()
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      filter.createdAt = { $gte: thirtyDaysAgo }
+    }
+
+    // Bestseller filter - products with sales > 3000
+    if (isBestseller === 'true') {
+      filter.soldCount = { $gte: 3000 }
     }
 
     // Price range filter - handle both finalPrice and price fields with $or
@@ -216,14 +233,28 @@ export const getProductsByTag = async (req: Request, res: Response): Promise<voi
 
 export const createProduct = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, description, price, category, sku, variants } = req.body
+    const { name, description, price, categoryId, sku, variants, stock } = req.body
 
-    if (!name || !description || !price || !category || !sku) {
+    // Check for missing required fields (use !== undefined for proper null/undefined check, not falsy check)
+    if (
+      !name?.trim() || 
+      !description?.trim() || 
+      price === null || 
+      price === undefined || 
+      !categoryId?.trim() || 
+      !sku?.trim()
+    ) {
       res.status(400).json({ success: false, message: 'Missing required fields' })
       return
     }
 
-    const product = await Product.create(req.body)
+    // Auto-generate slug from name if not provided
+    const providedData = {
+      ...req.body,
+      slug: req.body.slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    }
+
+    const product = await Product.create(providedData)
 
     // Auto-create inventory entry for product
     // If product has variants, create inventory for each variant
@@ -240,10 +271,11 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
       await Inventory.insertMany(inventoryEntries)
     } else {
       // Create single inventory entry for product without variants
+      // Use product SKU as variantSku for easier querying
       await Inventory.create({
         productId: product._id,
-        variantSku: null,
-        available: 0,
+        variantSku: product.sku,
+        available: stock || 0,
         reserved: 0,
         sold: 0,
         damaged: 0,
@@ -263,13 +295,41 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 export const updateProduct = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params
-    const { variants } = req.body
+    const { variants, stock, name } = req.body
     
-    const product = await Product.findByIdAndUpdate(id, req.body, { new: true })
+    // Auto-generate slug from name if name is being updated but slug is not provided
+    const updateData = { ...req.body }
+    if (name && !req.body.slug) {
+      updateData.slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    }
+    
+    const product = await Product.findByIdAndUpdate(id, updateData, { new: true })
 
     if (!product) {
       res.status(404).json({ success: false, message: 'Product not found' })
       return
+    }
+
+    // Update base product inventory if stock is provided
+    if (stock !== undefined) {
+      const baseInventory = await Inventory.findOne({
+        productId: product._id,
+        $or: [{ variantSku: null }, { variantSku: { $exists: false } }]
+      })
+      
+      if (baseInventory) {
+        baseInventory.available = stock
+        await baseInventory.save()
+      } else {
+        // Create base inventory if it doesn't exist
+        await Inventory.create({
+          productId: product._id,
+          available: stock,
+          reserved: 0,
+          sold: 0,
+          damaged: 0,
+        })
+      }
     }
 
     // Auto-create inventory for new variants if they don't have inventory yet

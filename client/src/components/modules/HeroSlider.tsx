@@ -1,7 +1,6 @@
 import { FC, useState, useEffect } from 'react'
 import { cn } from '../../utils/cn'
 import Button from '../atomic/Button'
-import Icon from '../atomic/Icon'
 import SectionContainer from '../atomic/SectionContainer'
 
 interface Slide {
@@ -74,7 +73,7 @@ const HeroSlider: FC<HeroSliderProps> = ({
 
   return (
     <section
-      className={cn('relative min-h-screen w-full flex items-center overflow-hidden', className)}
+      className={cn('relative lg:h-[80vh] max-w-8xl mx-auto flex items-center overflow-hidden', className)} 
     >
       {/* Background Image */}
       <div className="absolute inset-0">
@@ -85,12 +84,12 @@ const HeroSlider: FC<HeroSliderProps> = ({
           loading="eager"
         />
         {/* Gradient Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-bg-dark via-bg-dark/80 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-bg-dark via-bg-dark/30 to-transparent" />
       </div>
 
       {/* Content */}
-      <SectionContainer className="relative z-10 h-full flex items-center">
-        <div className="max-w-2xl">
+      <SectionContainer className="relative z-10 h-full pl-16 md:pl-32 flex items-center">
+        <div className="max-w-4xl">
           {/* Label */}
           <div className="flex items-center gap-2 mb-6">
             <span className="h-px w-12 bg-primary" />

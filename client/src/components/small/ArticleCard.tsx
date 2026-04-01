@@ -36,7 +36,19 @@ const ArticleCard: FC<ArticleCardProps> = ({ article }) => {
   const articlePath = article.slug ? `/news/${article.slug}` : `/article/${article._id}`
 
   return (
-    <div className="group bg-slate-800/50 rounded-lg overflow-hidden border border-slate-700 hover:border-cyan-500/50 transition duration-300">
+    <div className="group rounded-lg overflow-hidden border border-slate-700 hover:border-cyan-500/50 transition duration-300 bg-transparent" style={{
+      backgroundImage: `
+        radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
+        linear-gradient(135deg, 
+          rgba(15, 23, 42, 1) 0%,
+          rgba(30, 27, 75, 0.5) 25%,
+          rgba(15, 23, 42, 1) 50%,
+          rgba(30, 27, 75, 0.5) 75%,
+          rgba(15, 23, 42, 1) 100%)
+      `,
+      backgroundAttachment: 'fixed',
+    }}>
       {/* Image Container */}
       <div className="relative overflow-hidden h-82 bg-slate-700">
         <img
@@ -56,7 +68,7 @@ const ArticleCard: FC<ArticleCardProps> = ({ article }) => {
       </div>
 
       {/* Content */}
-      <div className="p-5 flex flex-col h-82">
+      <div className="p-5 flex flex-col flex-1">
         {/* Title */}
         <h3 className="text-lg font-bold text-white mb-2 line-clamp-2 group-hover:text-cyan-400 transition">
           {article.title}
@@ -68,7 +80,7 @@ const ArticleCard: FC<ArticleCardProps> = ({ article }) => {
         </p>
 
         {/* Meta Info */}
-        <div className="flex items-center justify-between text-xs text-slate-500 mb-4 border-t border-slate-700 pt-4">
+        <div className="flex items-center justify-between text-xs text-slate-500 mb-4 border-transparent pt-4">
           <div className="flex items-center gap-2">
             <Icon name="account_circle" size="sm" />
             <span>{authorName}</span>

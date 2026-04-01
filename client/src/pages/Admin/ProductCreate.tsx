@@ -72,6 +72,8 @@ interface FormData {
   price: number
   cost?: number
   discount: number
+  minPrice?: number
+  maxPrice?: number
   categoryId: string
   isActive: boolean
   stock?: number
@@ -101,6 +103,31 @@ const ProductCreate: React.FC = () => {
   const [newImageUrl, setNewImageUrl] = useState<string>('')
   const [mainImageIndex, setMainImageIndex] = useState(0)
 
+  // Common specification templates
+  const commonSpecs = [
+    'CPU Details',
+    'GPU',
+    'RAM',
+    'Internal Storage',
+    'Color',
+    'Size',
+    'Weight',
+    'Connectivity',
+    'Power Supply',
+    'Display',
+    'Battery',
+    'Operating System',
+    'Interface Ports',
+    'Network Connection',
+    'Warranty',
+    'Special Features',
+    'Release Date',
+    'Publisher',
+    'ESRB',
+    'System',
+    'Genre',
+  ]
+
   // Variant management
   const [variants, setVariants] = useState<ProductVariant[]>([])
   const [deletingVariantIdx, setDeletingVariantIdx] = useState<number | null>(null)
@@ -123,6 +150,8 @@ const ProductCreate: React.FC = () => {
     price: 0,
     cost: 0,
     discount: 0,
+    minPrice: 0,
+    maxPrice: 0,
     categoryId: '',
     isActive: true,
     stock: 0,
@@ -312,6 +341,9 @@ const ProductCreate: React.FC = () => {
 
   const uploadImagesToServer = async (filesToUpload: File[]) => {
     try {
+      const token = localStorage.getItem('adminToken')
+      console.log('Token from localStorage:', token ? 'EXISTS' : 'MISSING')
+      
       const formDataToUpload = new FormData()
       filesToUpload.forEach(file => {
         formDataToUpload.append('images', file)
@@ -321,14 +353,19 @@ const ProductCreate: React.FC = () => {
         method: 'POST',
         body: formDataToUpload,
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken') || ''}`,
+          'Authorization': `Bearer ${token || ''}`,
         }
       })
 
       const result = await response.json()
+      console.log('Upload response:', result)
 
       if (!response.ok) {
         throw new Error(result.message || 'Upload failed')
+      }
+
+      if (!result.data || !Array.isArray(result.data)) {
+        throw new Error('Invalid response format from server')
       }
 
       const newImages: ProductImage[] = result.data.map((img: any, idx: number) => ({
@@ -337,6 +374,7 @@ const ProductCreate: React.FC = () => {
         isMain: images.length + idx === 0,
       }))
 
+      console.log('New images to add:', newImages)
       setImages([...images, ...newImages])
       successToast(`Uploaded ${newImages.length} image(s) successfully`)
     } catch (err) {
@@ -372,6 +410,19 @@ const ProductCreate: React.FC = () => {
     }
     const newSpecs = { ...specifications, [newKey]: newValue }
     setSpecifications(newSpecs)
+    setIsAddingSpec(false)
+    setNewSpecKey('')
+    setNewSpecValue('')
+    successToast(`Thêm specification "${newKey}" thành công`)
+  }
+
+  const handleAddQuickSpec = (specName: string) => {
+    if (specifications[specName]) {
+      errorToast(`"${specName}" đã tồn tại`)
+      return
+    }
+    setNewSpecKey(specName)
+    setIsAddingSpec(true)
   }
 
   // Variant management handlers
@@ -455,7 +506,13 @@ const ProductCreate: React.FC = () => {
     if (!variant.attributes || typeof variant.attributes !== 'object') {
       variant.attributes = {}
     }
-    setVariantModal({ isOpen: true, index: idx, data: variant, available: 0, isAddMode: false })
+    setVariantModal({ 
+      isOpen: true, 
+      index: idx, 
+      data: variant, 
+      available: (variant as any).available || 0,  // Lấy stock từ variant
+      isAddMode: false 
+    })
   }
 
   const handleVariantModalChange = (field: keyof ProductVariant, value: any) => {
@@ -614,6 +671,16 @@ const ProductCreate: React.FC = () => {
         images,
         variants,
       }
+
+      // Log payload để debug
+      console.log('🔍 Create product payload:', {
+        name: createPayload.name,
+        sku: createPayload.sku,
+        price: createPayload.price,
+        categoryId: createPayload.categoryId,
+        description: createPayload.description ? 'EXISTS' : 'MISSING',
+        descriptionLength: createPayload.description?.length || 0,
+      })
 
       const { error } = await adminApiCall('/admin/products', {
         method: 'POST',
@@ -778,6 +845,15 @@ const ProductCreate: React.FC = () => {
                       placeholder="e.g. gaming, fast, portable"
                       className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all hover:border-slate-300"
                     />
+                    {tags && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {tags.split(',').filter(t => t.trim()).map((tag, idx) => (
+                          <span key={idx} className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold">
+                            {tag.trim()}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -887,6 +963,49 @@ const ProductCreate: React.FC = () => {
                   
                 />
               </div>
+
+              <div className="mt-6">
+                <label className="block text-xs font-bold uppercase tracking-widest text-slate-600 mb-2">
+                  Stock (units)
+                </label>
+                <input
+                  type="number"
+                  name="stock"
+                  value={formData.stock || ''}
+                  onChange={handleInputChange}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all hover:border-slate-300"
+                  min="0"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-6 mt-6">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest text-slate-600 mb-2">
+                    Min Price (₫)
+                  </label>
+                  <input
+                    type="number"
+                    name="minPrice"
+                    value={formData.minPrice || ''}
+                    onChange={handleInputChange}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all hover:border-slate-300"
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-widest text-slate-600 mb-2">
+                    Max Price (₫)
+                  </label>
+                  <input
+                    type="number"
+                    name="maxPrice"
+                    value={formData.maxPrice || ''}
+                    onChange={handleInputChange}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all hover:border-slate-300"
+                    min="0"
+                  />
+                </div>
+              </div>
             </section>
 
             {/* Variants Section */}
@@ -926,6 +1045,7 @@ const ProductCreate: React.FC = () => {
                         <th className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-slate-600 text-right">Price</th>
                         <th className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-slate-600 text-right">Cost</th>
                         <th className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-slate-600 text-right">Profit/Unit</th>
+                        <th className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-slate-600 text-right">Stock</th>
                         <th className="px-6 py-3 text-xs font-bold uppercase tracking-widest text-slate-600 text-right">Action</th>
                       </tr>
                     </thead>
@@ -946,6 +1066,11 @@ const ProductCreate: React.FC = () => {
                             </td>
                             <td className="px-6 py-4 text-right text-slate-600 text-xs">{formatVND(variantCost)}</td>
                             <td className={`px-6 py-4 text-right font-semibold text-sm ${profitColor}`}>{formatVND(profitPerUnit)}</td>
+                            <td className="px-6 py-4 text-right">
+                              <span className="text-slate-700 font-medium text-sm">
+                                {(variant as any).available || 0} units
+                              </span>
+                            </td>
                             <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100">
                                 <button
@@ -1021,13 +1146,35 @@ const ProductCreate: React.FC = () => {
 
                 {/* Specifications */}
                 <div className="pt-4 border-t border-slate-200">
-                  <div className="flex items-center justify-between mb-6">
+                  <div className="mb-6">
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-widest text-slate-600 mb-1">
+                      <label className="block text-xs font-bold uppercase tracking-widest text-slate-600 mb-3">
                         Product Specifications
                       </label>
-                      <p className="text-xs text-slate-500">Define product features and characteristics</p>
+                      <p className="text-xs text-slate-500 mb-4">Define product features and characteristics</p>
                     </div>
+
+                    {/* Quick Add Common Specs */}
+                    <div className="mb-6 p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+                      <p className="text-xs font-bold text-amber-900 uppercase tracking-widest mb-3">Quick Add Specifications</p>
+                      <div className="flex flex-wrap gap-2">
+                        {commonSpecs.map((spec) => (
+                          <button
+                            key={spec}
+                            onClick={() => handleAddQuickSpec(spec)}
+                            disabled={specifications[spec] ? true : false}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                              specifications[spec]
+                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'bg-white text-amber-700 border border-amber-300 hover:bg-amber-100 active:scale-95'
+                            }`}
+                          >
+                            + {spec}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     {!isAddingSpec && (
                       <button
                         onClick={() => {
@@ -1038,13 +1185,16 @@ const ProductCreate: React.FC = () => {
                         className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 hover:shadow-lg transition-all duration-200 active:scale-95"
                       >
                         <span className="material-symbols-outlined text-lg">add_circle</span>
-                        Add Specification
+                        Add Custom Specification
                       </button>
                     )}
                   </div>
 
                   {isAddingSpec && (
                     <div className="mb-6 p-4 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-200 shadow-sm">
+                      <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-4">
+                        {newSpecKey ? `Adding: ${newSpecKey}` : 'Enter specification details'}
+                      </p>
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-3">
                           <div>
@@ -1054,7 +1204,8 @@ const ProductCreate: React.FC = () => {
                               value={newSpecKey}
                               onChange={(e) => setNewSpecKey(e.target.value)}
                               placeholder="e.g., CPU, RAM, Storage"
-                              className="w-full px-3 py-2.5 bg-white border border-indigo-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                              disabled={commonSpecs.includes(newSpecKey) && newSpecKey !== ''}
+                              className="w-full px-3 py-2.5 bg-white border border-indigo-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all disabled:bg-indigo-100"
                             />
                           </div>
                           <div>
@@ -1063,14 +1214,12 @@ const ProductCreate: React.FC = () => {
                               type="text"
                               value={newSpecValue}
                               onChange={(e) => setNewSpecValue(e.target.value)}
-                              placeholder="e.g., Intel i7, 16GB"
+                              placeholder="Enter value..."
+                              autoFocus
                               className="w-full px-3 py-2.5 bg-white border border-indigo-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
                               onKeyPress={(e) => {
                                 if (e.key === 'Enter') {
                                   handleAddNewSpecification(newSpecKey, newSpecValue)
-                                  setIsAddingSpec(false)
-                                  setNewSpecKey('')
-                                  setNewSpecValue('')
                                 }
                               }}
                             />
@@ -1090,13 +1239,10 @@ const ProductCreate: React.FC = () => {
                           <button
                             onClick={() => {
                               handleAddNewSpecification(newSpecKey, newSpecValue)
-                              setIsAddingSpec(false)
-                              setNewSpecKey('')
-                              setNewSpecValue('')
                             }}
                             className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-all active:scale-95"
                           >
-                            Add
+                            Add Specification
                           </button>
                         </div>
                       </div>
