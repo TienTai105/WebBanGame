@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express'
 import Review from '../models/Review.js'
 import Product from '../models/Product.js'
+import Order from '../models/Order.js'
+import * as notificationService from '../services/notificationService.js'
 
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) => 
   (req: Request, res: Response, next: NextFunction) => {
@@ -33,6 +35,49 @@ export const getProductReviews = asyncHandler(async (req: Request, res: Response
   })
 })
 
+// ✅ Get reviews for admin dashboard (with filtering)
+export const getAdminReviews = asyncHandler(async (req: Request, res: Response) => {
+  const { page = 1, limit = 10, approved, search } = req.query
+
+  const pageNum = parseInt(page as string) || 1
+  const limitNum = parseInt(limit as string) || 10
+  const skip = (pageNum - 1) * limitNum
+
+  // Build filter
+  const filter: any = {}
+  if (approved !== undefined && approved !== 'all') {
+    filter.isApproved = approved === 'true'
+  }
+
+  // Build search filter
+  if (search) {
+    const searchRegex = new RegExp(search as string, 'i')
+    filter.$or = [
+      { 'user.name': searchRegex },
+      { 'product.name': searchRegex },
+      { comment: searchRegex },
+      { title: searchRegex },
+    ]
+  }
+
+  const reviews = await Review.find(filter)
+    .populate('user', 'name avatar email')
+    .populate('product', 'name slug images')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limitNum)
+
+  const total = await Review.countDocuments(filter)
+
+  res.status(200).json({
+    success: true,
+    count: reviews.length,
+    total,
+    pages: Math.ceil(total / limitNum),
+    data: reviews,
+  })
+})
+
 // Get review by ID
 export const getReviewById = asyncHandler(async (req: Request, res: Response) => {
   const review = await Review.findById(req.params.id)
@@ -54,7 +99,7 @@ export const getReviewById = asyncHandler(async (req: Request, res: Response) =>
 
 // Create review (user only)
 export const createReview = asyncHandler(async (req: Request, res: Response) => {
-  const { productId, rating, title, comment, images } = req.body
+  const { productId, rating, title, comment, images, variantSku } = req.body
   const userId = (req as any).user._id
 
   if (!productId || !rating) {
@@ -80,38 +125,90 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
     })
   }
 
+  // ✅ CHECK: User must have completed order with this product
+  const completedOrder = await Order.findOne({
+    user: userId,
+    'orderItems.product': productId,
+    orderStatus: 'completed',
+  }).populate('orderItems.product')
+
+  if (!completedOrder) {
+    return res.status(400).json({
+      success: false,
+      message: 'Bạn phải hoàn thành đơn hàng mới có thể đánh giá sản phẩm này',
+    })
+  }
+
+  // Get variant info from order item
+  const orderItem = completedOrder.orderItems.find(
+    (item: any) => item.product._id.toString() === productId
+  )
+
   // Check if user already reviewed this product
   const existingReview = await Review.findOne({ user: userId, product: productId })
   if (existingReview) {
     return res.status(400).json({
       success: false,
-      message: 'You already reviewed this product',
+      message: 'Bạn đã đánh giá sản phẩm này rồi',
     })
   }
 
+  // Create review with variant info
   const review = await Review.create({
     user: userId,
     product: productId,
+    variant: variantSku ? {
+      sku: variantSku,
+      name: orderItem?.variant || 'Default',
+    } : undefined,
     rating,
     title: title || '',
     comment: comment || '',
     images: images || [],
+    isApproved: false, // ← Admin must approve before showing
   })
 
-  // Update product rating
-  const allReviews = await Review.find({ product: productId })
-  const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length
-
-  await Product.findByIdAndUpdate(productId, {
-    ratingAverage: avgRating,
-    ratingCount: allReviews.length,
+  // ✅ AUTO-RECALCULATE: Update product rating (only count approved reviews)
+  const allApprovedReviews = await Review.find({
+    product: productId,
+    isApproved: true,
   })
 
-  await review.populate('user', 'name avatar')
+  if (allApprovedReviews.length > 0) {
+    const totalRating = allApprovedReviews.reduce((sum, r) => sum + r.rating, 0)
+    const avgRating = totalRating / allApprovedReviews.length
+
+    await Product.findByIdAndUpdate(productId, {
+      ratingAverage: parseFloat(avgRating.toFixed(1)),
+      ratingCount: allApprovedReviews.length,
+    })
+  }
+
+  // Re-fetch with populate to get user and product details
+  const populatedReview = await Review.findById(review._id)
+    .populate('user', 'name avatar')
+    .populate('product', 'name')
+
+  const productName = (populatedReview?.product as any)?.name || (orderItem?.name) || 'Unknown Product'
+  const userName = (populatedReview?.user as any)?.name || 'Unknown User'
+
+  // ✅ NOTIFY ADMIN: New review pending approval
+  try {
+    console.log('📢 Notifying admins about new review:', { productName, userName, rating: review.rating })
+    await notificationService.notifyAdminNewReview(
+      review._id.toString(),
+      productName,
+      userName,
+      review.rating
+    )
+  } catch (notifError: any) {
+    console.error('⚠️ Failed to send admin review notification:', notifError.message, notifError.stack)
+  }
 
   res.status(201).json({
     success: true,
-    data: review,
+    message: 'Review tạo thành công. Chờ admin duyệt để hiển thị trên sản phẩm.',
+    data: populatedReview || review,
   })
 })
 
@@ -145,19 +242,27 @@ export const updateReview = asyncHandler(async (req: Request, res: Response) => 
 
   await review.save()
 
-  // Update product rating
-  const allReviews = await Review.find({ product: review.product })
-  const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length
-
-  await Product.findByIdAndUpdate(review.product, {
-    ratingAverage: avgRating,
-    ratingCount: allReviews.length,
+  // ✅ AUTO-RECALCULATE: Update product rating (only count approved reviews)
+  const allApprovedReviews = await Review.find({
+    product: review.product,
+    isApproved: true,
   })
+
+  if (allApprovedReviews.length > 0) {
+    const totalRating = allApprovedReviews.reduce((sum, r) => sum + r.rating, 0)
+    const avgRating = totalRating / allApprovedReviews.length
+
+    await Product.findByIdAndUpdate(review.product, {
+      ratingAverage: parseFloat(avgRating.toFixed(1)),
+      ratingCount: allApprovedReviews.length,
+    })
+  }
 
   await review.populate('user', 'name avatar')
 
   res.status(200).json({
     success: true,
+    message: 'Review cập nhật thành công',
     data: review,
   })
 })
@@ -185,13 +290,18 @@ export const deleteReview = asyncHandler(async (req: Request, res: Response) => 
 
   await Review.findByIdAndDelete(req.params.id)
 
-  // Update product rating
-  const allReviews = await Review.find({ product: productId })
-  if (allReviews.length > 0) {
-    const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length
+  // ✅ AUTO-RECALCULATE: Update product rating (only count approved reviews)
+  const allApprovedReviews = await Review.find({
+    product: productId,
+    isApproved: true,
+  })
+
+  if (allApprovedReviews.length > 0) {
+    const totalRating = allApprovedReviews.reduce((sum, r) => sum + r.rating, 0)
+    const avgRating = totalRating / allApprovedReviews.length
     await Product.findByIdAndUpdate(productId, {
-      ratingAverage: avgRating,
-      ratingCount: allReviews.length,
+      ratingAverage: parseFloat(avgRating.toFixed(1)),
+      ratingCount: allApprovedReviews.length,
     })
   } else {
     await Product.findByIdAndUpdate(productId, {
@@ -202,7 +312,7 @@ export const deleteReview = asyncHandler(async (req: Request, res: Response) => 
 
   res.status(200).json({
     success: true,
-    message: 'Review deleted',
+    message: 'Review xóa thành công',
   })
 })
 
@@ -229,6 +339,125 @@ export const markHelpful = asyncHandler(async (req: Request, res: Response) => {
 
   res.status(200).json({
     success: true,
+    data: review,
+  })
+})
+
+// ✅ Admin approve review
+export const approveReview = asyncHandler(async (req: Request, res: Response) => {
+  const review = await Review.findById(req.params.id)
+
+  if (!review) {
+    return res.status(404).json({
+      success: false,
+      message: 'Review not found',
+    })
+  }
+
+  // Mark as approved
+  review.isApproved = true
+  await review.save()
+
+  // ✅ AUTO-RECALCULATE: Update product rating (now includes this approved review)
+  const allApprovedReviews = await Review.find({
+    product: review.product,
+    isApproved: true,
+  })
+
+  if (allApprovedReviews.length > 0) {
+    const totalRating = allApprovedReviews.reduce((sum, r) => sum + r.rating, 0)
+    const avgRating = totalRating / allApprovedReviews.length
+
+    await Product.findByIdAndUpdate(review.product, {
+      ratingAverage: parseFloat(avgRating.toFixed(1)),
+      ratingCount: allApprovedReviews.length,
+    })
+  }
+
+  await review.populate('user', 'name avatar')
+  await review.populate('product', 'name slug')
+
+  // Send notification to user
+  try {
+    const userId = (review.user as any)?._id
+    const productName = (review.product as any)?.name
+    if (userId && productName) {
+      await notificationService.notifyReviewApproved(
+        userId.toString(),
+        review._id.toString(),
+        productName
+      )
+    }
+  } catch (notifError: any) {
+    console.error('⚠️ Failed to send review approved notification:', notifError.message)
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Review approved successfully',
+    data: review,
+  })
+})
+
+// ✅ Admin reject review
+export const rejectReview = asyncHandler(async (req: Request, res: Response) => {
+  const { reason } = req.body
+  const review = await Review.findById(req.params.id)
+
+  if (!review) {
+    return res.status(404).json({
+      success: false,
+      message: 'Review not found',
+    })
+  }
+
+  // Mark as rejected (note: isApproved = false, could add rejection reason in future)
+  review.isApproved = false
+  await review.save()
+
+  // ✅ AUTO-RECALCULATE: Update product rating (exclude this rejected review)
+  const allApprovedReviews = await Review.find({
+    product: review.product,
+    isApproved: true,
+  })
+
+  if (allApprovedReviews.length > 0) {
+    const totalRating = allApprovedReviews.reduce((sum, r) => sum + r.rating, 0)
+    const avgRating = totalRating / allApprovedReviews.length
+
+    await Product.findByIdAndUpdate(review.product, {
+      ratingAverage: parseFloat(avgRating.toFixed(1)),
+      ratingCount: allApprovedReviews.length,
+    })
+  } else {
+    // No approved reviews left
+    await Product.findByIdAndUpdate(review.product, {
+      ratingAverage: 0,
+      ratingCount: 0,
+    })
+  }
+
+  await review.populate('user', 'name avatar')
+  await review.populate('product', 'name slug')
+
+  // Send notification to user
+  try {
+    const userId = (review.user as any)?._id
+    const productName = (review.product as any)?.name
+    if (userId && productName) {
+      await notificationService.notifyReviewRejected(
+        userId.toString(),
+        review._id.toString(),
+        productName,
+        reason
+      )
+    }
+  } catch (notifError: any) {
+    console.error('⚠️ Failed to send review rejected notification:', notifError.message)
+  }
+  res.status(200).json({
+    success: true,
+    message: 'Review rejected',
     data: review,
   })
 })

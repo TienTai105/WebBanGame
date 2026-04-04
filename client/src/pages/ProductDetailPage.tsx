@@ -1,5 +1,5 @@
 import { FC, useState, useMemo, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import Breadcrumb from '../components/atomic/Breadcrumb'
 import { Button } from '../components/atomic'
@@ -11,6 +11,8 @@ import { successToast, errorToast } from '../utils/toast'
 import { useInventory } from '../hooks/useInventory'
 import { ProductResponse } from '../services/index'
 import DescriptionDisplay from '../components/sections/DescriptionDisplay'
+import ReviewsSection from '../components/sections/ReviewsSection'
+import ReviewForm from '../components/sections/ReviewForm'
 
 interface SelectedState {
   variantIndex: number | null
@@ -28,6 +30,7 @@ interface SelectedState {
 const ProductDetailPage: FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { data: product, isLoading, error } = useProduct(id || '')
   const { data: allProductsData } = useProducts(1, 100) // Fetch up to 100 products
   const { addItem, openCart } = useCart()
@@ -45,6 +48,19 @@ const ProductDetailPage: FC = () => {
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [id])
+
+  // Auto-scroll to review section when scroll=review param is set
+  useEffect(() => {
+    const scrollParam = searchParams.get('scroll')
+    if (scrollParam === 'review') {
+      setTimeout(() => {
+        const reviewElement = document.querySelector('[data-scroll-target="review"]')
+        if (reviewElement) {
+          reviewElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 500)
+    }
+  }, [searchParams])
 
   // Determine if product is a GAME
   const isGame = useMemo(() => {
@@ -591,6 +607,23 @@ const ProductDetailPage: FC = () => {
             </div>
           </div>
         )}
+
+        {/* Reviews Section */}
+        <div className="mt-20" data-scroll-target="review">
+          <ReviewForm 
+            productId={product._id}
+            onSubmitSuccess={() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })}
+          />
+        </div>
+
+        {/* Reviews Display Section */}
+        <div className="mt-12">
+          <ReviewsSection 
+            productId={product._id}
+            productRating={product.ratingAverage}
+            ratingCount={product.ratingCount}
+          />
+        </div>
       </div>
     </main>
   )

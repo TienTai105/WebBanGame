@@ -4,6 +4,7 @@ import CheckoutHold from '../models/CheckoutHold.js'
 import inventoryService from '../services/inventoryService.js'
 import { sendOrderConfirmationEmail } from '../services/emailService.js'
 import packingSlipService from '../services/packingSlipService.js'
+import * as notificationService from '../services/notificationService.js'
 
 // Type for populated user in order
 interface IPopulatedUser {
@@ -299,6 +300,13 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
+  // Send notification to user
+  try {
+    await notificationService.notifyOrderCreated(userId.toString(), order._id.toString())
+  } catch (notifError: any) {
+    console.error('⚠️ Failed to send order created notification:', notifError.message)
+  }
+
   res.status(201).json({
     success: true,
     data: order,
@@ -439,6 +447,30 @@ export const updateOrder = asyncHandler(async (req: Request, res: Response) => {
         message: emailError?.message,
         code: emailError?.code,
       })
+    }
+  }
+
+  // Send notification to user about order status update
+  if (order.orderStatus !== existingOrder.orderStatus) {
+    try {
+      const userId = (order.user as unknown as IPopulatedUser)?._id
+      if (userId) {
+        await notificationService.notifyOrderUpdated(
+          userId,
+          order._id.toString(),
+          order.orderStatus
+        )
+        
+        // Special notification if order is completed
+        if (order.orderStatus === 'completed') {
+          await notificationService.notifyOrderCompleted(
+            userId,
+            order._id.toString()
+          )
+        }
+      }
+    } catch (notifError: any) {
+      console.error('⚠️ Failed to send order status notification:', notifError.message)
     }
   }
 

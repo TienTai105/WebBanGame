@@ -2,6 +2,8 @@ import { Request, Response } from 'express'
 import Contact from '../models/Contact.js'
 import AuditLog from '../models/AuditLog.js'
 import { sendContactReplyEmail } from '../services/emailService.js'
+import * as notificationService from '../services/notificationService.js'
+import User from '../models/User.js'
 
 interface AuthRequest extends Request {
   user?: any
@@ -30,6 +32,20 @@ export const submitContact = async (req: Request, res: Response): Promise<void> 
       subject: subject.trim(),
       message: message.trim(),
     })
+
+    // Notify all admins about new contact message
+    try {
+      const admins = await User.find({ role: { $in: ['admin', 'staff'] } })
+      for (const admin of admins) {
+        await notificationService.notifyAdminContactMessage(
+          admin._id.toString(),
+          fullName,
+          subject
+        )
+      }
+    } catch (notifError: any) {
+      console.error('⚠️ Failed to send contact notification to admins:', notifError.message)
+    }
 
     res.status(201).json({
       success: true,

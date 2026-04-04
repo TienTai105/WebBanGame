@@ -33,6 +33,24 @@ function broadcastOnlineUsers() {
   io.to('admin-room').emit('onlineUsers', { userIds, count: userIds.length })
 }
 
+/**
+ * Emit notification to specific user(s)
+ * If user is online, they'll receive it immediately via socket
+ */
+export function emitUserNotification(userId: string | string[], notification: any) {
+  if (!io) {
+    console.warn('Socket.IO not initialized')
+    return
+  }
+
+  const userIds = Array.isArray(userId) ? userId : [userId]
+  
+  userIds.forEach(uid => {
+    // Notify via socket if user is online
+    io!.to(`user:${uid}`).emit('notification', notification)
+  })
+}
+
 export function initSocket(server: HttpServer) {
   io = new Server(server, {
     cors: {
@@ -73,6 +91,9 @@ export function initSocket(server: HttpServer) {
     if (userRole === 'admin' || userRole === 'staff') {
       socket.join('admin-room')
     }
+
+    // Join user notification room
+    socket.join(`user:${userId}`)
 
     // Broadcast updated online list
     broadcastOnlineUsers()

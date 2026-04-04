@@ -3,6 +3,10 @@ import mongoose, { Schema, Document, Model } from 'mongoose'
 interface IReview extends Document {
   user: mongoose.Types.ObjectId
   product: mongoose.Types.ObjectId
+  variant?: {
+    sku: string
+    name: string
+  }  // Which variant they purchased
   rating: number
   title?: string
   comment?: string
@@ -27,6 +31,10 @@ const reviewSchema = new Schema<IReview>(
       type: Schema.Types.ObjectId,
       ref: 'Product',
       required: [true, 'Please provide product'],
+    },
+    variant: {
+      sku: String,
+      name: String,
     },
     rating: {
       type: Number,

@@ -1,5 +1,6 @@
 import React from 'react'
 import { useAdminAuth } from '../../context/AdminAuthContext'
+import NotificationBell from '../modules/NotificationBell'
 
 const AdminHeader: React.FC = () => {
   const { user } = useAdminAuth()
@@ -30,9 +31,9 @@ const AdminHeader: React.FC = () => {
 
         {/* Icons & Actions */}
         <div className="flex items-center gap-4">
-          <button className="text-slate-500 hover:text-indigo-600 transition-all p-2 rounded-lg hover:bg-slate-50">
-            <span className="material-symbols-outlined">notifications</span>
-          </button>
+          {/* Notifications */}
+          <NotificationBell />
+          
           <button className="text-slate-500 hover:text-indigo-600 transition-all p-2 rounded-lg hover:bg-slate-50">
             <span className="material-symbols-outlined">help_outline</span>
           </button>

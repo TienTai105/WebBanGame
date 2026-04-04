@@ -361,9 +361,20 @@ const OrderDetailsPage: FC = () => {
                           )}
                         </div>
                         <div className="flex items-center justify-between pt-2 border-t border-slate-700">
-                          <p className="text-sm text-slate-300">
-                            Số lượng: <span className="font-bold text-white">{item.quantity}</span>
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <p className="text-sm text-slate-300">
+                              Số lượng: <span className="font-bold text-white">{item.quantity}</span>
+                            </p>
+                            {/* Review Button */}
+                            {order.orderStatus === 'completed' && item.product?._id && (
+                              <button
+                                onClick={() => navigate(`/products/${item.product._id}?scroll=review`)}
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors"
+                              >
+                                ⭐ Đánh giá
+                              </button>
+                            )}
+                          </div>
                           <p className="font-bold text-indigo-400 text-base">
                             {item.priceAtPurchase.toLocaleString('vi-VN')} ₫
                           </p>

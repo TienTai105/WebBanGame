@@ -7,6 +7,7 @@ import { useCart } from '../../context/CartContext'
 import Button from '../atomic/Button'
 import Icon from '../atomic/Icon'
 import SearchBar from '../small/SearchBar'
+import NotificationBell from './NotificationBell'
 
 interface HeaderProps {
   onSearch?: (query: string) => void
@@ -144,6 +145,9 @@ const Header: FC<HeaderProps> = ({
 
             {/* Account & Cart Buttons */}
             <div className="flex items-center gap-5">
+              {/* Notification Bell */}
+              {user && <NotificationBell />}
+
               {/* Account Button with Dropdown */}
               <div className="relative" ref={dropdownRef}>
                 {user ? (

@@ -4,21 +4,16 @@
     "module": "ESNext",
     "lib": ["ES2020"],
     "outDir": "./dist",
-    "rootDir": "./",
+    "rootDir": ".",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true
+    "sourceMap": true
   },
-  "include": ["*.ts", "config/**/*.ts", "models/**/*.ts", "controllers/**/*.ts", "routes/**/*.ts", "middleware/**/*.ts", "utils/**/*.ts", "services/**/*.ts"],
+  "include": ["*.ts", "server.ts", "socket.ts", "seed.ts", "config/**/*.ts", "models/**/*.ts", "controllers/**/*.ts", "routes/**/*.ts", "middleware/**/*.ts", "utils/**/*.ts", "services/**/*.ts", "seeds/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

@@ -57,10 +57,6 @@ interface IProduct extends Document {
   ratingCount?: number
   soldCount?: number
   // Status
-  ratings?: Array<{
-    userId: mongoose.Types.ObjectId
-    rating: number
-  }>
   isActive: boolean
   views: number
   createdAt: Date
@@ -247,16 +243,6 @@ const productSchema = new Schema<IProduct>(
       default: 0,
       min: 0,
     },
-    ratings: [
-      {
-        userId: Schema.Types.ObjectId,
-        rating: {
-          type: Number,
-          min: 1,
-          max: 5,
-        },
-      },
-    ],
     isActive: {
       type: Boolean,
       default: true,

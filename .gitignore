@@ -22,5 +22,13 @@ dist/
 build/
 .next/
 
+# TypeScript compiled outputs (should not commit to repo)
+*.d.ts
+*.d.ts.map
+*.js.map
+**/*.d.ts
+**/*.d.ts.map
+**/*.js.map
+
 # Database
 *.log
