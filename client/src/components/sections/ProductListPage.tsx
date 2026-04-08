@@ -192,8 +192,8 @@ const ProductListPage: FC = () => {
         {/* Main Container */}
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Sidebar Filter */}
-          <div className="w-full lg:w-80 shrink-0">
-            <div className="sticky top-8 bg-gradient-to-br from-indigo-950/60 to-slate-900/60 backdrop-blur-sm border border-indigo-500/30 rounded-xl p-6 space-y-6  shadow-indigo-500/10">
+          <div className="w-full lg:w-80 shrink-0 self-start">
+            <div className="sticky top-4 bg-gradient-to-br from-indigo-950/60 to-slate-900/60 backdrop-blur-sm border border-indigo-500/30 rounded-xl p-6 space-y-6 shadow-indigo-500/10">
               <h2 className="text-lg font-black flex items-center gap-3">
                 <span className="material-symbols-outlined text-cyan-400 text-2xl">filter_alt</span>
                 <span className="bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">Bộ lọc</span>
