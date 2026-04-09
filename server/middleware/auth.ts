@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express'
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
+import TokenBlacklist from '../models/TokenBlacklist.js'
 import dotenv from 'dotenv'
 
 dotenv.config()
@@ -41,6 +42,15 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       tokenPreview: token.substring(0, 20) + '...',
     })
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any
+    
+    // ✅ Check if token is blacklisted
+    const isBlacklisted = await TokenBlacklist.findOne({ token })
+    if (isBlacklisted) {
+      console.log('❌ [PROTECT] Token is blacklisted (user logged out)')
+      res.status(401).json({ success: false, message: 'Token has been revoked. Please login again.' })
+      return
+    }
+    
     console.log('✅ [PROTECT] Token verified successfully:', {
       _id: decoded._id,
       email: decoded.email,

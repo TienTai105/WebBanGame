@@ -4,22 +4,41 @@ import Inventory from '../models/Inventory.js'
 
 export const getProducts = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { page = 1, limit = 12, category, search, brand, platforms, minPrice, maxPrice, sort = 'newest', hasDiscount, isNew, isBestseller } = req.query
+    const { 
+      page = 1, 
+      limit = 12, 
+      category, 
+      search, 
+      brand, 
+      platforms,
+      genres,           // ✅ NEW: Genre filter
+      minPrice, 
+      maxPrice,
+      minRating,        // ✅ NEW: Minimum rating filter
+      sort = 'newest', 
+      hasDiscount, 
+      isNew, 
+      isBestseller,
+      inStockOnly       // ✅ NEW: In-stock only filter
+    } = req.query
+    
     const skip = ((Number(page) - 1) * Number(limit)) as number
-
     const filter: any = { isActive: true }
 
-    // Category filter - fix field name from category to categoryId
+    // Category filter
     if (category) {
       filter.categoryId = category
     }
 
-    // Search filter
+    // ✅ IMPROVED: Search filter - now includes variant SKU search
+    const searchFilter: any[] = []
     if (search) {
-      filter.$or = [
+      searchFilter.push(
         { name: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } },
-      ]
+        { 'variants.sku': { $regex: search, $options: 'i' } },  // ✅ NEW: Search variant SKU
+        { tags: { $regex: search, $options: 'i' } }
+      )
     }
 
     // Brand filter (single or multiple)
@@ -32,6 +51,12 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
     if (platforms) {
       const platformArray = Array.isArray(platforms) ? platforms : [platforms]
       filter.platforms = { $in: platformArray }
+    }
+
+    // ✅ NEW: Genre filter (single or multiple)
+    if (genres) {
+      const genreArray = Array.isArray(genres) ? genres : [genres]
+      filter.genres = { $in: genreArray }
     }
 
     // Sale filter - products with discount > 0
@@ -51,8 +76,22 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       filter.soldCount = { $gte: 3000 }
     }
 
-    // Price range filter - handle both finalPrice and price fields with $or
-    if (minPrice || maxPrice) {
+    // ✅ NEW: Minimum rating filter
+    if (minRating) {
+      filter.ratingAverage = { $gte: Number(minRating) }
+    }
+
+    // ✅ NEW: In-stock only filter
+    if (inStockOnly === 'true') {
+      filter.$or = [
+        { stock: { $gt: 0 } },
+        { 'variants': { $elemMatch: { stock: { $gt: 0 } } } }
+      ]
+    }
+
+    // ✅ IMPROVED: Price range filter - fixed $or conflict with search
+    if ((minPrice || maxPrice) && searchFilter.length === 0) {
+      // If no search, use $or directly
       const priceFilter: any = {}
       if (minPrice) {
         priceFilter.$gte = Number(minPrice)
@@ -60,11 +99,31 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       if (maxPrice) {
         priceFilter.$lte = Number(maxPrice)
       }
-      // Match products with finalPrice OR price field
       filter.$or = [
         { finalPrice: priceFilter },
         { price: priceFilter }
       ]
+    } else if ((minPrice || maxPrice) && searchFilter.length > 0) {
+      // If search exists, combine with $and to avoid $or conflict
+      const priceFilter: any = {}
+      if (minPrice) {
+        priceFilter.$gte = Number(minPrice)
+      }
+      if (maxPrice) {
+        priceFilter.$lte = Number(maxPrice)
+      }
+      filter.$and = [
+        { $or: searchFilter },
+        {
+          $or: [
+            { finalPrice: priceFilter },
+            { price: priceFilter }
+          ]
+        }
+      ]
+    } else if (searchFilter.length > 0) {
+      // Search only, no price filter
+      filter.$or = searchFilter
     }
 
     // Determine sort order
@@ -82,15 +141,23 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       case 'trending':
         sortOrder = { views: -1, createdAt: -1 }
         break
+      case 'rating':
+        sortOrder = { ratingAverage: -1, createdAt: -1 }
+        break
       case 'newest':
       default:
         sortOrder = { createdAt: -1 }
     }
 
+    // ✅ IMPROVED: Select specific fields to reduce payload + improve performance
+    // Note: Consider adding text index on name, description, tags for faster full-text search:
+    // db.products.createIndex({ name: 'text', description: 'text', tags: 'text' })
     const products = await Product.find(filter)
+      .select('name slug finalPrice price minPrice maxPrice brand platforms genres ratingAverage ratingCount soldCount images discount views') // ← Optimized fields
       .populate('categoryId', 'name')
       .populate('brand', 'name')
       .populate('platforms', 'name')
+      .populate('genres', 'name')
       .sort(sortOrder)
       .skip(skip)
       .limit(Number(limit))

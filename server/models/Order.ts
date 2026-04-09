@@ -22,14 +22,6 @@ interface IShippingAddress {
   email?: string
 }
 
-interface IOrderStatusHistory {
-  oldStatus?: string
-  newStatus: string
-  reason?: string
-  changedBy: mongoose.Types.ObjectId | string  // userId or 'system'
-  timestamp: Date
-}
-
 interface IOrder extends Document {
   user: mongoose.Types.ObjectId
   orderCode: string
@@ -50,7 +42,6 @@ interface IOrder extends Document {
   momoRequestId?: string
   momoTransactionId?: string
   stockConfirmedAt?: Date          // Track when stock was confirmed (prevent double-confirm)
-  statusHistory?: IOrderStatusHistory[]
   createdAt: Date
   updatedAt: Date
 }
@@ -166,19 +157,6 @@ const orderSchema = new Schema<IOrder>(
       type: Date,
       default: null,
     },
-    statusHistory: [
-      {
-        oldStatus: String,
-        newStatus: String,
-        reason: String,
-        changedBy: Schema.Types.Mixed,  // userId or 'system'
-        timestamp: {
-          type: Date,
-          default: () => new Date(),
-        },
-        _id: false,
-      },
-    ],
   },
   { timestamps: true }
 )
@@ -191,4 +169,4 @@ orderSchema.index({ paymentStatus: 1 })
 
 const Order: Model<IOrder> = mongoose.model<IOrder>('Order', orderSchema)
 export default Order
-export type { IOrder, IOrderItem, IShippingAddress, IOrderStatusHistory }
+export type { IOrder, IOrderItem, IShippingAddress }

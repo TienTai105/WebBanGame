@@ -4,9 +4,11 @@ import cors from 'cors'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import cookieParser from 'cookie-parser'
+import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
 import connectDB from './config/db.js'
 import { errorHandler } from './middleware/auth.js'
+import { verifyCsrfToken, generateCsrfToken } from './middleware/csrf.js' // ✅ Add CSRF import
 import { startCronJobs } from './utils/cronJobs.js'
 import { initSocket } from './socket.js'
 
@@ -58,7 +60,49 @@ app.use(cookieParser())
 // Static files for images
 app.use('/images', express.static('public/images'))
 
+// ✅ CSRF Token endpoint (must be public, before CSRF middleware)
+app.post('/api/csrf-token', generateCsrfToken)
+
+// ✅ Apply CSRF middleware to all mutations (POST, PUT, DELETE)
+app.use(verifyCsrfToken)
+
+// ✅ Rate Limiting
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requests per window
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+  legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  skip: (req) => {
+    // Skip rate limiting for GET requests
+    return req.method === 'GET'
+  },
+  keyGenerator: (req) => {
+    // Use client IP for rate limiting
+    const ip = req.ip || req.socket.remoteAddress || 'unknown'
+    return ip
+  },
+})
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 login attempts per window
+  message: 'Too many login attempts, please try again in 15 minutes.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown'
+    return `auth-${ip}`
+  },
+})
+
+// Apply general limiter to all /api routes
+app.use('/api/', generalLimiter)
+
 // Routes
+// ✅ Apply stricter auth limiter to login/register endpoints
+app.use('/api/auth/login', authLimiter)
+app.use('/api/auth/register', authLimiter)
 app.use('/api/auth', authRoutes)
 app.use('/api/user', userRoutes)
 app.use('/api/admin', adminRoutes)

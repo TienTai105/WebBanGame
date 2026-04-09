@@ -7,13 +7,46 @@ const api = axios.create({
   withCredentials: true,
 })
 
+// ✅ CSRF token cache
+let csrfToken: string | null = null
+
+// ✅ Get fresh CSRF token
+const getCsrfToken = async (): Promise<string> => {
+  try {
+    if (!csrfToken) {
+      const response = await axios.post(
+        `${API_BASE_URL}/csrf-token`,
+        {},
+        { withCredentials: true }
+      )
+      csrfToken = response.data.data.token
+    }
+    return csrfToken || '' // ✅ Guarantee string return
+  } catch (error) {
+    console.error('❌ Failed to get CSRF token:', error)
+    throw error
+  }
+}
+
 // Add token to requests
 api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('accessToken')
+  async (config: InternalAxiosRequestConfig) => {
+    // ✅ Add access token
+    const token = localStorage.getItem('accessToken') // Fallback ke localStorage if needed
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+
+    // ✅ Add CSRF token for mutations
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(config.method?.toUpperCase() || '')) {
+      try {
+        const csrf = await getCsrfToken()
+        config.headers['X-CSRF-Token'] = csrf
+      } catch (error) {
+        console.warn('⚠️ CSRF token not available, continuing without it')
+      }
+    }
+
     return config
   },
   (error: AxiosError) => Promise.reject(error)
@@ -21,7 +54,13 @@ api.interceptors.request.use(
 
 // Handle token refresh on 401
 api.interceptors.response.use(
-  (response: AxiosResponse) => response,
+  (response: AxiosResponse) => {
+    // ✅ Update CSRF token if returned
+    if (response.headers['x-csrf-token']) {
+      csrfToken = response.headers['x-csrf-token'] as string
+    }
+    return response
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
     
@@ -49,6 +88,9 @@ api.interceptors.response.use(
         api.defaults.headers.common.Authorization = `Bearer ${accessToken}`
         originalRequest.headers.Authorization = `Bearer ${accessToken}`
 
+        // ✅ Reset CSRF token cache to fetch new one
+        csrfToken = null
+
         return api(originalRequest)
       } catch (refreshError) {
         localStorage.removeItem('accessToken')
@@ -63,3 +105,4 @@ api.interceptors.response.use(
 )
 
 export default api
+export { getCsrfToken }

@@ -291,13 +291,13 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     }
   }
 
-  // Auto-generate packing slip for COD orders
-  if (isCOD) {
-    try {
-      await packingSlipService.generatePackingSlip(order._id.toString())
-    } catch (slipError: any) {
-      console.error('⚠️ Failed to generate packing slip for COD order:', slipError.message)
-    }
+  // Auto-generate packing slip for all orders (COD + Momo)
+  try {
+    await packingSlipService.generatePackingSlip(order._id.toString())
+    console.log(`✅ Packing slip generated for ${order.orderCode}`)
+  } catch (slipError: any) {
+    console.error('⚠️ Failed to generate packing slip:', slipError.message)
+    // Don't fail order creation if packing slip generation fails
   }
 
   // Send notification to user

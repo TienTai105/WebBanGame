@@ -112,6 +112,8 @@ export const authService = {
   logout: (): Promise<AxiosResponse> => api.post('/auth/logout'),
   getCurrentUser: (): Promise<AxiosResponse<AuthResponse>> =>
     api.get('/auth/me'),
+  refreshToken: (): Promise<AxiosResponse<AuthResponse>> =>
+    api.post('/auth/refresh-token'),
 }
 
 export const productService = {

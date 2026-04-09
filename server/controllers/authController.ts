@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express'
 import User from '../models/User.js'
 import AuditLog from '../models/AuditLog.js'
+import TokenBlacklist from '../models/TokenBlacklist.js'
+import jwt from 'jsonwebtoken'
 import * as tokenUtils from '../utils/tokenUtils.js'
+import { validatePassword, getPasswordRequirements } from '../utils/passwordValidator.js'
 
 const generateTokens = async (user: { _id: string; email?: string; role?: string }) => {
   const accessToken = tokenUtils.generateAccessToken(user)
@@ -20,6 +23,18 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
   if (password !== confirmPassword) {
     res.status(400).json({ success: false, message: 'Passwords do not match' })
+    return
+  }
+
+  // ✅ NEW: Validate password strength
+  const passwordValidation = validatePassword(password)
+  if (!passwordValidation.valid) {
+    res.status(400).json({
+      success: false,
+      message: 'Password does not meet security requirements',
+      errors: passwordValidation.errors,
+      requirements: getPasswordRequirements(),
+    })
     return
   }
 
@@ -201,8 +216,44 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
 }
 
 export const logout = async (req: Request, res: Response): Promise<void> => {
-  res.clearCookie('refreshToken')
-  res.json({ success: true, message: 'Logout successful' })
+  try {
+    // ✅ Get access token from header to blacklist it
+    const authHeader = req.headers.authorization
+    if (authHeader && authHeader.startsWith('Bearer')) {
+      const accessToken = authHeader.split(' ')[1]
+      if (accessToken) {
+        try {
+          // Decode token to get expiration time
+          const decoded = jwt.decode(accessToken) as any
+          if (decoded && decoded.exp) {
+            // Add token to blacklist with its expiration time
+            await TokenBlacklist.create({
+              token: accessToken,
+              expiresAt: new Date(decoded.exp * 1000),
+              userId: decoded._id,
+              reason: 'logout',
+            })
+            console.log('✅ [LOGOUT] Access token blacklisted successfully')
+          }
+        } catch (error) {
+          console.error('⚠️ [LOGOUT] Failed to blacklist token:', error)
+          // Continue logout even if blacklist fails
+        }
+      }
+    }
+    
+    // Clear refresh token cookie
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    })
+    
+    res.json({ success: true, message: 'Logout successful' })
+  } catch (error: any) {
+    console.error('❌ [LOGOUT] Error during logout:', error)
+    res.status(500).json({ success: false, message: error.message })
+  }
 }
 
 export const getCurrentUser = async (req: Request, res: Response): Promise<void> => {
