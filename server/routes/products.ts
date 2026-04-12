@@ -10,6 +10,7 @@ router.get('/trending', asyncHandler(productController.getTrendingProducts))
 router.get('/best-sellers', asyncHandler(productController.getBestSellers))
 router.get('/tag/:tag', asyncHandler(productController.getProductsByTag))
 router.get('/category/:category', asyncHandler(productController.getProductsByCategory))
+router.get('/slug/:slug', asyncHandler(productController.getProductBySlug))
 router.get('/:id', asyncHandler(productController.getProductById))
 
 // Admin routes

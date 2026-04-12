@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import './styles/print.css'
@@ -69,14 +69,28 @@ function GlobalCartModal() {
 
 // Protected Admin Route Component
 function ProtectedAdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAdminAuth()
+  const { isAdmin } = useAdminAuth()
+  const [shouldRedirect, setShouldRedirect] = useState(false)
 
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [])
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
+  useEffect(() => {
+    if (!isAdmin) {
+      warningToast('Bạn không có quyền truy cập trang quản lý')
+      // Delay redirect to let toast show
+      const timer = setTimeout(() => setShouldRedirect(true), 500)
+      return () => clearTimeout(timer)
+    }
+  }, [isAdmin])
+
+  if (shouldRedirect) {
+    return <Navigate to="/" replace />
+  }
+
+  if (!isAdmin) {
+    return null
   }
 
   return <>{children}</>
@@ -189,7 +203,27 @@ function UserAppContent() {
 
 function AppRootContent() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isAdminRoute = location.pathname.startsWith('/admin')
+
+  // ✅ Listen to token expiration event
+  useEffect(() => {
+    const handleTokenExpired = () => {
+      // Clear all user data
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('refreshToken')
+      localStorage.removeItem('user')
+      sessionStorage.clear()
+      
+      warningToast('Phiên làm việc hết hạn, vui lòng đăng nhập lại')
+      setTimeout(() => {
+        navigate('/login', { replace: true })
+      }, 1500)
+    }
+
+    window.addEventListener('tokenExpired', handleTokenExpired)
+    return () => window.removeEventListener('tokenExpired', handleTokenExpired)
+  }, [navigate])
 
   return isAdminRoute ? <AdminAppContent /> : <UserAppContent />
 }

@@ -130,56 +130,46 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
 
     // STEP 1: Try to use existing checkout hold (stock already reserved)
     // If holdId provided, verify it belongs to this user and inherit the reserved time.
-    // Otherwise fall back to fresh stock reservation (COD or hold expired).
+    // Otherwise fall back to fresh stock reservation.
     let reservationExpiresAt: Date | null
     let consumedHold = false
     let effectiveHoldId = incomingHoldId
 
-    // COD orders: release any holdId since they don't use checkout hold
-    if (isCOD && effectiveHoldId) {
-      console.log(`⏭️ [COD] Ignoring holdId for COD order - releasing hold ${effectiveHoldId}`)
-      try {
-        const hold = await CheckoutHold.findOne({ holdId: effectiveHoldId, userId, released: false })
-        if (hold) {
-          console.log(`📌 [RELEASE HOLD] Releasing ${hold.items.length} items from hold ${effectiveHoldId}`)
-          await inventoryService.releaseStock(
-            hold.items.map(i => ({
-              product: i.productId,
-              variantSku: i.variantSku || undefined,
-              quantity: i.quantity,
-            })),
-            `hold:${hold.holdId}`
-          )
-          hold.released = true
-          await hold.save()
-          console.log(`✅ [RELEASE HOLD] Hold released successfully`)
-        }
-      } catch (err: any) {
-        console.error('⚠️ Failed to release hold for COD order:', err.message)
-        // Don't fail order creation just because release failed
+    // IMPORTANT: Check for ANY active hold for this user, even if holdId wasn't provided
+    // This prevents double-reservation when switching payment methods or page reload
+    let userHold = null
+    if (effectiveHoldId) {
+      // If holdId provided, use it
+      userHold = await CheckoutHold.findOne({ holdId: effectiveHoldId, userId, released: false })
+    } else {
+      // If holdId NOT provided, check if ANY active hold exists for this user
+      // This handles the case where user switched payment methods or page reloaded
+      userHold = await CheckoutHold.findOne({ userId, released: false })
+      if (userHold) {
+        console.log(`🔍 [AUTO FIND] Found active hold for user: ${userHold.holdId}`)
+        effectiveHoldId = userHold.holdId
       }
-      // Don't use this holdId
-      effectiveHoldId = undefined
     }
 
-    if (effectiveHoldId && !isCOD) {
+    // For BOTH Momo and COD: Check if valid checkout hold exists and consume it
+    if (effectiveHoldId && userHold) {
       console.log(`🔍 [CHECKOUT HOLD] Checking for hold ${effectiveHoldId}`)
-      const hold = await CheckoutHold.findOne({ holdId: effectiveHoldId, userId, released: false })
-      if (hold && hold.reservedUntil > new Date()) {
+      if (userHold && userHold.reservedUntil > new Date()) {
         // Inherit the remaining time from the hold window
-        reservationExpiresAt = hold.reservedUntil
+        reservationExpiresAt = userHold.reservedUntil
         // Mark hold as consumed so cron doesn't release it
-        hold.released = true
-        await hold.save()
+        userHold.released = true
+        await userHold.save()
         consumedHold = true
-        console.log(`✅ [CHECKOUT HOLD] Hold consumed, ${hold.items.length} items reserved`)
+        console.log(`✅ [CHECKOUT HOLD] Hold consumed for ${isCOD ? 'COD' : 'Momo'}, ${userHold.items.length} items reserved`)
       } else {
         // Hold expired or not found — fall through to fresh reservation below
-        if (hold) { hold.released = true; await hold.save() }
-        reservationExpiresAt = new Date(Date.now() + 15 * 60 * 1000)
+        if (userHold) { userHold.released = true; await userHold.save() }
+        reservationExpiresAt = isCOD ? null : new Date(Date.now() + 15 * 60 * 1000)
         console.log(`⏭️ [CHECKOUT HOLD] Hold not found or expired, will reserve fresh`)
       }
     } else {
+      // No hold provided and none found: fresh reservation for Momo, none for COD
       reservationExpiresAt = isCOD ? null : new Date(Date.now() + 15 * 60 * 1000)
     }
 
@@ -201,8 +191,8 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     shippingAddress,
     reservedAt,
     reservationExpiresAt,
-    // COD orders: NEVER save holdId (they don't use checkout hold)
-    // Online orders: save holdId only if consumed from checkout hold
+    // Save holdId for both Momo and COD if checkout hold was consumed
+    // Prevents double-reservation and ensures stock protection
     holdId: (consumedHold ? effectiveHoldId : undefined),
   })
 
@@ -327,7 +317,60 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   }
 })
 
-// Update order status (admin only)
+// ── Status Transition Validation ──────────────────────────
+const isValidStatusTransition = (from: string, to: string): boolean => {
+  // Cannot change terminal states (completed, cancelled, refunded)
+  if (['completed', 'cancelled', 'refunded'].includes(from)) return false
+  
+  // From pending: can go to processing or cancelled
+  if (from === 'pending') return ['processing', 'cancelled'].includes(to)
+  
+  // From processing: can go to shipped
+  if (from === 'processing') return to === 'shipped'
+  
+  // From shipped: can go to completed
+  if (from === 'shipped') return to === 'completed'
+  
+  // From failed: can retry to pending
+  if (from === 'failed') return to === 'pending'
+  
+  return false
+}
+
+const getInvalidTransitionMessage = (from: string, to: string): string => {
+  const statusMap: { [key: string]: string } = {
+    pending: 'Chờ Xử Lý',
+    processing: 'Đang Xử Lý',
+    shipped: 'Đang Giao',
+    completed: 'Hoàn Thành',
+    cancelled: 'Đã Hủy',
+    refunded: 'Hoàn Tiền',
+    failed: 'Thất Bại',
+  }
+  
+  const fromLabel = statusMap[from] || from
+  const toLabel = statusMap[to] || to
+  
+  if (['completed', 'cancelled', 'refunded'].includes(from)) {
+    return `Không thể thay đổi đơn hàng ở trạng thái "${fromLabel}". Đây là trạng thái cuối cùng.`
+  }
+  
+  if (from === 'pending') {
+    return `Không thể chuyển từ "Chờ Xử Lý" sang "${toLabel}". Chỉ có thể: Xử lý hoặc Hủy đơn`
+  }
+  
+  if (from === 'processing') {
+    return `Không thể chuyển từ "Đang Xử Lý" sang "${toLabel}". Chỉ có thể: Giao hàng`
+  }
+  
+  if (from === 'shipped') {
+    return `Không thể chuyển từ "Đang Giao" sang "${toLabel}". Chỉ có thể: Hoàn thành`
+  }
+  
+  return `Không thể chuyển từ "${fromLabel}" sang "${toLabel}".`
+}
+
+// Update order status 
 export const updateOrder = asyncHandler(async (req: Request, res: Response) => {
   const { orderStatus, paymentStatus, trackingNumber } = req.body
 
@@ -335,6 +378,22 @@ export const updateOrder = asyncHandler(async (req: Request, res: Response) => {
   const existingOrder = await Order.findById(req.params.id)
   if (!existingOrder) {
     return res.status(404).json({ success: false, message: 'Order not found' })
+  }
+
+  // ✅ VALIDATION: Check if status transition is valid
+  if (orderStatus && orderStatus !== existingOrder.orderStatus) {
+    if (!isValidStatusTransition(existingOrder.orderStatus, orderStatus)) {
+      const message = getInvalidTransitionMessage(existingOrder.orderStatus, orderStatus)
+      console.log(`❌ [VALIDATION] Invalid status transition: ${existingOrder.orderStatus} → ${orderStatus}`)
+      return res.status(400).json({
+        success: false,
+        message: message,
+        code: 'INVALID_STATUS_TRANSITION',
+        currentStatus: existingOrder.orderStatus,
+        attemptedStatus: orderStatus,
+      })
+    }
+    console.log(`✅ [VALIDATION] Valid transition: ${existingOrder.orderStatus} → ${orderStatus}`)
   }
 
   console.log(`📝 [UPDATE ORDER] ${existingOrder.orderCode}:`, {

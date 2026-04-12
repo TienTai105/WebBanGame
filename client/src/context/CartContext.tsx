@@ -23,10 +23,10 @@ interface CartContextType {
   closeCart: () => void
   clearCart: () => void
 }
+const CART_STORAGE_KEY = 'webbandb_cart'
+
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
-
-const CART_STORAGE_KEY = 'webbandb_cart'
 
 export const CartProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>([])

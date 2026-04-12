@@ -95,7 +95,8 @@ api.interceptors.response.use(
       } catch (refreshError) {
         localStorage.removeItem('accessToken')
         localStorage.removeItem('user')
-        window.location.href = '/login'
+        // ✅ Emit event instead of hard redirect for smooth UX
+        window.dispatchEvent(new Event('tokenExpired'))
         return Promise.reject(refreshError)
       }
     }

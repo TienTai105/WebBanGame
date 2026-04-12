@@ -39,8 +39,8 @@ const ProductCard: FC<ProductCardProps> = ({
 
   // Get first variant pricing if available, otherwise use product pricing
   const firstVariant = product.variants?.[0]
-  const finalPrice = firstVariant?.finalPrice || product.finalPrice || 0
-  const originalPrice = firstVariant?.price || product.price || 0
+  const finalPrice = firstVariant?.finalPrice || product.finalPrice || product.price || 0
+  const originalPrice = firstVariant?.price || product.price || product.minPrice || 0
   const discount = firstVariant?.discount || product.discount || 0
 
   // Get images

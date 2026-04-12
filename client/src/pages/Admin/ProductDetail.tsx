@@ -78,6 +78,7 @@ interface Product {
   tags?: string[]
   specifications?: Record<string, string>
   videoTrailerUrl?: VideoTrailer[]
+  isBaseProduct?: boolean
 }
 
 interface Category {
@@ -115,6 +116,7 @@ interface FormData {
   maxPrice?: number
   categoryId: string
   isActive: boolean
+  isBaseProduct?: boolean
   stock?: number
   genresId: string
   platformsId?: string
@@ -184,6 +186,7 @@ const ProductDetail: React.FC = () => {
     discount: 0,
     categoryId: '',
     isActive: true,
+    isBaseProduct: false,
     stock: 0,
     genresId: '',
     platformsId: '',
@@ -237,6 +240,7 @@ const ProductDetail: React.FC = () => {
             ? productData.categoryId._id
             : productData.categoryId || '',
         isActive: productData.isActive ?? true,
+        isBaseProduct: productData.isBaseProduct ?? false,
         stock: productData.stock || 0,
         genresId:
           productData.genres && Array.isArray(productData.genres)
@@ -391,6 +395,50 @@ const ProductDetail: React.FC = () => {
     fetchInventory()
   }, [productId, product])
 
+  // ✅ Helper function to refresh inventory after updates
+  const refreshInventoryData = async () => {
+    if (!productId || !product) return
+    try {
+      const { data, error } = await adminApiCall<any>(`/inventory/product/${productId}`)
+      if (error) throw error
+
+      let inventoryDataList = data
+      if (inventoryDataList && typeof inventoryDataList === 'object' && 'data' in inventoryDataList) {
+        inventoryDataList = (inventoryDataList as any).data
+      }
+      
+      if (!Array.isArray(inventoryDataList)) {
+        inventoryDataList = inventoryDataList ? [inventoryDataList] : []
+      }
+      
+      setInventory(inventoryDataList && inventoryDataList.length > 0 ? inventoryDataList[0] : null)
+
+      // Refresh variants with updated inventory
+      if (product.variants && product.variants.length > 0) {
+        const merged = product.variants.map((variant: ProductVariant) => {
+          const variantSku = (variant as any).sku || `variant-${variant.name}`
+          const inventoryForVariant = inventoryDataList?.find(
+            (inv: any) => inv.variantSku === variantSku
+          )
+
+          return {
+            ...variant,
+            inventoryId: inventoryForVariant?._id,
+            available: inventoryForVariant?.available || 0,
+            reserved: inventoryForVariant?.reserved || 0,
+            sold: inventoryForVariant?.sold || 0,
+            damaged: inventoryForVariant?.damaged || 0,
+          } as ProductVariantWithInventory
+        })
+
+        setVariantsWithInventory(merged)
+      }
+      console.log('✅ Inventory data refreshed')
+    } catch (err) {
+      console.error('❌ Error refreshing inventory:', err)
+    }
+  }
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target
 
@@ -532,12 +580,8 @@ const ProductDetail: React.FC = () => {
 
       if (error) throw error
 
-      // Update local state
-      setVariantsWithInventory(prev =>
-        prev.map((v, i) =>
-          i === idx ? { ...v, available: newStock } : v
-        )
-      )
+      // ✅ Refresh inventory data from backend to update all displays
+      await refreshInventoryData()
 
       // Clear editing state
       setEditingVariantStock(prev => {
@@ -744,6 +788,8 @@ const ProductDetail: React.FC = () => {
                 return isMatch ? { ...v, available: newAvailable } : v
               })
             )
+            // ✅ Refresh inventory data from backend to update all displays
+            await refreshInventoryData()
             console.log('✅ Local state updated successfully')
           } catch (err) {
             console.error('❌ Error updating inventory:', err)
@@ -1623,6 +1669,30 @@ const ProductDetail: React.FC = () => {
                       </span>
                       <span className="text-sm font-bold text-slate-900">
                         {formData.isActive ? 'Active Product' : 'Inactive Product'}
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* Base Product for Seeding */}
+                  <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-lg hover:bg-indigo-50 transition-all mt-2">
+                    <div className="relative inline-flex">
+                      <input
+                        type="checkbox"
+                        name="isBaseProduct"
+                        checked={formData.isBaseProduct || false}
+                        onChange={handleInputChange}
+                        className="w-5 h-5 text-indigo-600 rounded accent-indigo-600"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-lg" style={{ color: formData.isBaseProduct ? '#6366f1' : '#9ca3af' }}>
+                        {formData.isBaseProduct ? 'library_add' : 'layers'}
+                      </span>
+                      <span className="text-sm font-bold text-slate-900">
+                        Mark as Base Product (dùng để nhân bản)
+                      </span>
+                      <span className="material-symbols-outlined text-xs text-slate-400 ml-1" title="This product will be used as template for variant seeding">
+                        info
                       </span>
                     </div>
                   </label>

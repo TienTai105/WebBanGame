@@ -1,5 +1,5 @@
 import express from 'express'
-import { initMomoPayment, momoCallback, getMomoPaymentStatus, testMomoCallback, sendTestEmail } from '../controllers/paymentController.js'
+import { initMomoPayment, momoCallback, getMomoPaymentStatus, testMomoCallback, sendTestEmail, confirmMomoPaymentRetry } from '../controllers/paymentController.js'
 import { protect } from '../middleware/auth.js'
 
 const router = express.Router()
@@ -12,6 +12,9 @@ router.get('/momo/status/:orderId', protect, getMomoPaymentStatus)
 
 // Protected: test endpoint to simulate Momo callback (development only)
 router.post('/momo/test-callback', protect, testMomoCallback)
+
+// Protected: confirm Momo payment retry (fallback for missing webhook on localhost)
+router.post('/momo/confirm-paid/:orderId', protect, confirmMomoPaymentRetry)
 
 // Public: Momo sends IPN callback (Momo doesn't pass JWT token)
 router.post('/momo/callback', momoCallback)

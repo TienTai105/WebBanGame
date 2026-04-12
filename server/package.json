@@ -22,6 +22,7 @@
     "seed:promotions": "tsx seeds/seedPromotions.ts",
     "seed:audit-logs": "tsx seeds/seedAuditLogs.ts",
     "seed:news": "tsx seeds/seedNews.ts",
+    "seed:smart-variants": "tsx seeds/seedSmartVariants.ts",
     "test": "jest --coverage"
   },
   "keywords": [

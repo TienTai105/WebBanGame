@@ -115,5 +115,72 @@ router.post(
   })
 )
 
+/**
+ * POST /api/upload/avatar
+ * Upload avatar for users (single image)
+ * No staff access required - just needs authentication
+ */
+router.post(
+  '/avatar',
+  protect,
+  upload.single('images'),
+  asyncHandler(async (req: Request, res: Response) => {
+    const file = (req as any).file
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      })
+    }
+
+    try {
+      // Upload single file to Cloudinary
+      const uploadPromise = new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'web-ban-game/avatars',
+            resource_type: 'auto',
+            quality: 'auto',
+            fetch_format: 'auto',
+          },
+          (error, result) => {
+            if (error) {
+              console.error('Cloudinary avatar upload error:', error)
+              reject(error)
+            } else {
+              resolve({
+                url: result?.secure_url,
+                publicId: result?.public_id,
+                filename: file.originalname,
+              })
+            }
+          }
+        )
+
+        stream.end(file.buffer)
+      })
+
+      const uploadedFile: any = await uploadPromise
+
+      console.log('✅ Avatar uploaded successfully to Cloudinary:', uploadedFile.url)
+
+      res.status(200).json({
+        success: true,
+        data: {
+          images: [uploadedFile]
+        },
+        message: 'Avatar uploaded successfully to Cloudinary'
+      })
+    } catch (err: any) {
+      console.error('❌ Avatar upload error:', err.message)
+      res.status(500).json({
+        success: false,
+        message: 'Failed to upload avatar: ' + (err.message || 'Unknown error')
+      })
+    }
+  })
+)
+
 export default router
 

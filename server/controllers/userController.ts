@@ -217,9 +217,12 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     
     // Update avatar if provided
     if (avatar) {
-      // Validate that it's a base64 string
-      if (!avatar.startsWith('data:image/')) {
-        res.status(400).json({ success: false, message: 'Invalid image format' })
+      // Accept both base64 strings and URLs (http/https or cloudinary)
+      const isBase64 = avatar.startsWith('data:image/')
+      const isUrl = avatar.startsWith('http://') || avatar.startsWith('https://')
+      
+      if (!isBase64 && !isUrl) {
+        res.status(400).json({ success: false, message: 'Invalid avatar format. Must be image URL or base64.' })
         return
       }
       user.avatar = avatar

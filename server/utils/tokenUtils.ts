@@ -14,7 +14,7 @@ export const generateAccessToken = (user: { _id: string; email?: string; role?: 
       role: user.role 
     }, 
     JWT_SECRET, 
-    { expiresIn: '15m' }
+    { expiresIn: '1h' }
   )
 }
 

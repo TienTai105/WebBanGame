@@ -2,8 +2,8 @@ import mongoose, { Schema, Document, Model } from 'mongoose'
 
 interface IStockMovement extends Document {
   inventoryId: mongoose.Types.ObjectId
-  productId: mongoose.Types.ObjectId                // redundant lưu nhưng dễ query
-  variantSku?: string                              // Track variant-specific movements
+  productId: mongoose.Types.ObjectId                
+  variantSku?: string                              
   type: 'IN' | 'OUT' | 'ADJUST' | 'RESERVED' | 'UNRESERVED' | 'REFUNDED'
   quantity: number
   reason?: string
@@ -12,7 +12,7 @@ interface IStockMovement extends Document {
     id: mongoose.Types.ObjectId | string
   }
   notes?: string
-  createdBy?: mongoose.Types.ObjectId               // user ID (admin)
+  createdBy?: mongoose.Types.ObjectId               
   createdAt: Date
   updatedAt: Date
 }

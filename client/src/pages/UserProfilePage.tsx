@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { Icon } from '../components/atomic'
 import Button from '../components/atomic/Button'
 import Pagination from '../components/modules/Pagination'
+import ChangePasswordModal from '../components/small/ChangePasswordModal'
 import { cn } from '../utils/cn'
 import api from '../services/api'
-import { toast } from 'react-toastify'
+import { uploadAvatar } from '../services/uploadService'
+import { successToast, errorToast, infoToast } from '../utils/toast'
 
 interface UserProfileData {
     _id: string
@@ -48,6 +50,7 @@ const UserProfilePage: FC = () => {
     const [isEditing, setIsEditing] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [isLoading, setIsLoading] = useState(true)
+    const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState(false)
 
@@ -140,41 +143,41 @@ const UserProfilePage: FC = () => {
         if (file) {
             // Validate file type
             if (!file.type.startsWith('image/')) {
-                toast.error('Please select an image file')
+                errorToast('Please select an image file')
                 return
             }
 
             // Validate file size (max 5MB)
             if (file.size > 5 * 1024 * 1024) {
-                toast.error('Image size must be less than 5MB')
+                errorToast('Image size must be less than 5MB')
                 return
             }
 
-            // Create base64 and upload immediately
-            const reader = new FileReader()
-            reader.onload = (event) => {
-                const base64String = event.target?.result as string
-                // Upload immediately
-                handleAvatarUpload(base64String)
-            }
-            reader.readAsDataURL(file)
+            // Upload to Cloudinary via backend
+            handleAvatarUpload(file)
         }
     }
 
-    const handleAvatarUpload = async (base64String: string) => {
+    const handleAvatarUpload = async (file: File) => {
         try {
+            infoToast('Uploading avatar...')
+            
+            // Upload to Cloudinary
+            const uploadedUrl = await uploadAvatar(file)
+
+            // Update user profile with Cloudinary URL
             const response = await api.put('/user/profile', {
                 name: editForm.name || user?.name,
                 phone: editForm.phone || user?.phone,
-                avatar: base64String,
+                avatar: uploadedUrl, // Just URL, not base64
             })
 
             const updatedUser = response.data.data.user
             setUser(updatedUser)
-            toast.success('Avatar updated successfully!')
+            successToast('Avatar updated successfully!')
         } catch (err: any) {
-            const errorMsg = err.response?.data?.message || 'Failed to upload avatar'
-            toast.error(errorMsg)
+            const errorMsg = err.message || 'Failed to upload avatar'
+            errorToast(errorMsg)
             console.error('Failed to upload avatar:', err)
         }
     }
@@ -199,12 +202,12 @@ const UserProfilePage: FC = () => {
             setUser(updatedUser)
             setIsEditing(false)
             setSuccess(true)
-            toast.success('Profile updated successfully!')
+            successToast('Profile updated successfully!')
             setTimeout(() => setSuccess(false), 3000)
         } catch (err: any) {
             const errorMsg = err.response?.data?.message || 'Failed to update profile'
             setError(errorMsg)
-            toast.error(errorMsg)
+            errorToast(errorMsg)
             console.error('Failed to update profile:', err)
         } finally {
             setIsSaving(false)
@@ -346,6 +349,12 @@ const UserProfilePage: FC = () => {
                                     className="w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-slate-100 hover:bg-indigo-500/10 rounded-lg transition">
                                     <Icon name="location_on" size="sm" />
                                     <span className="text-sm">Address Book</span>
+                                </button>
+                                <button
+                                    onClick={() => setShowChangePasswordModal(true)}
+                                    className="w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-slate-100 hover:bg-indigo-500/10 rounded-lg transition">
+                                    <Icon name="lock" size="sm" />
+                                    <span className="text-sm">Change Password</span>
                                 </button>
                                 <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-slate-100 hover:bg-indigo-500/10 rounded-lg transition">
                                     <Icon name="military_tech" size="sm" />
@@ -667,6 +676,12 @@ const UserProfilePage: FC = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Change Password Modal */}
+            <ChangePasswordModal
+                isOpen={showChangePasswordModal}
+                onClose={() => setShowChangePasswordModal(false)}
+            />
 
             {/* Hidden file input */}
             <input

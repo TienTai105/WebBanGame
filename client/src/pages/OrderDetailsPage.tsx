@@ -128,7 +128,7 @@ const OrderDetailsPage: FC = () => {
     }
   }
 
-  const canCancelOrder = order && (order.orderStatus === 'pending' || order.orderStatus === 'processing')
+  const canCancelOrder = order && (order.orderStatus === 'pending' || order.orderStatus === 'processing' || order.paymentStatus === 'unpaid')
 
   if (isLoading) {
     return (
@@ -368,7 +368,7 @@ const OrderDetailsPage: FC = () => {
                             {/* Review Button */}
                             {order.orderStatus === 'completed' && item.product?._id && (
                               <button
-                                onClick={() => navigate(`/products/${item.product._id}?scroll=review`)}
+                                onClick={() => navigate(`/products/${item.product!._id}?scroll=review`)}
                                 className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition-colors"
                               >
                                 ⭐ Đánh giá
@@ -525,6 +525,11 @@ const OrderDetailsPage: FC = () => {
             {order?.paymentStatus === 'paid' && (
               <div className="mt-3 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded text-yellow-400 text-sm">
                 ⚠️ Đơn hàng đã được thanh toán. Sau khi hủy, tiền sẽ được hoàn lại.
+              </div>
+            )}
+            {order?.paymentStatus === 'failed' && (
+              <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded text-red-400 text-sm">
+                ℹ️ Thanh toán thất bại. Vui lòng nhấp vào "Thanh toán lại" ở trên để thanh toán lại đơn hàng này.
               </div>
             )}
           </>

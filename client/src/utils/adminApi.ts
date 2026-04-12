@@ -5,10 +5,34 @@
 
 const API_BASE_URL = '/api'
 
+// ✅ CSRF token cache
+let csrfToken: string | null = null
+
 interface ApiResponse<T> {
   success: boolean
   data: T
   message?: string
+}
+
+/**
+ * Get CSRF token for mutations
+ */
+async function getCsrfToken(): Promise<string> {
+  try {
+    if (!csrfToken) {
+      const response = await fetch(`${API_BASE_URL}/csrf-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      })
+      const data = await response.json()
+      csrfToken = data.data?.token
+    }
+    return csrfToken || ''
+  } catch (error) {
+    console.error('❌ Failed to get CSRF token:', error)
+    throw error
+  }
 }
 
 /**
@@ -62,14 +86,27 @@ export async function adminApiCall<T>(
     console.log('Admin API Call:', endpoint)
     console.log('Token:', token.substring(0, 20) + '...')
 
+    // Prepare headers
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...options.headers as Record<string, string>,
+      Authorization: `Bearer ${token}`,
+    }
+
+    // ✅ Add CSRF token for mutations (POST, PUT, DELETE, PATCH)
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes((options.method || 'GET').toUpperCase())) {
+      try {
+        const csrf = await getCsrfToken()
+        headers['X-CSRF-Token'] = csrf
+      } catch (error) {
+        console.warn('⚠️ CSRF token not available:', error)
+      }
+    }
+
     let response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       credentials: 'include', // Send cookies
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
     })
 
     console.log('Response Status:', response.status, response.statusText)
@@ -89,8 +126,9 @@ export async function adminApiCall<T>(
         credentials: 'include', // Send cookies
         headers: {
           'Content-Type': 'application/json',
-          ...options.headers,
+          ...options.headers as Record<string, string>,
           Authorization: `Bearer ${token}`,
+          'X-CSRF-Token': headers['X-CSRF-Token'],
         },
       })
     }

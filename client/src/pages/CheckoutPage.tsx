@@ -141,6 +141,31 @@ const CheckoutPage: FC = () => {
 
   // ── Payment Method & Hold ──────────────────────────────────────────────
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
+  const [retryOrderId, setRetryOrderId] = useState<string | null>(null)  // Store retry orderId from URL
+  
+  // ── Detect retry payment scenario ──────────────────────────────────────
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search)
+    const orderId = searchParams.get('orderId')
+    const isRetryPayment = orderId && searchParams.get('retry') === 'true'
+    
+    if (isRetryPayment && orderId) {
+      setRetryOrderId(orderId)  // Store orderId in state
+      console.log('🔄 [RETRY] Setting Momo as payment method')
+      setPaymentMethod('momo')
+      
+      // Show warning banner
+      warningToast('⏰ Vui lòng hoàn tất thanh toán trong 30 phút, nế không đơn sẽ bị xóa tự động')
+      
+      // Auto-scroll to payment section after a short delay
+      setTimeout(() => {
+        const paymentSection = document.querySelector('[data-payment-section]')
+        if (paymentSection) {
+          paymentSection.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+      }, 500)
+    }
+  }, [location.search])
 
   // ── Checkout Hold (15-min stock reservation) ──────────────────────────
   const [holdId, setHoldId] = useState<string | null>(null)
@@ -193,42 +218,114 @@ const CheckoutPage: FC = () => {
       console.log('🔄 Reset hold tracking after failed payment')
     }
     
-    // ONLY create hold if these 3 conditions are ALL true:
-    // 1. User logged in (have data)
-    // 2. Cart has items
-    // 3. Hold not already created
-    // 4. Payment method is MOMO (not COD)
-    if (user && items.length > 0 && !holdCreated.current && paymentMethod === 'momo') {
-      console.log('📦 Creating checkout hold for Momo payment...')
-      createCheckoutHold()
-    } else if (paymentMethod === 'cash') {
-      // COD: Clear any existing hold from previous Momo selection
-      console.log('💵 COD payment selected - clearing any hold from previous selection')
-      if (holdId) {
-        console.log('🧹 Clearing holdId:', holdId)
-        setHoldId(null)
-        setHoldExpiresAt(null)
-        setHoldSecondsLeft(null)
+    // ✅ For RETRY: Load existing order + hold info
+    if (retryOrderId) {
+      console.log('🔄 [RETRY] Loading existing order:', retryOrderId)
+      const loadRetryOrder = async () => {
+        try {
+          const res = await api.get(`/orders/${retryOrderId}`)
+          const order = res.data.data
+          console.log('✅ [RETRY] Order loaded:', {
+            orderCode: order.orderCode,
+            holdId: order.holdId,
+            reservationExpiresAt: order.reservationExpiresAt,
+          })
+          
+          // If order has hold, restore hold state
+          if (order.holdId && order.reservationExpiresAt) {
+            setHoldId(order.holdId)
+            setHoldExpiresAt(new Date(order.reservationExpiresAt))
+            holdCreated.current = true
+            console.log('✅ [RETRY] Hold restored from order')
+          }
+        } catch (err: any) {
+          console.error('❌ [RETRY] Failed to load order:', err)
+        }
       }
-      holdCreated.current = false
+      loadRetryOrder()
+      return
     }
-  }, [user, items, createCheckoutHold, paymentMethod])
+    
+    // ✅ CheckoutHold for ALL payment methods (by default on checkout)
+    // Show countdown timer regardless of payment method choice
+    if (user && items.length > 0 && !holdCreated.current && !retryOrderId) {
+      console.log('📦 Creating 15min checkout hold on checkout page...')
+      createCheckoutHold()
+    }
+  }, [user, items, createCheckoutHold, retryOrderId])
 
-  // When user switches from COD to Momo, allow creating a new hold
+  // ✅ POLLING: For retry payment, auto-confirm payment after Momo redirects
   useEffect(() => {
-    if (paymentMethod === 'momo' && !holdId) {
-      // Reset flag so next effect will create a new hold
-      holdCreated.current = false
+    if (!retryOrderId) return
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    let pollInterval: ReturnType<typeof setInterval> | null = null
+    let attempts = 0
+    const maxAttempts = 360  // 30 min
+
+    const checkAndConfirm = async () => {
+      attempts++
+      try {
+        const res = await api.get(`/orders/${retryOrderId}`)
+        const order = res.data.data
+        
+        console.log(`⏱️ [POLL] Attempt ${attempts}: paymentStatus=${order.paymentStatus}`)
+        
+        // ✅ Payment success!
+        if (order.paymentStatus === 'paid') {
+          console.log('✅ [POLL] Payment confirmed! Redirecting...')
+          if (pollInterval) clearInterval(pollInterval)
+          if (timeoutId) clearTimeout(timeoutId)
+          setTimeout(() => navigate(`/order-confirm?orderId=${retryOrderId}`), 1000)
+          return
+        }
+        
+        // Timeout (30 min)
+        if (attempts >= maxAttempts) {
+          console.log('⏰ [POLL] Timeout')
+          if (pollInterval) clearInterval(pollInterval)
+          if (timeoutId) clearTimeout(timeoutId)
+        }
+      } catch (err) {
+        console.error('❌ [POLL] Error:', err)
+      }
     }
-  }, [paymentMethod, holdId])
+
+    // After 3 sec, if still unpaid, call confirm endpoint
+    timeoutId = setTimeout(async () => {
+      try {
+        const currentOrder = (await api.get(`/orders/${retryOrderId}`)).data.data
+        if (currentOrder.paymentStatus === 'unpaid') {
+          console.log('⏰ [CONFIRM] 3 sec passed, calling confirm endpoint...')
+          await api.post(`/payment/momo/confirm-paid/${retryOrderId}`)
+          console.log('✅ [CONFIRM] Order confirmed!')
+        }
+      } catch (err) {
+        console.error('❌ [CONFIRM] Error:', err)
+      }
+    }, 3000)
+
+    // Start polling
+    checkAndConfirm()
+    pollInterval = setInterval(checkAndConfirm, 5000)
+
+    return () => {
+      if (pollInterval) clearInterval(pollInterval)
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [retryOrderId, navigate])
 
   // Release hold when user leaves checkout without placing order
   useEffect(() => {
     return () => {
       if (holdId) {
         console.log('🧹 [CLEANUP] Unmounting - releasing hold:', holdId)
-        // Try best-effort release via sendBeacon (most reliable for unmount)
-        navigator.sendBeacon(`/api/checkout/hold/${holdId}`, '')
+        // Use sendBeacon() for reliable delivery even if page is closing
+        // sendBeacon() MUST be POST (DELETE not supported)
+        // Create FormData for reliable POST
+        const formData = new FormData()
+        navigator.sendBeacon(`/api/checkout/hold/${holdId}/release`, formData)
+        console.log('📤 sendBeacon sent to release hold:', holdId)
       }
     }
   }, [holdId])
@@ -250,6 +347,29 @@ const CheckoutPage: FC = () => {
     const sec = s % 60
     return `${m}:${sec.toString().padStart(2, '0')}`
   }
+
+  // Function to reset/refresh hold (called by [Giữ lại] button)
+  const resetHoldCountdown = useCallback(async () => {
+    console.log('🔄 [Giữ lại] clicked - resetting hold countdown')
+    try {
+      // Release old hold if exists
+      if (holdId) {
+        await api.post(`/checkout/hold/${holdId}/release`)  // Changed from DELETE to POST
+        console.log('🧹 Old hold released')
+      }
+      // Reset flag to allow new hold creation
+      holdCreated.current = false
+      setHoldId(null)
+      setHoldExpiresAt(null)
+      setHoldSecondsLeft(null)
+      // Create fresh hold
+      await createCheckoutHold()
+      successToast('Đã giữ lại hàng thêm 15 phút')
+    } catch (err: any) {
+      console.error('❌ Error resetting hold:', err)
+      errorToast('Không thể giữ lại hàng, vui lòng thử lại')
+    }
+  }, [holdId, createCheckoutHold])
   // ─────────────────────────────────────────────────────────────────────
 
   const [appliedCodes, setAppliedCodes] = useState<{ code: string; amount: number; type: 'discount' | 'shipping' }[]>([])
@@ -294,6 +414,45 @@ const CheckoutPage: FC = () => {
     // Validate address fields
     if (!selectedProvinceCode || !selectedDistrictCode || !formData.ward) {
       warningToast('Vui lòng chọn Tỉnh/Thành phố, Quận/Huyện và Phường/Xã')
+      return
+    }
+
+    // Check if this is a retry payment (check retryOrderId state OR URL params as fallback)
+    let checkRetryOrderId = retryOrderId
+    if (!checkRetryOrderId) {
+      const searchParams = new URLSearchParams(location.search)
+      const urlOrderId = searchParams.get('orderId')
+      const urlRetry = searchParams.get('retry')
+      if (urlOrderId && urlRetry === 'true') {
+        checkRetryOrderId = urlOrderId
+      }
+    }
+    
+    const isRetryPayment = !!checkRetryOrderId
+
+    // If retry payment, skip order creation and go straight to Momo init
+    if (isRetryPayment) {
+      console.log('🔄 [RETRY] Skipping order creation, using existing order:', checkRetryOrderId)
+      try {
+        // For Momo retry: directly init payment with existing order
+        if (paymentMethod === 'momo') {
+          const payRes = await api.post('/payment/momo/init', { orderId: checkRetryOrderId })
+          console.log('💳 Momo Retry Init Response:', payRes.data)
+          
+          // Redirect to Momo payment URL
+          if (payRes.data.data?.payUrl) {
+            window.location.href = payRes.data.data.payUrl
+          } else {
+            errorToast('Không nhận được URL thanh toán từ Momo. ' + (payRes.data.message || ''))
+            console.error('❌ Missing payUrl in Momo response:', payRes.data)
+          }
+        } else {
+          errorToast('Chỉ có thể retry thanh toán Momo')
+        }
+      } catch (err: any) {
+        console.error('❌ Momo Retry Error:', err)
+        errorToast(err?.response?.data?.message || 'Lỗi khởi tạo thanh toán Momo')
+      }
       return
     }
 
@@ -344,8 +503,8 @@ const CheckoutPage: FC = () => {
         shippingFee: shippingAmt,
         finalPrice: totalPriceCalc - discountAmt + shippingAmt,
         paymentMethod: paymentMethodMap[paymentMethod],
-        // Only send holdId for Momo payments (COD never uses hold)
-        holdId: paymentMethod === 'momo' ? (holdId ?? undefined) : undefined,
+        // Send holdId for both Momo and COD (both now use checkout hold)
+        holdId: holdId ?? undefined,
         shippingAddress: {
           name: formData.fullName,
           address: formData.address,
@@ -562,28 +721,6 @@ const CheckoutPage: FC = () => {
 
         {/* ==================== MAIN CONTENT ==================== */}
         <div className="w-full max-w-8xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
-
-          {/* Reservation Countdown Banner (only for non-COD) */}
-          {holdSecondsLeft !== null && paymentMethod !== 'cash' && (
-            <div className={`flex items-center gap-3 p-4 rounded-lg border mb-6 ${
-              holdSecondsLeft === 0
-                ? 'bg-red-900/30 border-red-500/40 text-red-300'
-                : holdSecondsLeft < 120
-                ? 'bg-yellow-900/30 border-yellow-500/40 text-yellow-300'
-                : 'bg-indigo-900/30 border-indigo-500/40 text-indigo-200'
-            }`}>
-              <Clock className="w-5 h-5 flex-shrink-0" />
-              {holdSecondsLeft === 0 ? (
-                <span className="font-semibold">Hết thời gian giữ hàng! Vui lòng <button onClick={() => { holdCreated.current = false; createCheckoutHold() }} className="underline font-bold">giữ lại</button> hoặc quay về giỏ hàng.</span>
-              ) : (
-                <span>
-                  Hàng được giữ cho bạn trong{' '}
-                  <span className="font-black text-lg tabular-nums">{formatCountdown(holdSecondsLeft)}</span>
-                  {' '}— vui lòng hoàn tất đặt hàng trước khi hết giờ.
-                </span>
-              )}
-            </div>
-          )}
 
           {/* Title Row */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-6">
@@ -893,7 +1030,10 @@ const CheckoutPage: FC = () => {
               </div>
 
               {/* Payment Methods */}
-              <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 space-y-4">
+              <div 
+                data-payment-section
+                className="bg-slate-900 border border-slate-800 rounded-lg p-6 space-y-4"
+              >
                 <h3 className="text-xl font-bold text-white">Phương thức thanh toán</h3>
 
                 <RadioGroup value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as PaymentMethod)}>
@@ -943,6 +1083,31 @@ const CheckoutPage: FC = () => {
             {/* ==================== RIGHT COLUMN - SUMMARY ==================== */}
             <div className="lg:col-span-1">
               <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 sticky top-20 space-y-4">
+
+                {/* Countdown Timer - Always Display */}
+                {holdExpiresAt && (
+                  <div className="bg-gradient-to-r from-red-900/30 to-orange-900/30 border border-red-500/50 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-red-400 animate-pulse" />
+                      <p className="text-sm font-semibold text-red-300">Thời gian giữ hàng</p>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-3xl font-black text-red-400">
+                        {holdSecondsLeft !== null ? formatCountdown(holdSecondsLeft) : '--:--'}
+                      </span>
+                      <span className="text-xs text-red-300/70">phút : giây</span>
+                    </div>
+                    <p className="text-xs text-red-300/70">
+                      Hết thời gian giữ hàng hoặc thoát trang sẽ bỏ phiếu yêu cầu
+                    </p>
+                    <button
+                      onClick={resetHoldCountdown}
+                      className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded transition-colors"
+                    >
+                      [Giữ lại]
+                    </button>
+                  </div>
+                )}
 
                 {/* Order Items */}
                 <div className="space-y-4 max-h-96 overflow-y-auto pb-4 border-b border-slate-800">

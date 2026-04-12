@@ -119,8 +119,12 @@ export const authService = {
 export const productService = {
   getProducts: (params?: Record<string, any>): Promise<AxiosResponse<ProductsListResponse>> =>
     api.get('/products', { params }),
-  getProductById: (id: string): Promise<AxiosResponse<{ data: ProductResponse }>> =>
-    api.get(`/products/${id}`),
+  getProductById: (id: string): Promise<AxiosResponse<{ data: ProductResponse }>> => {
+    // Check if it's a slug (contains hyphens/lowercase) or MongoDB ID
+    const isSlug = /^[a-z0-9\-]+$/.test(id) && id.includes('-')
+    const endpoint = isSlug ? `/products/slug/${id}` : `/products/${id}`
+    return api.get(endpoint)
+  },
   getProductsByCategory: (
     category: string,
     limit?: number

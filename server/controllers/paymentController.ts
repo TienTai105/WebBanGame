@@ -3,6 +3,7 @@ import Order from '../models/Order.js'
 import momoService from '../services/momoService.js'
 import inventoryService from '../services/inventoryService.js'
 import { sendOrderConfirmationEmail } from '../services/emailService.js'
+import { notifyOrderCompleted } from '../services/notificationService.js'
 import packingSlipService from '../services/packingSlipService.js'
 
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) =>
@@ -37,9 +38,20 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
   }
 
   try {
-    // If request already created, return existing payment info
-    if (order.momoRequestId) {
+    // Detect retry: If order already has momoRequestId from previous attempt, this is a retry!
+    const isRetry = !!order.momoRequestId
+    
+    if (isRetry) {
+      console.log(`🔄 [MOMO RETRY] User calling init again for order ${order.orderCode}, momoRetryCount=${order.momoRetryCount}`)
+      order.momoRetryCount = (order.momoRetryCount || 0) + 1
+      order.momoRequestId = null  // Reset to create new payment
+      await order.save()
+    }
+
+    // Only return cached if truly first attempt (no momoRequestId at all)
+    if (order.momoRequestId && !isRetry) {
       const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173'
+      console.log(`📌 [MOMO CACHED] Returning cached payUrl for order ${order.orderCode}, retryCount=${order.momoRetryCount}`)
       return res.status(200).json({
         success: true,
         data: {
@@ -54,12 +66,20 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
 
     // Create Momo payment request
     const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173'
+    // IMPORTANT: Generate UNIQUE momoOrderId EVERY TIME (Momo doesn't allow reuse)
+    // Each retry must have a different orderId, so append retry count
+    const retryCount = order.momoRetryCount || 0
+    const momoOrderId = retryCount === 0 
+      ? `${order.orderCode}${Date.now()}`.substring(0, 34)
+      : `${order.orderCode}${Date.now()}-${retryCount}`.substring(0, 34)
+    
     const momoResponse = await momoService.createPaymentUrl({
-      orderId: order._id.toString(),
+      orderId: momoOrderId,
       amount: Math.round(order.finalPrice),
-      orderInfo: `WebBanGame - Đơn hàng ${order.orderCode}`,
-      redirectUrl: `${baseUrl}/order-confirm?orderId=${order._id}`,
+      orderInfo: `Order ${order.orderCode}`,  // Use ASCII only, no Vietnamese characters
+      redirectUrl: `${baseUrl}/checkout?orderId=${order._id}&retry=true`,
       ipnUrl: `${process.env.SERVER_URL || 'http://localhost:5000'}/api/payment/momo/callback`,
+      extraData: order._id.toString(),  // Pass MongoDB ID for callback lookup
     })
 
     // Check Momo response
@@ -79,6 +99,12 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
         },
       })
     } else {
+      console.error('❌ [MOMO INIT] Momo API error response:', {
+        resultCode: momoResponse.resultCode,
+        message: momoResponse.message,
+        orderId: order.orderCode,
+        amount: order.finalPrice,
+      })
       return res.status(400).json({
         success: false,
         message: `Momo error: ${momoResponse.message}`,
@@ -101,13 +127,20 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
 export const momoCallback = asyncHandler(async (req: Request, res: Response) => {
   console.log('🔔 [MOMO CALLBACK] RECEIVED REQUEST - Body:', JSON.stringify(req.body, null, 2))
   
-  const { orderId, resultCode, transId, requestId } = req.body
+  const { orderId, resultCode, transId, requestId, extraData } = req.body
 
-  console.log('📩 [MOMO CALLBACK] Extracted data:', { orderId, resultCode, transId, requestId })
+  console.log('� [DEBUG] Extracted data:')
+  console.log('  - orderId (Momo custom ID):', orderId)
+  console.log('  - extraData (MongoDB ID):', extraData)
+  console.log('  - resultCode:', resultCode)
+  console.log('  - transId:', transId)
 
-  // Find order
-  const order = await Order.findById(orderId)
-  console.log(`📩 [MOMO CALLBACK] Order found: ${order ? 'YES - ' + order.orderCode : 'NO'}`)
+  // Use extraData (MongoDB _id) to find order, NOT orderId (custom Momo orderId)
+  const mongoDbOrderId = extraData || orderId
+  console.log('🔔 [DEBUG] Using mongoDbOrderId for lookup:', mongoDbOrderId)
+  
+  const order = await Order.findById(mongoDbOrderId)
+  console.log(`🔔 [DEBUG] Order after findById:`, order ? `FOUND - ${order.orderCode}` : 'NOT FOUND')
   
   if (!order) {
     console.error('❌ [MOMO CALLBACK] Order not found for ID:', orderId)
@@ -195,6 +228,17 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
         
         await sendOrderConfirmationEmail(emailPayload)
         console.log(`✅ Order confirmation email sent to ${customerEmail}`)
+        
+        // Send Socket.IO notification to user
+        try {
+          await notifyOrderCompleted(
+            populatedOrder.user?._id?.toString() || order.user?.toString(),
+            populatedOrder._id.toString()
+          )
+          console.log(`📢 Socket notification sent for order ${populatedOrder.orderCode}`)
+        } catch (notifError: any) {
+          console.warn('⚠️ Failed to send socket notification:', notifError.message)
+        }
       } else {
         console.warn('⚠️ No customer email found for Momo order - skipping email')
       }
@@ -215,8 +259,8 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
 
     return res.status(200).json({ success: true, message: 'Payment confirmed' })
   } else {
-    // Payment failed - DELETE order since payment not completed
-    console.log(`❌ MOMO PAYMENT FAILED - Result Code: ${resultCode} - Deleting order ${order._id}`)
+    // Payment failed - KEEP order with failed status for retry
+    console.log(`❌ MOMO PAYMENT FAILED - Result Code: ${resultCode} - Marking order as failed for retry`)
     
     try {
       // Release stock first
@@ -231,17 +275,20 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
         ).catch((err: any) => console.log('⚠️ Hold reset failed:', err.message))
       }
       
-      // Delete order from DB
-      await Order.deleteOne({ _id: order._id })
-      console.log(`✅ Order deleted after failed payment: ${order._id}`)
+      // Mark order as FAILED (not deleted) - allows retry
+      order.paymentStatus = 'failed'
+      order.momoRequestId = null  // Reset so new QR can be generated
+      order.failedAt = new Date() // Track when payment failed for auto-cleanup
+      await order.save()
+      console.log(`✅ Order marked as failed (kept in DB for retry): ${order._id}`)
     } catch (err: any) {
-      console.error('⚠️ Error cleaning up failed payment:', err.message)
+      console.error('⚠️ Error handling failed payment:', err.message)
     }
 
-    // Don't send email on failed payment
     return res.status(400).json({ 
       success: false, 
-      message: 'Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.' 
+      message: 'Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.',
+      redirectUrl: `/orders/${order._id}`
     })
   }
 })
@@ -355,6 +402,17 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
             
             await sendOrderConfirmationEmail(emailPayload)
             console.log(`✅ Order confirmation email sent to ${customerEmail}`)
+            
+            // Send Socket.IO notification to user
+            try {
+              await notifyOrderCompleted(
+                populatedOrder.user?._id?.toString() || order.user?.toString(),
+                populatedOrder._id.toString()
+              )
+              console.log(`📢 Socket notification sent for order ${populatedOrder.orderCode}`)
+            } catch (notifError: any) {
+              console.warn('⚠️ Failed to send socket notification:', notifError.message)
+            }
           } else {
             console.warn('⚠️ No customer email found when querying Momo status - skipping email')
           }
@@ -385,8 +443,8 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
           },
         })
       } else {
-        // Payment failed - DELETE order since payment not completed
-        console.log(`❌ MOMO PAYMENT FAILED FROM QUERY - Result Code: ${momoStatus.resultCode} - Deleting order ${order._id}`)
+        // Payment failed - KEEP order with failed status for retry
+        console.log(`❌ MOMO PAYMENT FAILED FROM QUERY - Result Code: ${momoStatus.resultCode} - Marking order as failed`)
         
         try {
           // Release stock first
@@ -401,11 +459,14 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
             ).catch((err: any) => console.log('⚠️ Hold reset failed:', err.message))
           }
           
-          // Delete order from DB
-          await Order.deleteOne({ _id: order._id })
-          console.log(`✅ Order deleted after failed payment: ${order._id}`)
+          // Mark as FAILED (keep order for retry)
+          order.paymentStatus = 'failed'
+          order.momoRequestId = null
+          order.failedAt = new Date() // Track when payment failed for auto-cleanup
+          await order.save()
+          console.log(`✅ Order marked as failed (kept in DB for retry): ${order._id}`)
         } catch (err: any) {
-          console.error('⚠️ Error cleaning up failed payment:', err.message)
+          console.error('⚠️ Error handling failed payment:', err.message)
         }
 
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
@@ -414,6 +475,7 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
         return res.status(400).json({
           success: false,
           message: 'Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.',
+          redirectUrl: `/orders/${order._id}`
         })
       }
     } catch (err: any) {
@@ -480,10 +542,17 @@ export const testMomoCallback = asyncHandler(async (req: Request, res: Response)
 
     // Send order confirmation email after payment success
     try {
-      const populatedOrder = await (order as any).populate('user').populate({
-        path: 'orderItems.product',
-        select: 'name price',
-      })
+      const populatedOrder = await Order.findById(order._id)
+        .populate('user')
+        .populate({
+          path: 'orderItems.product',
+          select: 'name price',
+        })
+      
+      if (!populatedOrder) {
+        console.error('❌ Failed to populate order for email in test callback')
+        throw new Error('Failed to populate order')
+      }
       
       const customerEmail = populatedOrder.shippingAddress.email || (populatedOrder.user as any)?.email
       if (customerEmail) {
@@ -514,6 +583,17 @@ export const testMomoCallback = asyncHandler(async (req: Request, res: Response)
         }
         
         await sendOrderConfirmationEmail(emailPayload)
+        
+        // Send Socket.IO notification to user
+        try {
+          await notifyOrderCompleted(
+            userId.toString(),
+            order._id.toString()
+          )
+          console.log(`📢 Socket notification sent for test order ${order.orderCode}`)
+        } catch (notifError: any) {
+          console.warn('⚠️ Failed to send socket notification in test:', notifError.message)
+        }
       }
     } catch (emailError: any) {
       console.error('⚠️ Failed to send confirmation email in test callback:', emailError.message)
@@ -529,6 +609,93 @@ export const testMomoCallback = asyncHandler(async (req: Request, res: Response)
     res.status(200).json({ success: true, message: 'Test payment confirmed' })
   } catch (err: any) {
     console.error('❌ Test callback error:', err)
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+/**
+ * POST /api/payment/momo/confirm-paid/:orderId
+ * Manually confirm Momo payment (fallback for missing webhook on localhost)
+ * Called by frontend after Momo redirects back to checkout page
+ */
+export const confirmMomoPaymentRetry = asyncHandler(async (req: Request, res: Response) => {
+  const { orderId } = req.params
+  const userId = (req as any).user._id
+
+  console.log(`📍 [MOMO CONFIRM] Confirming payment for order: ${orderId}`)
+  console.log(`📍 [DEBUG] User ID: ${userId}`)
+
+  const order = await Order.findById(orderId)
+  console.log(`📍 [DEBUG] Order found:`, order ? `YES - ${order.orderCode}` : 'NO')
+  
+  if (!order) return res.status(404).json({ success: false, message: 'Order not found' })
+  
+  if (order.user.toString() !== userId.toString()) {
+    return res.status(403).json({ success: false, message: 'Not authorized' })
+  }
+
+  if (order.paymentStatus === 'paid') {
+    return res.status(200).json({ success: true, message: 'Order already paid' })
+  }
+
+  try {
+    if (order.stockConfirmedAt) {
+      return res.status(400).json({ success: false, message: 'Stock already confirmed' })
+    }
+
+    // Confirm stock
+    await inventoryService.confirmOrderStock(order.orderItems as any, order._id.toString())
+    order.stockConfirmedAt = new Date()
+    
+    // Mark as paid
+    order.paymentStatus = 'paid'
+    await order.save()
+
+    console.log(`✅ [MOMO CONFIRM] Order paid: ${order.orderCode}`)
+
+    // Send email & packing slip
+    try {
+      const populatedOrder = await Order.findById(order._id)
+        .populate('user')
+        .populate({
+          path: 'orderItems.product',
+          select: 'name price',
+        })
+      
+      if (!populatedOrder) {
+        console.error('❌ Failed to populate order for email')
+        throw new Error('Failed to populate order')
+      }
+      
+      const email = populatedOrder.shippingAddress.email || (populatedOrder.user as any)?.email
+      if (email) {
+        console.log(`📧 [CONFIRM] Sending order confirmation email to ${email}`)
+        await sendOrderConfirmationEmail({
+          to: email,
+          orderCode: populatedOrder.orderCode,
+          orderItems: populatedOrder.orderItems.map((item: any) => ({
+            name: item.product?.name,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+          shippingAddress: populatedOrder.shippingAddress,
+          totalPrice: populatedOrder.totalPrice,
+          discountAmount: populatedOrder.discountAmount,
+          shippingFee: 0,
+          finalTotal: populatedOrder.finalPrice,
+          paymentMethod: populatedOrder.paymentMethod,
+          paymentStatus: 'paid',
+        })
+        console.log(`✅ [CONFIRM] Email sent successfully to ${email}`)
+      }
+      await packingSlipService.generatePackingSlip(order._id.toString())
+    } catch (e: any) {
+      console.error('⚠️ Email/packing slip error:', e.message)
+    }
+
+    res.status(200).json({ success: true, message: 'Payment confirmed' })
+  } catch (err: any) {
+    console.error('❌ Confirm error:', err)
     res.status(500).json({ success: false, message: err.message })
   }
 })

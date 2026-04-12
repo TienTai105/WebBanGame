@@ -4,24 +4,24 @@ import Inventory from '../models/Inventory.js'
 
 export const getProducts = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { 
-      page = 1, 
-      limit = 12, 
-      category, 
-      search, 
-      brand, 
+    const {
+      page = 1,
+      limit = 12,
+      category,
+      search,
+      brand,
       platforms,
-      genres,           // ✅ NEW: Genre filter
-      minPrice, 
+      genres,
+      minPrice,
       maxPrice,
-      minRating,        // ✅ NEW: Minimum rating filter
-      sort = 'newest', 
-      hasDiscount, 
-      isNew, 
+      minRating,
+      sort = 'newest',
+      hasDiscount,
+      isNew,
       isBestseller,
-      inStockOnly       // ✅ NEW: In-stock only filter
+      inStockOnly
     } = req.query
-    
+
     const skip = ((Number(page) - 1) * Number(limit)) as number
     const filter: any = { isActive: true }
 
@@ -30,13 +30,13 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       filter.categoryId = category
     }
 
-    // ✅ IMPROVED: Search filter - now includes variant SKU search
+
     const searchFilter: any[] = []
     if (search) {
       searchFilter.push(
         { name: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } },
-        { 'variants.sku': { $regex: search, $options: 'i' } },  // ✅ NEW: Search variant SKU
+        { 'variants.sku': { $regex: search, $options: 'i' } },
         { tags: { $regex: search, $options: 'i' } }
       )
     }
@@ -152,24 +152,50 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
     // ✅ IMPROVED: Select specific fields to reduce payload + improve performance
     // Note: Consider adding text index on name, description, tags for faster full-text search:
     // db.products.createIndex({ name: 'text', description: 'text', tags: 'text' })
-    const products = await Product.find(filter)
+    let products = await Product.find(filter)
       .select('name slug finalPrice price minPrice maxPrice brand platforms genres ratingAverage ratingCount soldCount images discount views') // ← Optimized fields
       .populate('categoryId', 'name')
       .populate('brand', 'name')
       .populate('platforms', 'name')
       .populate('genres', 'name')
       .sort(sortOrder)
-      .skip(skip)
-      .limit(Number(limit))
+
+    // ✅ NEW: Sort by search relevance if search query exists
+    if (search && searchFilter.length > 0) {
+      const searchLower = String(search).toLowerCase()
+      products.sort((a: any, b: any) => {
+        const aName = (a.name || '').toLowerCase()
+        const bName = (b.name || '').toLowerCase()
+
+        // Exact match gets highest priority
+        if (aName === searchLower) return -1
+        if (bName === searchLower) return 1
+
+        // Prefix match gets second priority
+        if (aName.startsWith(searchLower) && !bName.startsWith(searchLower)) return -1
+        if (!aName.startsWith(searchLower) && bName.startsWith(searchLower)) return 1
+
+        // Both start with search or both don't - keep original sort
+        return 0
+      })
+    }
+
+    // Apply pagination after sorting
+    const paginatedProducts = products.slice(skip, skip + Number(limit))
 
     const total = await Product.countDocuments(filter)
-
+    // Tính tổng số trang
+    const pages = Math.ceil(total / Number(limit))
+    // Kiểm tra có trang tiếp theo không
+    const hasMore = Number(page) < pages
     res.json({
       success: true,
       data: {
-        products,
+        products: paginatedProducts,
         total,
         page: Number(page),
+        pages,
+        hasMore,
         limit: Number(limit),
       },
     })
@@ -182,6 +208,26 @@ export const getProductById = async (req: Request, res: Response): Promise<void>
   try {
     const { id } = req.params
     const product = await Product.findByIdAndUpdate(id, { $inc: { views: 1 } }, { new: true }).populate('categoryId', 'name')
+
+    if (!product) {
+      res.status(404).json({ success: false, message: 'Product not found' })
+      return
+    }
+
+    res.json({ success: true, data: product })
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+export const getProductBySlug = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { slug } = req.params
+    const product = await Product.findOneAndUpdate(
+      { slug: slug },
+      { $inc: { views: 1 } },
+      { new: true }
+    ).populate('categoryId', 'name')
 
     if (!product) {
       res.status(404).json({ success: false, message: 'Product not found' })
@@ -269,18 +315,18 @@ export const getProductsByTag = async (req: Request, res: Response): Promise<voi
     const skip = ((Number(page) - 1) * Number(limit)) as number
 
     // Case-insensitive tag search
-    const products = await Product.find({ 
-      tags: { $regex: `^${tag}$`, $options: 'i' }, 
-      isActive: true 
+    const products = await Product.find({
+      tags: { $regex: `^${tag}$`, $options: 'i' },
+      isActive: true
     })
       .populate('categoryId', 'name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit))
 
-    const total = await Product.countDocuments({ 
-      tags: { $regex: `^${tag}$`, $options: 'i' }, 
-      isActive: true 
+    const total = await Product.countDocuments({
+      tags: { $regex: `^${tag}$`, $options: 'i' },
+      isActive: true
     })
 
     res.json({
@@ -304,11 +350,11 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
 
     // Check for missing required fields (use !== undefined for proper null/undefined check, not falsy check)
     if (
-      !name?.trim() || 
-      !description?.trim() || 
-      price === null || 
-      price === undefined || 
-      !categoryId?.trim() || 
+      !name?.trim() ||
+      !description?.trim() ||
+      price === null ||
+      price === undefined ||
+      !categoryId?.trim() ||
       !sku?.trim()
     ) {
       res.status(400).json({ success: false, message: 'Missing required fields' })
@@ -363,13 +409,13 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
   try {
     const { id } = req.params
     const { variants, stock, name } = req.body
-    
+
     // Auto-generate slug from name if name is being updated but slug is not provided
     const updateData = { ...req.body }
     if (name && !req.body.slug) {
       updateData.slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     }
-    
+
     const product = await Product.findByIdAndUpdate(id, updateData, { new: true })
 
     if (!product) {
@@ -383,7 +429,7 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
         productId: product._id,
         $or: [{ variantSku: null }, { variantSku: { $exists: false } }]
       })
-      
+
       if (baseInventory) {
         baseInventory.available = stock
         await baseInventory.save()
@@ -403,13 +449,13 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
     if (variants && Array.isArray(variants) && variants.length > 0) {
       for (const variant of variants) {
         const variantSku = variant.sku || `${product.sku}-${variant.name}`
-        
+
         // Check if inventory already exists for this variant
         const existingInventory = await Inventory.findOne({
           productId: product._id,
           variantSku: variantSku
         })
-        
+
         // Create inventory only if it doesn't exist
         if (!existingInventory) {
           await Inventory.create({

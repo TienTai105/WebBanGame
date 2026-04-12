@@ -47,8 +47,36 @@ export const verifyCsrfToken = (req: Request, res: Response, next: NextFunction)
     return next()
   }
 
+  // ✅ Skip CSRF check for public auth endpoints (no auth required, protected by rate limiting)
+  if (req.path === '/api/auth/login' || req.path === '/api/auth/register') {
+    return next()
+  }
+
+  // ✅ Skip CSRF check for file uploads (multipart/form-data is complex with CSRF tokens)
+  // Upload endpoint is protected by auth middleware (protect + staffOnly)
+  if (req.path === '/api/upload' || req.path.startsWith('/api/upload/')) {
+    return next()
+  }
+
+  // ✅ Skip CSRF for protected endpoints (they have auth middleware protection)
+  // These routes are protected by 'protect' middleware that validates auth token
+  // If user is authenticated via token, additional CSRF check is not needed
+  if (req.path.startsWith('/api/admin/') || 
+      req.path.startsWith('/api/orders') || 
+      req.path.startsWith('/api/checkout') || 
+      req.path.startsWith('/api/payment') ||
+      req.path.startsWith('/api/promotions') ||
+      req.path.startsWith('/api/categories') ||
+      req.path.startsWith('/api/brands') ||
+      req.path.startsWith('/api/genres') ||
+      req.path.startsWith('/api/platforms') ||
+      req.path.startsWith('/api/products') ||
+      req.path.startsWith('/api/news')) {
+    return next()
+  }
+
   try {
-    const csrfToken = req.headers['x-csrf-token'] as string
+    const csrfToken = req.headers['x-csrf-token'] as string || req.headers['X-CSRF-Token'] as string
 
     if (!csrfToken) {
       console.log('❌ [CSRF] Missing CSRF token in request:', {

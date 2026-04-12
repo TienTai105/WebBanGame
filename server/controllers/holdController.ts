@@ -10,11 +10,7 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
 
 const HOLD_DURATION_MS = 15 * 60 * 1000 // 15 minutes
 
-/**
- * POST /api/checkout/hold
- * Reserve stock for all cart items when user enters checkout page.
- * If a previous hold exists for this user, release it first then re-hold.
- */
+
 export const createHold = asyncHandler(async (req: Request, res: Response) => {
   const userId = (req as any).user._id
   const { items } = req.body // [{ productId, variantSku, quantity }]
@@ -83,19 +79,26 @@ export const createHold = asyncHandler(async (req: Request, res: Response) => {
 })
 
 /**
- * DELETE /api/checkout/hold/:holdId
+ * DELETE /api/checkout/hold/:holdId (with auth)
+ * POST /api/checkout/hold/:holdId/release (without auth, from sendBeacon)
  * Release a hold when user navigates away from checkout without placing order.
  */
 export const releaseHold = asyncHandler(async (req: Request, res: Response) => {
-  const userId = (req as any).user._id
+  const userId = (req as any).user?._id  // Optional - may not exist if sendBeacon
   const { holdId } = req.params
 
-  const hold = await CheckoutHold.findOne({ holdId, userId, released: false })
+  // If userId exists (auth), verify ownership
+  // If userId doesn't exist (sendBeacon), just lookup by holdId
+  const query = userId ? { holdId, userId, released: false } : { holdId, released: false }
+
+  const hold = await CheckoutHold.findOne(query)
   if (!hold) {
+    console.log(`ℹ️ Hold not found or already released - holdId: ${holdId}, userId: ${userId || 'none (sendBeacon)'}`)
     return res.status(200).json({ success: true, message: 'Hold not found or already released' })
   }
 
   try {
+    console.log(`🧹 Releasing hold: ${holdId} (userId: ${userId || 'sendBeacon'})`)
     await inventoryService.releaseStock(
       hold.items.map(i => ({
         product: i.productId,
@@ -111,5 +114,6 @@ export const releaseHold = asyncHandler(async (req: Request, res: Response) => {
   hold.released = true
   await hold.save()
 
+  console.log(`✅ Hold released successfully: ${holdId}`)
   res.status(200).json({ success: true, message: 'Hold released' })
 })

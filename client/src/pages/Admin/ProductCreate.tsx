@@ -76,6 +76,7 @@ interface FormData {
   maxPrice?: number
   categoryId: string
   isActive: boolean
+  isBaseProduct?: boolean
   stock?: number
   genresId: string
   platformsId?: string
@@ -154,6 +155,7 @@ const ProductCreate: React.FC = () => {
     maxPrice: 0,
     categoryId: '',
     isActive: true,
+    isBaseProduct: false,
     stock: 0,
     genresId: '',
     platformsId: '',
@@ -1139,6 +1141,30 @@ const ProductCreate: React.FC = () => {
                       </span>
                       <span className="text-sm font-bold text-slate-900">
                         {formData.isActive ? 'Active Product' : 'Inactive Product'}
+                      </span>
+                    </div>
+                  </label>
+
+                  {/* Base Product for Seeding */}
+                  <label className="flex items-center gap-3 cursor-pointer group p-3 rounded-lg hover:bg-indigo-50 transition-all mt-2">
+                    <div className="relative inline-flex">
+                      <input
+                        type="checkbox"
+                        name="isBaseProduct"
+                        checked={formData.isBaseProduct || false}
+                        onChange={handleInputChange}
+                        className="w-5 h-5 text-indigo-600 rounded accent-indigo-600"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-lg" style={{ color: formData.isBaseProduct ? '#6366f1' : '#9ca3af' }}>
+                        {formData.isBaseProduct ? 'library_add' : 'layers'}
+                      </span>
+                      <span className="text-sm font-bold text-slate-900">
+                        Mark as Base Product (dùng để nhân bản)
+                      </span>
+                      <span className="material-symbols-outlined text-xs text-slate-400 ml-1" title="This product will be used as template for variant seeding">
+                        info
                       </span>
                     </div>
                   </label>

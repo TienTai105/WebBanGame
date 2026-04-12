@@ -1,6 +1,6 @@
-import { createNotification } from '../controllers/notificationController'
-import { emitUserNotification } from '../socket'
-import User from '../models/User'
+import { createNotification } from '../controllers/notificationController.js'
+import { emitUserNotification } from '../socket.js'
+import User from '../models/User.js'
 
 type NotificationType = 
   | 'order_created'

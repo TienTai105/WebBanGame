@@ -12,5 +12,6 @@ router.post('/refresh-token', asyncHandler(authController.refreshToken))
 // Protected routes
 router.post('/logout', protect, asyncHandler(authController.logout))
 router.get('/me', protect, asyncHandler(authController.getCurrentUser))
+router.post('/change-password', protect, asyncHandler(authController.changePassword))
 
 export default router

@@ -27,6 +27,7 @@ export const STAFF_PERMISSIONS = [
 interface AdminAuthContextType {
   user: AdminUser | null
   isAuthenticated: boolean
+  isAdmin: boolean
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
@@ -183,6 +184,7 @@ export const AdminAuthProvider: React.FC<{ children: ReactNode }> = ({ children 
       value={{
         user,
         isAuthenticated: !!user,
+        isAdmin: user?.role === 'admin' || user?.role === 'staff',
         isLoading,
         login,
         logout,

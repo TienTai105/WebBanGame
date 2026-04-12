@@ -1,6 +1,6 @@
 import { FC, useState, useRef, useEffect } from 'react'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
-import { LogOut, ShoppingBag, User, Shield } from 'lucide-react'
+import { LogOut, ShoppingBag, User, Shield, Lock } from 'lucide-react'
 import { disconnectSocket } from '../../utils/socket'
 import { cn } from '../../utils/cn'
 import { useCart } from '../../context/CartContext'
@@ -8,6 +8,7 @@ import Button from '../atomic/Button'
 import Icon from '../atomic/Icon'
 import SearchBar from '../small/SearchBar'
 import NotificationBell from './NotificationBell'
+import ChangePasswordModal from '../small/ChangePasswordModal'
 
 interface HeaderProps {
   onSearch?: (query: string) => void
@@ -26,6 +27,7 @@ const Header: FC<HeaderProps> = ({
   const navigate = useNavigate()
   const { items, openCart } = useCart()
   const [showDropdown, setShowDropdown] = useState(false)
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const [user, setUser] = useState<any>(null)
 
@@ -188,13 +190,24 @@ const Header: FC<HeaderProps> = ({
                         <span className="text-sm font-medium">Hồ sơ của tôi</span>
                       </button>
                       {/* My Orders */}
-
                       <button
                         onClick={handleMyOrders}
                         className="w-full px-4 py-3 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
                       >
                         <ShoppingBag className="w-4 h-4 text-cyan-400" />
                         <span className="text-sm font-medium">Đơn hàng của tôi</span>
+                      </button>
+
+                      {/* Change Password */}
+                      <button
+                        onClick={() => {
+                          setShowDropdown(false)
+                          setShowChangePasswordModal(true)
+                        }}
+                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                      >
+                        <Lock className="w-4 h-4 text-cyan-400" />
+                        <span className="text-sm font-medium">Đổi mật khẩu</span>
                       </button>
 
                       {/* Admin Panel */}
@@ -240,7 +253,11 @@ const Header: FC<HeaderProps> = ({
           </div>
         </div>
       </div>
-    </header>
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={showChangePasswordModal}
+        onClose={() => setShowChangePasswordModal(false)}
+      />    </header>
   )
 }
 

@@ -96,6 +96,50 @@ const STATUS_TABS: { key: StatusTab; label: string; borderColor: string; textCol
   { key: 'cancelled',  label: 'Đã Hủy',     borderColor: 'border-red-400',    textColor: 'text-red-600' },
 ]
 
+// ── Status Transition Validation ───────────────────────────
+// Define which status transitions are allowed
+const isValidStatusTransition = (from: OrderStatus, to: OrderStatus): boolean => {
+  // Cannot change terminal states (completed, cancelled, refunded)
+  if (['completed', 'cancelled', 'refunded'].includes(from)) return false
+  
+  // From pending: can go to processing or cancelled
+  if (from === 'pending') return ['processing', 'cancelled'].includes(to)
+  
+  // From processing: can go to shipped
+  if (from === 'processing') return to === 'shipped'
+  
+  // From shipped: can go to completed
+  if (from === 'shipped') return to === 'completed'
+  
+  // From failed: can retry to pending
+  if (from === 'failed') return to === 'pending'
+  
+  return false
+}
+
+const getInvalidTransitionMessage = (from: OrderStatus, to: OrderStatus): string => {
+  const fromLabel = ORDER_STATUS_MAP[from].label
+  const toLabel = ORDER_STATUS_MAP[to].label
+  
+  if (['completed', 'cancelled', 'refunded'].includes(from)) {
+    return `❌ Không thể thay đổi đơn hàng ở trạng thái "${fromLabel}". Đây là trạng thái cuối cùng.`
+  }
+  
+  if (from === 'pending') {
+    return `❌ Không thể chuyển từ "Chờ Xử Lý" sang "${toLabel}".\n\n✓ Chỉ có thể: Xử lý hoặc Hủy đơn`
+  }
+  
+  if (from === 'processing') {
+    return `❌ Không thể chuyển từ "Đang Xử Lý" sang "${toLabel}".\n\n✓ Chỉ có thể: Giao hàng`
+  }
+  
+  if (from === 'shipped') {
+    return `❌ Không thể chuyển từ "Đang Giao" sang "${toLabel}".\n\n✓ Chỉ có thể: Hoàn thành`
+  }
+  
+  return `❌ Không thể chuyển từ "${fromLabel}" sang "${toLabel}".`
+}
+
 // ── Component ──────────────────────────────────────────────
 const AdminOrders: React.FC = () => {
   // View mode
@@ -213,8 +257,17 @@ const AdminOrders: React.FC = () => {
   useEffect(() => { fetchStatusCounts() }, [fetchStatusCounts])
 
   // ── Update order status ──────────────────────────────────
-  const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {
-    setPendingAction({ type: 'status', orderId, status: newStatus })
+  const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {    // Find the order to get current status
+    const order = orders.find(o => o._id === orderId)
+    if (!order) return
+    
+    // Validate status transition
+    if (!isValidStatusTransition(order.orderStatus, newStatus)) {
+      const message = getInvalidTransitionMessage(order.orderStatus, newStatus)
+      errorToast(message)
+      return
+    }
+        setPendingAction({ type: 'status', orderId, status: newStatus })
     setOtpModal(true)
   }
 
@@ -263,8 +316,16 @@ const AdminOrders: React.FC = () => {
 
   // ── Save full edit ───────────────────────────────────────
   const handleSaveEdit = async () => {
-    if (!selectedOrder) return
-    const body: Record<string, string> = {}
+    if (!selectedOrder) return    
+    // Validate status transition if orderStatus changed
+    if (editOrderStatus !== selectedOrder.orderStatus) {
+      if (!isValidStatusTransition(selectedOrder.orderStatus, editOrderStatus)) {
+        const message = getInvalidTransitionMessage(selectedOrder.orderStatus, editOrderStatus)
+        errorToast(message)
+        return
+      }
+    }
+        const body: Record<string, string> = {}
     if (editOrderStatus !== selectedOrder.orderStatus) body.orderStatus = editOrderStatus
     if (editPaymentStatus !== selectedOrder.paymentStatus) body.paymentStatus = editPaymentStatus
     if (editTrackingNumber !== (selectedOrder.trackingNumber || '')) body.trackingNumber = editTrackingNumber
@@ -630,20 +691,28 @@ const AdminOrders: React.FC = () => {
                         {(Object.keys(ORDER_STATUS_MAP) as OrderStatus[]).map((status) => {
                           const s = ORDER_STATUS_MAP[status]
                           const isActive = editOrderStatus === status
+                          const isValid = isValidStatusTransition(selectedOrder.orderStatus, status)
+                          const title = isValid ? '' : getInvalidTransitionMessage(selectedOrder.orderStatus, status)
+                          
                           return (
                             <button
                               key={status}
+                              title={title}
                               onClick={() => {
+                                if (!isValid) return // Prevent invalid transition
                                 setEditOrderStatus(status)
                                 // COD: auto-set payment to paid when completed
                                 if (status === 'completed' && selectedOrder.paymentMethod === 'COD') {
                                   setEditPaymentStatus('paid')
                                 }
                               }}
+                              disabled={!isValid}
                               className={`flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-bold uppercase border-2 transition-all ${
                                 isActive
                                   ? `${s.bg} ${s.color} ${s.border} ring-2 ring-offset-1 ring-indigo-300`
-                                  : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                                  : isValid
+                                  ? 'bg-white border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50 cursor-pointer'
+                                  : 'bg-slate-50 border-slate-200 text-slate-300 opacity-40 cursor-not-allowed'
                               }`}
                             >
                               {s.dot && <span className={`w-2 h-2 rounded-full ${isActive ? s.dot : 'bg-slate-300'}`} />}
@@ -652,6 +721,16 @@ const AdminOrders: React.FC = () => {
                           )
                         })}
                       </div>
+                      
+                      {/* Validation hint */}
+                      {!isValidStatusTransition(selectedOrder.orderStatus, editOrderStatus) && (
+                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <p className="text-xs text-red-700 font-semibold flex items-start gap-2">
+                            <span className="mt-0.5">⚠️</span>
+                            <span>{getInvalidTransitionMessage(selectedOrder.orderStatus, editOrderStatus)}</span>
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Payment Status */}
@@ -692,26 +771,41 @@ const AdminOrders: React.FC = () => {
                     </div>
 
                     {/* Change summary */}
-                    {(editOrderStatus !== selectedOrder.orderStatus ||
-                      editPaymentStatus !== selectedOrder.paymentStatus ||
-                      editTrackingNumber !== (selectedOrder.trackingNumber || '')) && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                        <h4 className="text-xs uppercase font-bold text-amber-700 tracking-wider mb-2 flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-sm">info</span>
-                          Thay đổi sẽ áp dụng
+                    {editOrderStatus !== selectedOrder.orderStatus &&
+                    !isValidStatusTransition(selectedOrder.orderStatus, editOrderStatus) ? (
+                      // Validation error
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                        <h4 className="text-xs uppercase font-bold text-red-700 tracking-wider mb-2 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-sm">cancel</span>
+                          Chuyển đổi không hợp lệ
                         </h4>
-                        <ul className="space-y-1 text-sm text-amber-800">
-                          {editOrderStatus !== selectedOrder.orderStatus && (
-                            <li>• Trạng thái: <span className="font-bold">{ORDER_STATUS_MAP[selectedOrder.orderStatus].label}</span> → <span className="font-bold">{ORDER_STATUS_MAP[editOrderStatus].label}</span></li>
-                          )}
-                          {editPaymentStatus !== selectedOrder.paymentStatus && (
-                            <li>• Thanh toán: <span className="font-bold">{PAYMENT_STATUS_MAP[selectedOrder.paymentStatus].label}</span> → <span className="font-bold">{PAYMENT_STATUS_MAP[editPaymentStatus].label}</span></li>
-                          )}
-                          {editTrackingNumber !== (selectedOrder.trackingNumber || '') && (
-                            <li>• Mã vận chuyển: <span className="font-bold">{editTrackingNumber || '(xóa)'}</span></li>
-                          )}
-                        </ul>
+                        <p className="text-xs text-red-700 whitespace-pre-wrap">
+                          {getInvalidTransitionMessage(selectedOrder.orderStatus, editOrderStatus)}
+                        </p>
                       </div>
+                    ) : (
+                      // Successful change preview
+                      (editOrderStatus !== selectedOrder.orderStatus ||
+                        editPaymentStatus !== selectedOrder.paymentStatus ||
+                        editTrackingNumber !== (selectedOrder.trackingNumber || '')) && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                          <h4 className="text-xs uppercase font-bold text-amber-700 tracking-wider mb-2 flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-sm">info</span>
+                            Thay đổi sẽ áp dụng
+                          </h4>
+                          <ul className="space-y-1 text-sm text-amber-800">
+                            {editOrderStatus !== selectedOrder.orderStatus && (
+                              <li>• Trạng thái: <span className="font-bold">{ORDER_STATUS_MAP[selectedOrder.orderStatus].label}</span> → <span className="font-bold text-emerald-700">{ORDER_STATUS_MAP[editOrderStatus].label}</span></li>
+                            )}
+                            {editPaymentStatus !== selectedOrder.paymentStatus && (
+                              <li>• Thanh toán: <span className="font-bold">{PAYMENT_STATUS_MAP[selectedOrder.paymentStatus].label}</span> → <span className="font-bold text-emerald-700">{PAYMENT_STATUS_MAP[editPaymentStatus].label}</span></li>
+                            )}
+                            {editTrackingNumber !== (selectedOrder.trackingNumber || '') && (
+                              <li>• Mã vận chuyển: <span className="font-bold text-emerald-700">{editTrackingNumber || '(xóa)'}</span></li>
+                            )}
+                          </ul>
+                        </div>
+                      )
                     )}
                   </div>
 
@@ -729,7 +823,16 @@ const AdminOrders: React.FC = () => {
                         editOrderStatus === selectedOrder.orderStatus &&
                         editPaymentStatus === selectedOrder.paymentStatus &&
                         editTrackingNumber === (selectedOrder.trackingNumber || '')
+                      ) || (
+                        editOrderStatus !== selectedOrder.orderStatus &&
+                        !isValidStatusTransition(selectedOrder.orderStatus, editOrderStatus)
                       )}
+                      title={
+                        editOrderStatus !== selectedOrder.orderStatus &&
+                        !isValidStatusTransition(selectedOrder.orderStatus, editOrderStatus)
+                          ? 'Chuyển đổi trạng thái không hợp lệ'
+                          : ''
+                      }
                       className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {updating && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}

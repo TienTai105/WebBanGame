@@ -7,6 +7,7 @@ interface MomoPaymentRequest {
   orderInfo: string
   redirectUrl: string
   ipnUrl: string
+  extraData?: string
 }
 
 interface MomoPaymentResponse {
@@ -44,10 +45,11 @@ class MomoService {
   async createPaymentUrl(params: MomoPaymentRequest): Promise<MomoPaymentResponse> {
     const requestId = `${this.partnerCode}${Date.now()}`
     const requestType = 'captureWallet'
-    const extraData = ''
+    const extraData = params.extraData || ''
     const lang = 'vi'
 
-    // Build raw signature string (must be alphabetical order)
+    // Build raw signature string (must be alphabetical order, using UNENCODED values)
+    // Momo API expects the original values in the signature, NOT URL-encoded
     const rawSignature = [
       `accessKey=${this.accessKey}`,
       `amount=${params.amount}`,
@@ -80,9 +82,17 @@ class MomoService {
 
     // 🔍 DEBUG: Log full request details
     console.log('🔍 MOMO REQUEST DEBUG:')
+    console.log('  orderId:', params.orderId, '(length:', params.orderId.length + ')')
+    console.log('  amount:', params.amount, '(type:', typeof params.amount + ')')
+    console.log('  orderInfo:', params.orderInfo, '(length:', params.orderInfo.length + ')')
+    console.log('  redirectUrl:', params.redirectUrl)
+    console.log('  ipnUrl:', params.ipnUrl)
+    console.log('  requestId:', requestId)
+    console.log('  partnerCode:', this.partnerCode)
+    console.log('  accessKey:', this.accessKey)
     console.log('  Raw Signature:', rawSignature)
     console.log('  Calculated Signature:', signature)
-    console.log('  Request Body:', JSON.stringify(requestBody, null, 2))
+    console.log('  Full Request Body:', JSON.stringify(requestBody, null, 2))
     console.log('  API URL:', this.momoUrl)
 
     try {
@@ -95,8 +105,10 @@ class MomoService {
     } catch (error: any) {
       console.error('❌ Momo API Error:')
       console.error('  Status:', error.response?.status)
+      console.error('  Status Text:', error.response?.statusText)
       console.error('  Data:', JSON.stringify(error.response?.data, null, 2))
       console.error('  Message:', error.message)
+      console.error('  Full Error Response:', JSON.stringify(error.response, null, 2))
       throw new Error(`Momo payment creation failed: ${error.response?.data?.message || error.message}`)
     }
   }

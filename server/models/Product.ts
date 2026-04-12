@@ -58,6 +58,7 @@ interface IProduct extends Document {
   soldCount?: number
   // Status
   isActive: boolean
+  isBaseProduct?: boolean  // Mark base product for seeding
   views: number
   createdAt: Date
   updatedAt: Date
@@ -246,6 +247,11 @@ const productSchema = new Schema<IProduct>(
     isActive: {
       type: Boolean,
       default: true,
+    },
+    isBaseProduct: {
+      type: Boolean,
+      default: false,  // Only mark as true for original products used in seeding
+      index: true,
     },
     views: {
       type: Number,

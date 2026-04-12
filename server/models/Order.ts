@@ -32,16 +32,19 @@ interface IOrder extends Document {
   shippingFee: number
   finalPrice: number
   paymentMethod: string
-  paymentStatus: 'unpaid' | 'paid'
+  paymentStatus: 'unpaid' | 'paid' | 'failed'
   orderStatus: 'pending' | 'processing' | 'shipped' | 'completed' | 'cancelled' | 'failed' | 'refunded'
   shippingAddress: IShippingAddress
   trackingNumber?: string
   reservedAt?: Date
   reservationExpiresAt?: Date
   holdId?: string
-  momoRequestId?: string
+  momoRequestId?: string | null
+  momoOrderId?: string | null        // Momo's unique orderId per attempt (new on each retry)
+  momoRetryCount?: number             // Track retry attempts for unique orderId generation
   momoTransactionId?: string
   stockConfirmedAt?: Date          // Track when stock was confirmed (prevent double-confirm)
+  failedAt?: Date                  // Track when payment failed (for auto-cleanup after 30 min)
   createdAt: Date
   updatedAt: Date
 }
@@ -130,7 +133,7 @@ const orderSchema = new Schema<IOrder>(
     },
     paymentStatus: {
       type: String,
-      enum: ['unpaid', 'paid'],
+      enum: ['unpaid', 'paid', 'failed'],
       default: 'unpaid',
     },
     orderStatus: {
@@ -151,9 +154,24 @@ const orderSchema = new Schema<IOrder>(
     reservedAt: Date,
     reservationExpiresAt: Date,
     holdId: String,
-    momoRequestId: String,
+    momoRequestId: {
+      type: String,
+      default: null,
+    },
+    momoOrderId: {
+      type: String,
+      default: null,
+    },
+    momoRetryCount: {
+      type: Number,
+      default: 0,
+    },
     momoTransactionId: String,
     stockConfirmedAt: {
+      type: Date,
+      default: null,
+    },
+    failedAt: {
       type: Date,
       default: null,
     },
@@ -166,6 +184,8 @@ orderSchema.index({ user: 1, createdAt: -1 })
 orderSchema.index({ orderCode: 1 })
 orderSchema.index({ orderStatus: 1 })
 orderSchema.index({ paymentStatus: 1 })
+// TTL index: Auto-delete orders where failedAt > 30 minutes old
+orderSchema.index({ failedAt: 1 }, { expireAfterSeconds: 1800, sparse: true })
 
 const Order: Model<IOrder> = mongoose.model<IOrder>('Order', orderSchema)
 export default Order

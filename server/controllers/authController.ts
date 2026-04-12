@@ -281,3 +281,91 @@ export const getCurrentUser = async (req: Request, res: Response): Promise<void>
     res.status(500).json({ success: false, message: error.message })
   }
 }
+
+// ✅ NEW: Change password (for logged-in users)
+export const changePassword = async (req: Request, res: Response): Promise<void> => {
+  const { currentPassword, newPassword, confirmPassword } = req.body
+  const userId = (req as any).user?._id
+
+  // Validation
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    res.status(400).json({ success: false, message: 'All fields are required' })
+    return
+  }
+
+  if (newPassword !== confirmPassword) {
+    res.status(400).json({ success: false, message: 'New passwords do not match' })
+    return
+  }
+
+  if (currentPassword === newPassword) {
+    res.status(400).json({ success: false, message: 'New password must be different from current password' })
+    return
+  }
+
+  // Validate new password strength
+  const passwordValidation = validatePassword(newPassword)
+  if (!passwordValidation.valid) {
+    res.status(400).json({
+      success: false,
+      message: 'New password does not meet security requirements',
+      errors: passwordValidation.errors,
+      requirements: getPasswordRequirements(),
+    })
+    return
+  }
+
+  try {
+    // Fetch user with password field
+    const user = await User.findById(userId).select('+password')
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' })
+      return
+    }
+
+    // Verify current password matches
+    const isPasswordValid = await user.matchPassword(currentPassword)
+    if (!isPasswordValid) {
+      // Log failed attempt
+      await AuditLog.create({
+        action: 'UPDATE',
+        entity: 'User',
+        entityId: user._id,
+        userId: user._id,
+        userEmail: user.email,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        status: 'failed',
+        errorMessage: 'Current password incorrect',
+        reason: 'Password change attempt with wrong current password',
+      })
+      res.status(401).json({ success: false, message: 'Current password is incorrect' })
+      return
+    }
+
+    // Update password (will be hashed by pre-save hook)
+    user.password = newPassword
+    await user.save()
+
+    // Log successful password change
+    await AuditLog.create({
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: user._id,
+      userId: user._id,
+      userEmail: user.email,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      status: 'success',
+      reason: 'User changed password',
+    })
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully',
+    })
+  } catch (error: any) {
+    console.error('❌ [CHANGE_PASSWORD] Error:', error)
+    res.status(500).json({ success: false, message: error.message })
+  }
+}
