@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: webbangame
+    runtime: node
+    region: oregon
+    buildCommand: "cd server && npm install && npm run build"
+    startCommand: "cd server && npm start"
+    envVars:
+      - key: NODE_ENV
+        value: production
