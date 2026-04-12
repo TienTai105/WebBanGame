@@ -12,7 +12,15 @@
     "resolveJsonModule": true,
     "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "useDefineForClassFields": true,
+    "declaration": true,
+    "declarationMap": true,
+    "outDir": "./dist",
+    "rootDir": ".",
+    "noEmitOnError": true,
+    "lib": ["ES2020"],
+    "types": ["node"]
   },
   "include": ["*.ts", "server.ts", "socket.ts", "seed.ts", "config/**/*.ts", "models/**/*.ts", "controllers/**/*.ts", "routes/**/*.ts", "middleware/**/*.ts", "utils/**/*.ts", "services/**/*.ts", "seeds/**/*.ts"],
   "exclude": ["node_modules", "dist"]

@@ -1,5 +1,5 @@
 import { Request, Response } from 'express'
-import Notification from '../models/Notification'
+import Notification from '../models/Notification.js'
 
 // Get paginated notifications for user
 export const getNotifications = async (req: Request, res: Response) => {
@@ -179,7 +179,7 @@ export const createNotification = async (
     icon?: string
     metadata?: any
   }
-) => {
+): Promise<any> => {
   try {
     const notification = new Notification({
       user: userId,

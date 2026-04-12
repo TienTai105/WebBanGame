@@ -1,10 +1,10 @@
 import { Request, Response } from 'express'
-import Promotion from '../models/Promotion'
-import User from '../models/User'
-import Product from '../models/Product'
-import Category from '../models/Category'
-import Platform from '../models/Platform'
-import AuditLog from '../models/AuditLog'
+import Promotion from '../models/Promotion.js'
+import User from '../models/User.js'
+import Product from '../models/Product.js'
+import Category from '../models/Category.js'
+import Platform from '../models/Platform.js'
+import AuditLog from '../models/AuditLog.js'
 
 /**
  * GET /api/promotions/admin/all

@@ -1,6 +1,6 @@
 import express, { Router } from 'express'
-import { protect } from '../middleware/auth'
-import { staffOnly, requirePermission, requireOTPVerification } from '../middleware/adminAuth'
+import { protect } from '../middleware/auth.js'
+import { staffOnly, requirePermission, requireOTPVerification } from '../middleware/adminAuth.js'
 import {
   getAllPromotions,
   getPromotionByCode,
@@ -11,7 +11,7 @@ import {
   deletePromotion,
   adminGetAllPromotions,
   adminGetPromotionById,
-} from '../controllers/promotionController'
+} from '../controllers/promotionController.js'
 
 const router: Router = express.Router()
 
