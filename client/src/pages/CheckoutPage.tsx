@@ -246,12 +246,15 @@ const CheckoutPage: FC = () => {
       return
     }
     
-    // ✅ CheckoutHold for ALL payment methods (by default on checkout)
-    // Show countdown timer regardless of payment method choice
+    // ✅ DISABLED FOR SPEC 4.5.2 TESTING: Auto-hold prevents race condition test
+    // Both users must be able to enter checkout simultaneously for concurrency testing
+    // Hold will now be created when clicking "Xác nhận đặt hàng" button instead
+    /*
     if (user && items.length > 0 && !holdCreated.current && !retryOrderId) {
       console.log('📦 Creating 15min checkout hold on checkout page...')
       createCheckoutHold()
     }
+    */
   }, [user, items, createCheckoutHold, retryOrderId])
 
   // ✅ POLLING: For retry payment, auto-confirm payment after Momo redirects
@@ -494,6 +497,13 @@ const CheckoutPage: FC = () => {
         orderItems: orderItems.length,
         holdId: holdId || 'NONE',
       })
+      
+      // SPEC 4.5.2: Create hold JUST BEFORE placing order (not on checkout entry)
+      // This allows both users to enter checkout simultaneously
+      if (!holdId) {
+        console.log('📦 [SPEC 4.5.2] Creating hold when clicking "Xác nhận đặt hàng"...')
+        await createCheckoutHold()
+      }
       
       const res = await api.post('/orders', {
         orderItems,

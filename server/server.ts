@@ -77,11 +77,6 @@ const generalLimiter = rateLimit({
     // Skip rate limiting for GET requests
     return req.method === 'GET'
   },
-  keyGenerator: (req) => {
-    // Use client IP for rate limiting
-    const ip = req.ip || req.socket.remoteAddress || 'unknown'
-    return ip
-  },
 })
 
 const authLimiter = rateLimit({
@@ -90,10 +85,6 @@ const authLimiter = rateLimit({
   message: 'Too many login attempts, please try again in 15 minutes.',
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    const ip = req.ip || req.socket.remoteAddress || 'unknown'
-    return `auth-${ip}`
-  },
 })
 
 // Apply general limiter to all /api routes
