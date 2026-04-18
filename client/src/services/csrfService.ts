@@ -7,22 +7,28 @@ let csrfToken: string | null = null
  * Fetch and cache CSRF token from server
  */
 export const fetchCsrfToken = async (): Promise<string> => {
-  // Return cached token if available
-  if (csrfToken) {
+  if (csrfToken !== null) {
     return csrfToken
   }
 
   try {
     const response = await axios.post(`${API_URL}/csrf-token`)
-    csrfToken = response.data.data.token
+
+    const token = response.data?.data?.token
+
+    if (!token) {
+      throw new Error('CSRF token not found')
+    }
+
+    csrfToken = token
+
     console.log('✅ CSRF token fetched and cached')
-    return csrfToken
+    return token 
   } catch (error: any) {
     console.error('❌ Failed to fetch CSRF token:', error.message)
     throw error
   }
 }
-
 /**
  * Get cached CSRF token (fetch if not available)
  */
@@ -32,7 +38,6 @@ export const getCsrfToken = async (): Promise<string> => {
   }
   return csrfToken
 }
-
 /**
  * Clear cached CSRF token (call on logout)
  */
