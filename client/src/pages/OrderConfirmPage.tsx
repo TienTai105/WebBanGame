@@ -64,23 +64,23 @@ const OrderConfirmPage: FC = () => {
         setLoading(true)
         const id = orderId || localStorage.getItem('lastOrderId')
         
-        console.log('📥 FETCH ORDER - ID:', id)
+        console.log('FETCH ORDER - ID:', id)
         
         if (!id) {
-          console.log('❌ NO ORDER ID - Redirecting to checkout')
+          console.log('NO ORDER ID - Redirecting to checkout')
           navigate('/checkout')
           return
         }
 
-        console.log('🔄 FETCHING ORDER FROM API...')
+        console.log('FETCHING ORDER FROM API...')
         const res = await api.get(`/orders/${id}`)
-        console.log('✅ API RESPONSE:', res.data)
+        console.log('API RESPONSE:', res.data)
         
         const order = res.data.data
-        console.log('📦 ORDER DATA:', order)
+        console.log('ORDER DATA:', order)
         
         if (!order) {
-          console.log('❌ NO ORDER DATA IN RESPONSE')
+          console.log('NO ORDER DATA IN RESPONSE')
           errorToast('Đơn hàng không tồn tại. Vui lòng tạo đơn hàng mới.')
           navigate('/checkout')
           return
@@ -88,7 +88,7 @@ const OrderConfirmPage: FC = () => {
 
         // Check payment status
         if (order.paymentMethod === 'Momo' && order.paymentStatus === 'unpaid') {
-          console.log('⚠️ MOMO PAYMENT STILL UNPAID - Starting polling...')
+          console.log('MOMO PAYMENT STILL UNPAID - Starting polling...')
           
           // Poll for payment status update (Momo callback may be delayed)
           let pollCount = 0
@@ -100,10 +100,10 @@ const OrderConfirmPage: FC = () => {
               const pollRes = await api.get(`/payment/momo/status/${order._id}`)
               const updatedOrder = pollRes.data.data
               
-              console.log(`📊 Poll #${pollCount + 1} - Status: ${updatedOrder.paymentStatus}`)
+              console.log(`Poll #${pollCount + 1} - Status: ${updatedOrder.paymentStatus}`)
               
               if (updatedOrder.paymentStatus === 'paid') {
-                console.log('✅ PAYMENT CONFIRMED VIA POLLING')
+                console.log('PAYMENT CONFIRMED VIA POLLING')
                 
                 // Clear polling interval
                 if (pollInterval) clearInterval(pollInterval)
@@ -146,11 +146,23 @@ const OrderConfirmPage: FC = () => {
                 setLoading(false)
                 return // STOP polling after success
               }
+
+              if (updatedOrder.paymentStatus === 'failed') {
+                console.log('PAYMENT FAILED VIA POLLING - Redirecting to checkout')
+                if (pollInterval) clearInterval(pollInterval)
+                errorToast('Thanh toán không thành công. Vui lòng thử lại.')
+                sessionStorage.setItem('paymentFailed', 'true')
+                localStorage.removeItem('lastOrderId')
+                setTimeout(() => {
+                  navigate('/checkout')
+                }, 2000)
+                return
+              }
               
               pollCount++
               if (pollCount >= maxPolls) {
                 // Timeout: payment still unpaid after 30 seconds
-                console.log('❌ PAYMENT TIMEOUT - Still unpaid after 30 seconds')
+                console.log('PAYMENT TIMEOUT - Still unpaid after 30 seconds')
                 if (pollInterval) clearInterval(pollInterval)
                 
                 errorToast('Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.')
@@ -162,7 +174,7 @@ const OrderConfirmPage: FC = () => {
                 }, 2000)
               }
             } catch (pollErr: any) {
-              console.error('❌ POLLING ERROR:', pollErr)
+              console.error('POLLING ERROR:', pollErr)
               pollCount++
               if (pollCount >= maxPolls) {
                 if (pollInterval) clearInterval(pollInterval)
@@ -182,8 +194,20 @@ const OrderConfirmPage: FC = () => {
           
           setLoading(false)
           return
+        } else if (order.paymentMethod === 'Momo' && order.paymentStatus === 'failed') {
+          // Handle failed Momo payment - redirect back to checkout
+          console.log('MOMO PAYMENT FAILED - Redirecting to checkout')
+          errorToast('Thanh toán không thành công. Vui lòng thử lại hoặc chọn phương thức thanh toán khác.')
+          sessionStorage.setItem('paymentFailed', 'true')
+          localStorage.removeItem('lastOrderId')
+          
+          setTimeout(() => {
+            navigate('/checkout')
+          }, 2000)
+          return
         }
         
+        // Only proceed to show confirm page if payment is successful (paid or cash)
         // Transform order data to match OrderData interface
         const orderData: OrderData = {
           paymentMethod: order.paymentMethod === 'Momo' ? 'momo' : 'cash',
@@ -215,7 +239,7 @@ const OrderConfirmPage: FC = () => {
           })),
         }
         
-        console.log('🎯 TRANSFORMED ORDER:', orderData)
+        console.log('TRANSFORMED ORDER:', orderData)
         setOrderData(orderData)
         // Only clear cart after successful payment
         clearCart()
@@ -224,9 +248,9 @@ const OrderConfirmPage: FC = () => {
         localStorage.setItem('lastOrderId', order._id)
         // Clear checkout data since we now have order from DB
         localStorage.removeItem('checkoutData')
-        console.log('✨ ORDER LOADED SUCCESSFULLY')
+        console.log('ORDER LOADED SUCCESSFULLY')
       } catch (err: any) {
-        console.error('❌ FETCH ORDER ERROR:', {
+        console.error('FETCH ORDER ERROR:', {
           message: err.message,
           response: err.response?.data,
           status: err.response?.status,
@@ -235,7 +259,7 @@ const OrderConfirmPage: FC = () => {
         
         // If order not found or deleted
         if (err.response?.status === 404) {
-          console.log('❌ ORDER NOT FOUND (404) - Order was deleted after failed payment')
+          console.log(' ORDER NOT FOUND (404) - Order was deleted after failed payment')
           errorToast('Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.')
           sessionStorage.setItem('paymentFailed', 'true')
           localStorage.removeItem('lastOrderId')
@@ -260,7 +284,7 @@ const OrderConfirmPage: FC = () => {
     if (orderData?.paymentMethod === 'momo' && !toastShownRef.current) {
       toastShownRef.current = true
       successToast('Thanh toán Momo thành công!')
-      console.log('✨ AUTO SUCCESS TOAST SHOWN FOR MOMO')
+      console.log(' AUTO SUCCESS TOAST SHOWN FOR MOMO')
     }
   }, [orderData?.paymentMethod])
 

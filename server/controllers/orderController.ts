@@ -641,6 +641,74 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
   })
 })
 
+// Delete order completely (for failed payments)
+export const deleteOrder = asyncHandler(async (req: Request, res: Response) => {
+  console.log(`🗑️ Delete order request for: ${req.params.id}`)
+
+  const order = await Order.findById(req.params.id)
+
+  if (!order) {
+    return res.status(404).json({
+      success: false,
+      message: 'Order not found',
+    })
+  }
+
+  console.log(`📦 Current order status: ${order.orderStatus}, Payment status: ${order.paymentStatus}`)
+
+  // Only allow deletion for pending/processing orders (same as cancel)
+  if (order.orderStatus !== 'pending' && order.orderStatus !== 'processing') {
+    return res.status(400).json({
+      success: false,
+      message: 'Chỉ có thể xóa đơn hàng chưa được giao hoặc đang xử lý',
+    })
+  }
+
+  const userId = (req as any).user._id
+  if (order.user.toString() !== userId && (req as any).user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Not authorized',
+    })
+  }
+
+  // Release reserved or sold stock back to available
+  if (order.orderStatus === 'pending' || order.orderStatus === 'processing') {
+    try {
+      // Check if order is confirmed/paid (Momo) or unpaid (COD)
+      const isConfirmed = order.paymentStatus === 'paid' || !!order.stockConfirmedAt
+      console.log(`💾 Releasing stock for ${order.orderItems.length} items before deletion... (isConfirmed: ${isConfirmed})`)
+      await inventoryService.releaseStockOnCancel(order.orderItems as any, order._id.toString(), isConfirmed)
+      console.log(`✅ Stock released successfully from ${isConfirmed ? 'SOLD' : 'RESERVED'} pool`)
+    } catch (err) {
+      console.error('⚠️ Error releasing stock on delete:', err)
+    }
+  }
+
+  // Delete the order completely
+  await Order.findByIdAndDelete(order._id)
+
+  // Audit log for order deletion
+  try {
+    const AuditLog = (await import('../models/AuditLog.js')).default
+    await AuditLog.create({
+      action: 'DELETE',
+      entity: 'Order',
+      entityId: order._id,
+      changes: { deleted: true, reason: 'User cancelled failed payment' },
+      userId: (req as any).user?._id,
+      ipAddress: req.ip,
+    })
+  } catch {}
+
+  console.log(`✔️ Order deleted successfully: ${order._id}`)
+
+  res.status(200).json({
+    success: true,
+    message: 'Order deleted successfully',
+  })
+})
+
 // Confirm order payment - move reserved → sold (called after payment success)
 export const confirmOrderPayment = asyncHandler(async (req: Request, res: Response) => {
   const order = await Order.findById(req.params.id)

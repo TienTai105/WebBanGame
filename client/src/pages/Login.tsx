@@ -33,8 +33,19 @@ const Login: FC = () => {
         body: JSON.stringify(data),
       })
 
-      if (response.ok) {
-        const result = await response.json()
+      const responseText = await response.text()
+      let result: any = null
+      let errorMessage = 'Email hoặc mật khẩu không đúng'
+
+      try {
+        result = JSON.parse(responseText)
+      } catch {
+        if (responseText) {
+          errorMessage = responseText
+        }
+      }
+
+      if (response.ok && result) {
         const user = result.data.user
         const token = result.data.accessToken
 
@@ -63,7 +74,7 @@ const Login: FC = () => {
           setTimeout(() => navigate(redirectTo), 1500)
         }
       } else {
-        warningToast('Email hoặc mật khẩu không đúng')
+        warningToast((result && result.message) || errorMessage)
       }
     } catch (error) {
       warningToast('Lỗi kết nối, vui lòng thử lại')

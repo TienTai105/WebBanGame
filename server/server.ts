@@ -9,6 +9,7 @@ import dotenv from 'dotenv'
 import connectDB from './config/db.js'
 import { errorHandler } from './middleware/auth.js'
 import { verifyCsrfToken, generateCsrfToken } from './middleware/csrf.js' // ✅ Add CSRF import
+import { sanitizeInput } from './middleware/sanitize.js' // ✅ Add XSS protection
 import { startCronJobs } from './utils/cronJobs.js'
 import { initSocket } from './socket.js'
 
@@ -45,7 +46,29 @@ connectDB()
 startCronJobs()
 
 // Middleware
-app.use(helmet()) // Security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"], // Cho phép inline scripts cho React dev
+      styleSrc: ["'self'", "'unsafe-inline'"], // Cho phép inline styles
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "ws:", "wss:"], // Cho phép WebSocket
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  noSniff: true,
+  xssFilter: true,
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+})) // Security headers
 app.use(
   cors({
     origin: process.env.CLIENT_URL || ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
@@ -56,6 +79,9 @@ app.use(morgan('combined')) // Logging
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ limit: '10mb', extended: true }))
 app.use(cookieParser())
+
+// ✅ XSS Protection Middleware
+app.use(sanitizeInput)
 
 // Static files for images
 app.use('/images', express.static('public/images'))

@@ -84,8 +84,9 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
 
     // Check Momo response
     if (momoResponse.resultCode === 0) {
-      // Success - save requestId for verification
+      // Success - save requestId and merchant momoOrderId for later status queries
       order.momoRequestId = momoResponse.requestId
+      order.momoOrderId = momoOrderId
       await order.save()
 
       return res.status(200).json({
@@ -96,6 +97,7 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
           applink: momoResponse.applink,
           qrCodeUrl: momoResponse.qrCodeUrl,
           requestId: momoResponse.requestId,
+          momoOrderId,
         },
       })
     } else {
@@ -263,24 +265,16 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
     console.log(`❌ MOMO PAYMENT FAILED - Result Code: ${resultCode} - Marking order as failed for retry`)
     
     try {
-      // Release stock first
-      await inventoryService.releaseStock(order.orderItems as any, order._id.toString())
-      
-      // If order has holdId, mark hold as released so it can be reused
-      if (order.holdId) {
-        const CheckoutHold = require('../models/CheckoutHold.js').default
-        await CheckoutHold.updateOne(
-          { holdId: order.holdId },
-          { released: false }
-        ).catch((err: any) => console.log('⚠️ Hold reset failed:', err.message))
+      // Do not mark as failed if already confirmed via redirect success detection
+      if (!order.stockConfirmedAt) {
+        order.paymentStatus = 'failed'
+        order.momoRequestId = null  // Reset so new QR can be generated
+        order.failedAt = new Date() // Track when payment failed for auto-cleanup
+        await order.save()
+        console.log(`✅ Order marked as failed (kept in DB for retry): ${order._id}`)
+      } else {
+        console.log(`⏭️ [MOMO CALLBACK] Order ${order._id} already confirmed via redirect success, ignoring failed callback`)
       }
-      
-      // Mark order as FAILED (not deleted) - allows retry
-      order.paymentStatus = 'failed'
-      order.momoRequestId = null  // Reset so new QR can be generated
-      order.failedAt = new Date() // Track when payment failed for auto-cleanup
-      await order.save()
-      console.log(`✅ Order marked as failed (kept in DB for retry): ${order._id}`)
     } catch (err: any) {
       console.error('⚠️ Error handling failed payment:', err.message)
     }
@@ -293,14 +287,16 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
   }
 })
 
-/**
- * GET /api/payment/momo/status/:orderId
- * Polling endpoint to check payment status
- * Auto-queries Momo if payment not yet confirmed
- */
 export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Response) => {
   const { orderId } = req.params
   const userId = (req as any).user._id
+
+  // Check for Momo redirect success params (for test environment fallback)
+  const { resultCode, transId } = req.query
+  const isMomoRedirectSuccess = resultCode === '0' && transId
+
+  console.log(`🔍 [MOMO STATUS] Checking status for order: ${orderId}`)
+  console.log(`🔍 [MOMO STATUS] Momo redirect params: resultCode=${resultCode}, transId=${transId}`)
 
   const order = await Order.findById(orderId)
   if (!order) {
@@ -326,14 +322,121 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
     })
   }
 
+  // SPECIAL CASE: Momo test environment redirect success - auto-confirm payment
+  if (isMomoRedirectSuccess && order.paymentMethod === 'Momo' && !order.stockConfirmedAt) {
+    console.log(`🎉 [MOMO REDIRECT SUCCESS] Auto-confirming payment for order ${order._id}`)
+    
+    // Reset failed status if this was a retry after failure
+    if (order.paymentStatus === 'failed') {
+      console.log(`🔄 [MOMO REDIRECT SUCCESS] Resetting failed status for retry order ${order._id}`)
+      order.paymentStatus = 'unpaid'
+      order.failedAt = undefined
+    }
+    
+    try {
+      // Confirm order stock (move reserved → sold)
+      await inventoryService.confirmOrderStock(order.orderItems as any, order._id.toString())
+      order.stockConfirmedAt = new Date()
+
+      // Mark order as paid
+      order.paymentStatus = 'paid'
+      order.momoTransactionId = transId as string
+      await order.save()
+
+      console.log(`✅ [MOMO REDIRECT SUCCESS] Order confirmed: ${order.orderCode}`)
+
+      // Send confirmation email
+      try {
+        const populatedOrder = await Order.findById(order._id)
+          .populate('user')
+          .populate({
+            path: 'orderItems.product',
+            select: 'name price',
+          })
+
+        if (populatedOrder) {
+          const customerEmail = populatedOrder.shippingAddress.email || (populatedOrder.user as any)?.email
+          if (customerEmail) {
+            const emailPayload = {
+              to: customerEmail,
+              orderCode: populatedOrder.orderCode,
+              orderItems: populatedOrder.orderItems.map((item: any) => ({
+                name: item.product?.name || item.name || 'Unknown Product',
+                quantity: item.quantity,
+                priceAtPurchase: item.priceAtPurchase || item.price,
+                variantSku: item.variantSku,
+                variant: item.variant,
+                warranty: item.warranty,
+              })),
+              shippingAddress: {
+                name: populatedOrder.shippingAddress.name || '',
+                address: populatedOrder.shippingAddress.address || '',
+                city: populatedOrder.shippingAddress.city || '',
+                phone: populatedOrder.shippingAddress.phone || '',
+                district: populatedOrder.shippingAddress.district || '',
+                ward: populatedOrder.shippingAddress.ward || '',
+              },
+              totalPrice: populatedOrder.totalPrice,
+              discountAmount: populatedOrder.discountAmount || 0,
+              discountCode: populatedOrder.discountCode || undefined,
+              shippingFee: populatedOrder.shippingFee || 0,
+              finalTotal: populatedOrder.finalPrice,
+              paymentMethod: populatedOrder.paymentMethod,
+              paymentStatus: 'paid',
+            }
+
+            await sendOrderConfirmationEmail(emailPayload)
+            console.log(`✅ [MOMO REDIRECT] Confirmation email sent to ${customerEmail}`)
+          }
+        }
+      } catch (emailError: any) {
+        console.error('❌ [MOMO REDIRECT] Failed to send confirmation email:', emailError.message)
+      }
+
+      // Auto-generate packing slip
+      try {
+        await packingSlipService.generatePackingSlip(order._id.toString())
+        console.log(`✅ [MOMO REDIRECT] Packing slip generated for ${order.orderCode}`)
+      } catch (slipError: any) {
+        console.error('⚠️ [MOMO REDIRECT] Failed to generate packing slip:', slipError.message)
+      }
+
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      res.set('Pragma', 'no-cache')
+      res.set('Expires', '0')
+      return res.status(200).json({
+        success: true,
+        data: {
+          paymentStatus: 'paid',
+          orderStatus: order.orderStatus,
+          momoTransactionId: order.momoTransactionId,
+        },
+      })
+    } catch (confirmError: any) {
+      console.error('❌ [MOMO REDIRECT] Failed to confirm payment:', confirmError.message)
+      // Continue to status query as fallback
+    }
+  }
+
   // If Momo payment and not paid yet, query Momo API to check status
   if (order.paymentMethod === 'Momo' && order.momoRequestId && order.paymentStatus === 'unpaid') {
     try {
+      const momoOrderId = order.momoOrderId || order._id.toString()
+      console.log(`🔍 [MOMO STATUS] Querying status for order ${order._id}`)
+      console.log(`🔍 [MOMO STATUS] Using momoOrderId: ${momoOrderId}`)
+      console.log(`🔍 [MOMO STATUS] Using requestId: ${order.momoRequestId}`)
+
+      if (!order.momoOrderId) {
+        console.warn(`⚠️ [MOMO STATUS] Missing momoOrderId for order ${order._id}, falling back to order._id for query`)
+      }
+
       const momoStatus = await momoService.queryPaymentStatus(
         order.momoRequestId,
-        order._id.toString(),
+        momoOrderId,
         order.finalPrice
       )
+
+      console.log(`📊 [MOMO STATUS] Query result:`, momoStatus)
 
       // resultCode 0 = payment successful
       if (momoStatus.resultCode === 0) {
@@ -447,19 +550,7 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
         console.log(`❌ MOMO PAYMENT FAILED FROM QUERY - Result Code: ${momoStatus.resultCode} - Marking order as failed`)
         
         try {
-          // Release stock first
-          await inventoryService.releaseStock(order.orderItems as any, order._id.toString())
-          
-          // If order has holdId, mark hold as released so it can be reused
-          if (order.holdId) {
-            const CheckoutHold = require('../models/CheckoutHold.js').default
-            await CheckoutHold.updateOne(
-              { holdId: order.holdId },
-              { released: false }
-            ).catch((err: any) => console.log('⚠️ Hold reset failed:', err.message))
-          }
-          
-          // Mark as FAILED (keep order for retry)
+          // Do not release reserved stock here; keep it until the hold expires or user retries.
           order.paymentStatus = 'failed'
           order.momoRequestId = null
           order.failedAt = new Date() // Track when payment failed for auto-cleanup
@@ -472,10 +563,15 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
         res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
         res.set('Pragma', 'no-cache')
         res.set('Expires', '0')
-        return res.status(400).json({
-          success: false,
+        return res.status(200).json({
+          success: true,
+          data: {
+            paymentStatus: order.paymentStatus,
+            orderStatus: order.orderStatus,
+            momoTransactionId: order.momoTransactionId,
+            redirectUrl: `/orders/${order._id}`,
+          },
           message: 'Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.',
-          redirectUrl: `/orders/${order._id}`
         })
       }
     } catch (err: any) {

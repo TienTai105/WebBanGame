@@ -177,12 +177,10 @@ const AdminInventory: React.FC = () => {
       params.set('limit', '20')
       if (movementType !== 'all') params.set('type', movementType)
 
-      const { data, error } = await adminFetch<{
-        movements: StockMovement[]
-        pagination: { pages: number }
-      }>(`/api/inventory/admin/movements?${params}`)
+      const { data: fullResponse, error } = await adminFetch<any>(`/api/inventory/admin/movements?${params}`)
 
       if (error) throw error
+      const data = fullResponse?.data || fullResponse
       setMovements(data?.movements || [])
       setMovementsTotalPages(data?.pagination?.pages || 1)
     } catch (err: any) {

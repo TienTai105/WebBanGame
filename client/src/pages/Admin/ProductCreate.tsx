@@ -166,9 +166,9 @@ const ProductCreate: React.FC = () => {
     const fetchMetadata = async () => {
       try {
         const [catRes, genreRes, platformRes] = await Promise.all([
-          adminFetch<any>('/categories'),
-          adminFetch<any>('/genres'),
-          adminFetch<any>('/platforms'),
+          adminFetch<any>('/api/categories'),
+          adminFetch<any>('/api/genres'),
+          adminFetch<any>('/api/platforms'),
         ])
 
         let categoriesArray: Category[] = []

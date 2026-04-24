@@ -97,6 +97,17 @@ const STATUS_TABS: { key: StatusTab; label: string; borderColor: string; textCol
   { key: 'cancelled',  label: 'Đã Hủy',     borderColor: 'border-red-400',    textColor: 'text-red-600' },
 ]
 
+// ── Safe Status Getters ────────────────────────────────────
+const DEFAULT_STATUS = { label: 'Không xác định', color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200' }
+
+const getOrderStatus = (status: any) => {
+  return ORDER_STATUS_MAP[status as OrderStatus] || DEFAULT_STATUS
+}
+
+const getPaymentStatus = (status: any) => {
+  return PAYMENT_STATUS_MAP[status as PaymentStatus] || DEFAULT_STATUS
+}
+
 // ── Status Transition Validation ───────────────────────────
 // Define which status transitions are allowed
 const isValidStatusTransition = (from: OrderStatus, to: OrderStatus): boolean => {
@@ -119,8 +130,8 @@ const isValidStatusTransition = (from: OrderStatus, to: OrderStatus): boolean =>
 }
 
 const getInvalidTransitionMessage = (from: OrderStatus, to: OrderStatus): string => {
-  const fromLabel = ORDER_STATUS_MAP[from].label
-  const toLabel = ORDER_STATUS_MAP[to].label
+  const fromLabel = getOrderStatus(from).label
+  const toLabel = getOrderStatus(to).label
   
   if (['completed', 'cancelled', 'refunded'].includes(from)) {
     return `❌ Không thể thay đổi đơn hàng ở trạng thái "${fromLabel}". Đây là trạng thái cuối cùng.`
@@ -143,6 +154,20 @@ const getInvalidTransitionMessage = (from: OrderStatus, to: OrderStatus): string
 
 // ── Component ──────────────────────────────────────────────
 const AdminOrders: React.FC = () => {
+  // Error boundary state
+  const [renderError, setRenderError] = useState<string | null>(null)
+
+  // Handle render errors
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('AdminOrders render error:', event.error)
+      setRenderError(event.error?.message || 'Lỗi hiển thị không xác định')
+    }
+
+    window.addEventListener('error', handleError)
+    return () => window.removeEventListener('error', handleError)
+  }, [])
+
   // View mode
   const [viewMode, setViewMode] = useState<'orders' | 'packingslips'>('orders')
 
@@ -404,6 +429,26 @@ const AdminOrders: React.FC = () => {
   }
 
   // ── Render ───────────────────────────────────────────────
+  if (renderError) {
+    return (
+      <AdminLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <span className="material-symbols-outlined text-6xl text-red-300 mb-4 block">error</span>
+            <h1 className="text-2xl font-bold text-slate-900 mb-2">Lỗi hiển thị</h1>
+            <p className="text-slate-500 mb-4">{renderError}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700"
+            >
+              Tải lại trang
+            </button>
+          </div>
+        </div>
+      </AdminLayout>
+    )
+  }
+
   return (
     <AdminLayout>
       {/* ── Header ───────────────────────────────────── */}
@@ -540,16 +585,16 @@ const AdminOrders: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredOrders.map((order) => {
-                    const os = ORDER_STATUS_MAP[order.orderStatus]
-                    const ps = PAYMENT_STATUS_MAP[order.paymentStatus]
+                    const os = getOrderStatus(order.orderStatus)
+                    const ps = getPaymentStatus(order.paymentStatus)
                     return (
                       <tr key={order._id} className="hover:bg-slate-50/60 transition-colors duration-200 group">
                         <td className="px-8 py-6 font-bold text-indigo-600 text-sm">{order.orderCode}</td>
                         <td className="px-6 py-6 text-sm text-slate-500">{formatDate(order.createdAt)}</td>
                         <td className="px-6 py-6">
                           <div className="flex flex-col">
-                            <span className="font-bold text-sm text-slate-900">{order.user?.name || order.shippingAddress?.name}</span>
-                            <span className="text-xs text-slate-400">{order.shippingAddress?.phone || order.user?.phone}</span>
+                            <span className="font-bold text-sm text-slate-900">{order.user?.name || order.shippingAddress?.name || 'Unknown'}</span>
+                            <span className="text-xs text-slate-400">{order.shippingAddress?.phone || order.user?.phone || ''}</span>
                           </div>
                         </td>
                         <td className="px-6 py-6 text-right font-extrabold text-sm text-slate-900">{formatVND(order.finalPrice)}</td>
@@ -649,7 +694,7 @@ const AdminOrders: React.FC = () => {
                       <label className="block text-xs uppercase font-bold text-slate-400 tracking-wider mb-2">Trạng thái đơn hàng</label>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {(Object.keys(ORDER_STATUS_MAP) as OrderStatus[]).map((status) => {
-                          const s = ORDER_STATUS_MAP[status]
+                          const s = getOrderStatus(status)
                           const isActive = editOrderStatus === status
                           const isValid = isValidStatusTransition(selectedOrder.orderStatus, status)
                           const title = isValid ? '' : getInvalidTransitionMessage(selectedOrder.orderStatus, status)
@@ -698,7 +743,7 @@ const AdminOrders: React.FC = () => {
                       <label className="block text-xs uppercase font-bold text-slate-400 tracking-wider mb-2">Trạng thái thanh toán</label>
                       <div className="grid grid-cols-2 gap-2">
                         {(Object.keys(PAYMENT_STATUS_MAP) as PaymentStatus[]).map((status) => {
-                          const s = PAYMENT_STATUS_MAP[status]
+                          const s = getPaymentStatus(status)
                           const isActive = editPaymentStatus === status
                           return (
                             <button
@@ -755,10 +800,10 @@ const AdminOrders: React.FC = () => {
                           </h4>
                           <ul className="space-y-1 text-sm text-amber-800">
                             {editOrderStatus !== selectedOrder.orderStatus && (
-                              <li>• Trạng thái: <span className="font-bold">{ORDER_STATUS_MAP[selectedOrder.orderStatus].label}</span> → <span className="font-bold text-emerald-700">{ORDER_STATUS_MAP[editOrderStatus].label}</span></li>
+                              <li>• Trạng thái: <span className="font-bold">{getOrderStatus(selectedOrder.orderStatus).label}</span> → <span className="font-bold text-emerald-700">{getOrderStatus(editOrderStatus).label}</span></li>
                             )}
                             {editPaymentStatus !== selectedOrder.paymentStatus && (
-                              <li>• Thanh toán: <span className="font-bold">{PAYMENT_STATUS_MAP[selectedOrder.paymentStatus].label}</span> → <span className="font-bold text-emerald-700">{PAYMENT_STATUS_MAP[editPaymentStatus].label}</span></li>
+                              <li>• Thanh toán: <span className="font-bold">{getPaymentStatus(selectedOrder.paymentStatus).label}</span> → <span className="font-bold text-emerald-700">{getPaymentStatus(editPaymentStatus).label}</span></li>
                             )}
                             {editTrackingNumber !== (selectedOrder.trackingNumber || '') && (
                               <li>• Mã vận chuyển: <span className="font-bold text-emerald-700">{editTrackingNumber || '(xóa)'}</span></li>
@@ -805,12 +850,12 @@ const AdminOrders: React.FC = () => {
                   {/* ── View Mode ──────────────────────── */}
                   {/* Status row */}
                   <div className="flex items-center gap-3 flex-wrap">
-                    {(() => { const os = ORDER_STATUS_MAP[selectedOrder.orderStatus]; return (
+                    {(() => { const os = getOrderStatus(selectedOrder.orderStatus); return (
                       <span className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase ${os.bg} ${os.color} border ${os.border}`}>
                         {os.dot && <span className={`w-2 h-2 rounded-full ${os.dot}`} />} {os.label}
                       </span>
                     )})()}
-                    {(() => { const ps = PAYMENT_STATUS_MAP[selectedOrder.paymentStatus]; return (
+                    {(() => { const ps = getPaymentStatus(selectedOrder.paymentStatus); return (
                       <span className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-extrabold uppercase ${ps.bg} ${ps.color} border ${ps.border}`}>
                         {ps.dot && <span className={`w-2 h-2 rounded-full ${ps.dot}`} />} {ps.label}
                       </span>
