@@ -8,6 +8,8 @@ const router = Router()
 router.post('/register', asyncHandler(authController.register))
 router.post('/login', asyncHandler(authController.login))
 router.post('/refresh-token', asyncHandler(authController.refreshToken))
+router.post('/check-email', asyncHandler(authController.checkEmailExists))
+router.post('/check-phone', asyncHandler(authController.checkPhoneExists))
 
 // Protected routes
 router.post('/logout', protect, asyncHandler(authController.logout))

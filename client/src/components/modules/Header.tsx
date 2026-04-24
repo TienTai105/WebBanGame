@@ -50,21 +50,33 @@ const Header: FC<HeaderProps> = ({
       setShowDropdown(false)
     }
 
+    const handleTokenExpired = () => {
+      console.log('Token expired, clearing user data...')
+      setUser(null)
+      setShowDropdown(false)
+      localStorage.removeItem('user')
+      localStorage.removeItem('accessToken')
+      navigate('/login')
+    }
+
     loadUser()
 
     // Listen for custom login event
     window.addEventListener('userLoggedIn', loadUser)
     // Listen for custom logout event
     window.addEventListener('userLoggedOut', handleLogoutEvent)
+    // Listen for token expiration event
+    window.addEventListener('tokenExpired', handleTokenExpired)
     // Also listen for storage changes
     window.addEventListener('storage', loadUser)
 
     return () => {
       window.removeEventListener('userLoggedIn', loadUser)
       window.removeEventListener('userLoggedOut', handleLogoutEvent)
+      window.removeEventListener('tokenExpired', handleTokenExpired)
       window.removeEventListener('storage', loadUser)
     }
-  }, [])
+  }, [navigate])
 
   // Close dropdown when clicking outside
   useEffect(() => {

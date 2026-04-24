@@ -5,6 +5,7 @@ import ActionMenu, { ActionMenuItem } from '../../components/admin/ActionMenu'
 import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
 import PackingSlipTab from '../../components/admin/PackingSlipTab'
 import { errorToast, successToast } from '../../utils/toast'
+import { adminFetch } from '../../utils/adminFetch'
 
 // ── Types ──────────────────────────────────────────────────
 interface OrderUser {
@@ -168,49 +169,6 @@ const AdminOrders: React.FC = () => {
   const [otpModal, setOtpModal] = useState(false)
   const [pendingAction, setPendingAction] = useState<{ type: 'status'; orderId: string; status: OrderStatus } | { type: 'edit' } | null>(null)
 
-  // ── Authenticated fetch with auto token refresh ──────────
-  const adminFetch = useCallback(async (url: string, options?: RequestInit) => {
-    let token = localStorage.getItem('adminToken')
-    if (!token) throw new Error('No admin token found')
-
-    const makeHeaders = (t: string) => ({
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${t}`,
-      ...options?.headers,
-    })
-
-    let res = await fetch(url, { ...options, headers: makeHeaders(token), credentials: 'include' })
-
-    if (res.status === 401) {
-      // Try refreshing token
-      const refreshRes = await fetch('/api/auth/refresh-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-      })
-      if (refreshRes.ok) {
-        const refreshData = await refreshRes.json()
-        const newToken = refreshData.data?.accessToken
-        if (newToken) {
-          localStorage.setItem('adminToken', newToken)
-          res = await fetch(url, { ...options, headers: makeHeaders(newToken), credentials: 'include' })
-        }
-      }
-      if (res.status === 401) {
-        localStorage.removeItem('adminToken')
-        localStorage.removeItem('adminUser')
-        window.location.href = '/login'
-        throw new Error('Phiên đăng nhập hết hạn')
-      }
-    }
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}))
-      throw new Error(errData.message || `Lỗi server: ${res.status}`)
-    }
-    return res.json()
-  }, [])
-
   // ── Fetch orders ─────────────────────────────────────────
   const fetchOrders = useCallback(async () => {
     setLoading(true)
@@ -220,7 +178,8 @@ const AdminOrders: React.FC = () => {
       params.set('limit', String(LIMIT))
       if (activeTab !== 'all') params.set('status', activeTab)
 
-      const json = await adminFetch(`/api/orders/admin/all?${params}`)
+      const { data: json, error } = await adminFetch(`/api/orders/admin/all?${params}`)
+      if (error) throw error
       setOrders(json.data || [])
       setTotalOrders(json.total || 0)
       setTotalPages(json.pages || 1)
@@ -242,7 +201,8 @@ const AdminOrders: React.FC = () => {
           ? '/api/orders/admin/all?limit=1'
           : `/api/orders/admin/all?limit=1&status=${status}`
         try {
-          const json = await adminFetch(url)
+          const { data: json, error } = await adminFetch(url)
+          if (error) throw error
           counts[status] = json.total ?? 0
         } catch { /* silent */ }
       })

@@ -4,7 +4,7 @@ import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import ActionMenu, { ActionMenuItem } from '../../components/admin/ActionMenu'
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal'
 import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
-import adminApiCall from '../../utils/adminApi'
+import { adminFetch } from '../../utils/adminFetch'
 import { errorToast, successToast } from '../../utils/toast'
 
 // ── Types ──────────────────────────────────────────────────
@@ -94,11 +94,12 @@ const AdminContacts: React.FC = () => {
       params.set('limit', String(LIMIT))
       if (statusFilter !== 'all') params.set('status', statusFilter)
 
-      const { data, error } = await adminApiCall<any>(`/contact/admin/all?${params}`)
+      const { data: fullResponse, error } = await adminFetch<any>(`/api/contact/admin/all?${params}`)
       if (error) throw error
-      setContacts(data?.contacts || [])
+      const contactsData = fullResponse?.data || fullResponse
+      setContacts(contactsData?.contacts || [])
 
-      const pagination = data?.pagination
+      const pagination = contactsData?.pagination
       if (pagination) {
         setTotalPages(pagination.pages || 1)
         setTotalItems(pagination.total || 0)
@@ -112,9 +113,10 @@ const AdminContacts: React.FC = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      const { data, error } = await adminApiCall<any>('/contact/admin/stats')
+      const { data: fullResponse, error } = await adminFetch<any>('/api/contact/admin/stats')
       if (error) throw error
-      setStats(data || { total: 0, pending: 0, read: 0, replied: 0, closed: 0 })
+      const statsData = fullResponse?.data || fullResponse
+      setStats(statsData || { total: 0, pending: 0, read: 0, replied: 0, closed: 0 })
     } catch { /* silent */ }
   }, [])
 
@@ -127,7 +129,7 @@ const AdminContacts: React.FC = () => {
       const body: any = { status: newStatus }
       if (notes !== undefined) body.adminNotes = notes
 
-      const { error } = await adminApiCall(`/contact/admin/${contact._id}/status`, {
+      const { error } = await adminFetch(`/api/contact/admin/${contact._id}/status`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       })
@@ -161,7 +163,7 @@ const AdminContacts: React.FC = () => {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      const { error } = await adminApiCall(`/contact/admin/${deleteTarget._id}`, {
+      const { error } = await adminFetch(`/api/contact/admin/${deleteTarget._id}`, {
         method: 'DELETE',
         headers: otpToken ? { otpToken } : undefined,
       })
@@ -198,7 +200,7 @@ const AdminContacts: React.FC = () => {
     setReplying(true)
     try {
       const body: any = { status: 'replied', replyMessage }
-      const { error } = await adminApiCall(`/contact/admin/${selectedContact._id}/status`, {
+      const { error } = await adminFetch(`/api/contact/admin/${selectedContact._id}/status`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       })
@@ -220,7 +222,7 @@ const AdminContacts: React.FC = () => {
     setSaving(true)
     try {
       const body: any = { status: selectedContact.status, adminNotes }
-      const { error } = await adminApiCall(`/contact/admin/${selectedContact._id}/status`, {
+      const { error } = await adminFetch(`/api/contact/admin/${selectedContact._id}/status`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       })
@@ -307,7 +309,7 @@ const AdminContacts: React.FC = () => {
             <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-6xl text-slate-100 opacity-30">{card.icon}</span>
             <span className="uppercase tracking-widest text-slate-400 text-[10px] font-bold">{card.label}</span>
             <div className="flex items-end gap-2">
-              <span className={`text-3xl font-extrabold ${card.textColor}`}>{card.value.toLocaleString()}</span>
+              <span className={`text-3xl font-extrabold ${card.textColor}`}>{Number(card.value ?? 0).toLocaleString()}</span>
               {card.alert && (
                 <span className="flex items-center gap-1 text-[10px] text-amber-500 font-bold mb-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> MỚI

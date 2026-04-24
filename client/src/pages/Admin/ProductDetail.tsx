@@ -5,7 +5,7 @@ import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal'
 import EditVariantModal from '../../components/admin/EditVariantModal'
 import RichTextEditor, { RichTextEditorHandle } from '../../components/admin/RichTextEditor'
-import adminApiCall from '../../utils/adminApi'
+import { adminFetch } from '../../utils/adminFetch'
 import { errorToast, successToast } from '../../utils/toast'
 import { ProductVariant } from '../../components/admin/VariantManagementModal'
 
@@ -199,16 +199,22 @@ const ProductDetail: React.FC = () => {
     try {
       setIsLoading(true)
 
-      const { data, error } = await adminApiCall<Product>(
-        `/admin/products/${productId}`
+      const { data, error } = await adminFetch<any>(
+        `/api/admin/products/${productId}`
       )
 
       if (error) throw error
       
       // Data could be Product object directly or wrapped
-      let productData = data
+      let productData: Product = data as Product
+      
       if (!productData) {
         throw new Error('Product data not found')
+      }
+      
+      // If response is wrapped in 'data' key (like { success: true, data: product })
+      if (productData && typeof productData === 'object' && 'data' in productData) {
+        productData = (productData as any).data
       }
       
       // If response is wrapped in another object, extract it
@@ -216,10 +222,10 @@ const ProductDetail: React.FC = () => {
         productData = (productData as any).product
       }
 
-      setProduct(productData)
+      setProduct(productData!)
       
       // Initialize variants - ensure each has attributes
-      const variantsData = (productData.variants || []).map((v: any) => ({
+      const variantsData = (productData!.variants || []).map((v: any) => ({
         ...v,
         attributes: v.attributes && typeof v.attributes === 'object' ? v.attributes : {}
       }))
@@ -227,51 +233,51 @@ const ProductDetail: React.FC = () => {
 
       // ✅ set form
       setFormData({
-        name: productData.name || '',
-        sku: productData.sku || '',
-        description: productData.description || '',
-        price: productData.price || 0,
-        cost: productData.cost || 0,
-        discount: productData.discount || 0,
-        minPrice: productData.minPrice || 0,
-        maxPrice: productData.maxPrice || 0,
+        name: productData!.name || '',
+        sku: productData!.sku || '',
+        description: productData!.description || '',
+        price: productData!.price || 0,
+        cost: productData!.cost || 0,
+        discount: productData!.discount || 0,
+        minPrice: productData!.minPrice || 0,
+        maxPrice: productData!.maxPrice || 0,
         categoryId:
-          typeof productData.categoryId === 'object'
-            ? productData.categoryId._id
-            : productData.categoryId || '',
-        isActive: productData.isActive ?? true,
-        isBaseProduct: productData.isBaseProduct ?? false,
-        stock: productData.stock || 0,
+          typeof productData!.categoryId === 'object'
+            ? productData!.categoryId._id
+            : productData!.categoryId || '',
+        isActive: productData!.isActive ?? true,
+        isBaseProduct: productData!.isBaseProduct ?? false,
+        stock: productData!.stock || 0,
         genresId:
-          productData.genres && Array.isArray(productData.genres)
-            ? productData.genres.map((g: any) => typeof g === 'string' ? g : g._id).join(',')
+          productData!.genres && Array.isArray(productData!.genres)
+            ? productData!.genres.map((g: any) => typeof g === 'string' ? g : g._id).join(',')
             : '',
         platformsId:
-          productData.platforms && Array.isArray(productData.platforms)
-            ? productData.platforms.map((p: any) => typeof p === 'string' ? p : p._id).join(',')
+          productData!.platforms && Array.isArray(productData!.platforms)
+            ? productData!.platforms.map((p: any) => typeof p === 'string' ? p : p._id).join(',')
             : '',
       })
 
       // Set genres, platforms
-      if (productData.genres && Array.isArray(productData.genres)) {
-        setSelectedGenres(productData.genres.map((g: any) => typeof g === 'string' ? g : g._id))
+      if (productData!.genres && Array.isArray(productData!.genres)) {
+        setSelectedGenres(productData!.genres.map((g: any) => typeof g === 'string' ? g : g._id))
       }
-      if (productData.platforms && Array.isArray(productData.platforms)) {
-        setSelectedPlatforms(productData.platforms.map((p: any) => typeof p === 'string' ? p : p._id))
+      if (productData!.platforms && Array.isArray(productData!.platforms)) {
+        setSelectedPlatforms(productData!.platforms.map((p: any) => typeof p === 'string' ? p : p._id))
       }
-      if (productData.tags && Array.isArray(productData.tags)) {
-        setTags(productData.tags.join(', '))
+      if (productData!.tags && Array.isArray(productData!.tags)) {
+        setTags(productData!.tags.join(', '))
       }
-      if (productData.specifications && typeof productData.specifications === 'object') {
-        setSpecifications(productData.specifications)
+      if (productData!.specifications && typeof productData!.specifications === 'object') {
+        setSpecifications(productData!.specifications)
       }
       
       // Handle trailers - check both trailers array and videoTrailerUrl string
-      if (productData.videoTrailerUrl && Array.isArray(productData.videoTrailerUrl)) {
-        setTrailers(productData.videoTrailerUrl)
-      } else if (productData.videoTrailerUrl && typeof productData.videoTrailerUrl === 'string') {
+      if (productData!.videoTrailerUrl && Array.isArray(productData!.videoTrailerUrl)) {
+        setTrailers(productData!.videoTrailerUrl)
+      } else if (productData!.videoTrailerUrl && typeof productData!.videoTrailerUrl === 'string') {
         // Convert YouTube URL to embed format
-        const videoId = extractYoutubeVideoId(productData.videoTrailerUrl)
+        const videoId = extractYoutubeVideoId(productData!.videoTrailerUrl)
         if (videoId) {
           setTrailers([{
             url: `https://www.youtube.com/embed/${videoId}`,
@@ -283,10 +289,10 @@ const ProductDetail: React.FC = () => {
 
       // ✅ set ảnh chính
       const mainIndex =
-        productData.images?.findIndex((img) => img.isMain) ?? 0
+        productData!.images?.findIndex((img: any) => img.isMain) ?? 0
 
       setMainImageIndex(Math.max(0, mainIndex))
-      setImages(productData.images || [])
+      setImages(productData!.images || [])
 
     } catch (err) {
       console.error('Error loading product:', err)
@@ -307,9 +313,9 @@ const ProductDetail: React.FC = () => {
     const fetchMetadata = async () => {
       try {
         const [catRes, genreRes, platformRes] = await Promise.all([
-          adminApiCall<any>('/categories'),
-          adminApiCall<any>('/genres'),
-          adminApiCall<any>('/platforms'),
+          adminFetch<any>('/categories'),
+          adminFetch<any>('/genres'),
+          adminFetch<any>('/platforms'),
         ])
 
         // Handle categories
@@ -352,7 +358,7 @@ const ProductDetail: React.FC = () => {
     const fetchInventory = async () => {
       if (!productId || !product) return
       try {
-        const { data, error } = await adminApiCall<any>(`/inventory/product/${productId}`)
+        const { data, error } = await adminFetch<any>(`/api/inventory/product/${productId}`)
         if (error) throw error
 
         let inventoryDataList = data
@@ -399,7 +405,7 @@ const ProductDetail: React.FC = () => {
   const refreshInventoryData = async () => {
     if (!productId || !product) return
     try {
-      const { data, error } = await adminApiCall<any>(`/inventory/product/${productId}`)
+      const { data, error } = await adminFetch<any>(`/api/inventory/product/${productId}`)
       if (error) throw error
 
       let inventoryDataList = data
@@ -567,8 +573,8 @@ const ProductDetail: React.FC = () => {
       
       const variantSku = (variant as any).sku || `variant-${variant.name}`
       
-      const { error } = await adminApiCall(
-        `/inventory/${product._id}/${variantSku}`,
+      const { error } = await adminFetch(
+        `/api/inventory/${product._id}/${variantSku}`,
         {
           method: 'PUT',
           body: JSON.stringify({
@@ -640,12 +646,19 @@ const ProductDetail: React.FC = () => {
         formData.append('images', file)
       })
 
+      // Get CSRF token from cookie
+      const csrfToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrfToken='))
+        ?.split('=')[1]
+
       // Upload to backend
-      const response = await fetch('/api/upload', {
+      const response = await fetch('/api/upload/upload', {
         method: 'POST',
         body: formData,
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('adminToken') || ''}`,
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
         }
       })
 
@@ -768,8 +781,8 @@ const ProductDetail: React.FC = () => {
               }
             })
 
-            const { error } = await adminApiCall(
-              `/inventory/${product._id}/${variantSku}`,
+            const { error } = await adminFetch(
+              `/api/inventory/${product._id}/${variantSku}`,
               {
                 method: 'PUT',
                 body: JSON.stringify({
@@ -918,11 +931,18 @@ const ProductDetail: React.FC = () => {
         formData.append('images', file)
       })
 
+      // Get CSRF token from cookie
+      const csrfToken = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('csrfToken='))
+        ?.split('=')[1]
+
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('adminToken') || ''}`,
+          ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
         }
       })
 
@@ -1037,7 +1057,7 @@ const ProductDetail: React.FC = () => {
         variants,
       }
 
-      const { error } = await adminApiCall(`/admin/products/${productId}`, {
+      const { error } = await adminFetch(`/api/admin/products/${productId}`, {
         method: 'PUT',
         body: JSON.stringify(savePayload),
       })

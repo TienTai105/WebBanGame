@@ -10,20 +10,21 @@ import {
   approveReview,
   rejectReview,
 } from '../controllers/reviewController.js'
-import { protect, adminOnly } from '../middleware/auth.js'
+import { protect } from '../middleware/auth.js'
+import { staffOnly, requirePermission } from '../middleware/adminAuth.js'
 
 const router = express.Router()
 
-// ✅ Admin routes (MUST come FIRST - specific routes before generic!)
-router.get('/admin/all', protect, adminOnly, getAdminReviews)  // Get all reviews for admin dashboard
+// ✅ Admin/staff routes (MUST come FIRST - specific routes before generic!)
+router.get('/admin/all', protect, staffOnly, requirePermission('reviews'), getAdminReviews)  // Get all reviews for admin dashboard
 
 // Public routes
 router.get('/product/:productId', getProductReviews)
 router.get('/:id', getReviewById)
 
-// More admin routes
-router.put('/:id/approve', protect, adminOnly, approveReview)
-router.put('/:id/reject', protect, adminOnly, rejectReview)
+// More admin/staff routes
+router.put('/:id/approve', protect, staffOnly, requirePermission('reviews'), approveReview)
+router.put('/:id/reject', protect, staffOnly, requirePermission('reviews'), rejectReview)
 
 // Protected routes (user)
 router.post('/', protect, createReview)

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import AdminLayout from '../../components/admin/AdminLayout'
 import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import { errorToast } from '../../utils/toast'
-import adminApiCall from '../../utils/adminApi'
+import { adminFetch } from '../../utils/adminFetch'
 
 interface AuditLogEntry {
   _id: string
@@ -55,11 +55,11 @@ const AdminAuditLog: React.FC = () => {
         if (filters.action) params.set('action', filters.action)
         if (filters.entity) params.set('entity', filters.entity)
 
-        const { data: resp, error } = await adminApiCall<AuditLogResponse>(
-          `/admin/audit-logs?${params.toString()}`
+        const { data: fullResponse, error } = await adminFetch<{ success: boolean; data: AuditLogResponse }>(
+          `/api/admin/audit-logs?${params.toString()}`
         )
         if (error) throw error
-        setData(resp)
+        setData(fullResponse?.data || null)
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to load audit logs'
         errorToast(msg)

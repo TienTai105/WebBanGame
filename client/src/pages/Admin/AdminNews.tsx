@@ -6,6 +6,7 @@ import ActionMenu, { ActionMenuItem } from '../../components/admin/ActionMenu'
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal'
 import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
 import { errorToast, successToast } from '../../utils/toast'
+import { adminFetch } from '../../utils/adminFetch'
 
 // ── Types ──────────────────────────────────────────────────
 interface NewsArticle {
@@ -81,40 +82,6 @@ const AdminNews: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<NewsArticle | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // ── Admin Fetch ──────────────────────────────────────────
-  const adminFetch = useCallback(async (url: string, options?: RequestInit) => {
-    let token = localStorage.getItem('adminToken')
-    if (!token) throw new Error('No admin token found')
-
-    const makeHeaders = (t: string) => ({
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${t}`,
-      ...options?.headers,
-    })
-
-    let res = await fetch(url, { ...options, headers: makeHeaders(token), credentials: 'include' })
-
-    if (res.status === 401) {
-      const refreshRes = await fetch('/api/auth/refresh-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-      })
-      if (refreshRes.ok) {
-        const refreshData = await refreshRes.json()
-        const newToken = refreshData.data?.accessToken
-        if (newToken) {
-          localStorage.setItem('adminToken', newToken)
-          res = await fetch(url, { ...options, headers: makeHeaders(newToken), credentials: 'include' })
-        }
-      }
-    }
-
-    const json = await res.json()
-    if (!res.ok) throw new Error(json.message || 'Request failed')
-    return json
-  }, [])
-
   // ── Fetch Articles ───────────────────────────────────────
   const fetchArticles = useCallback(async () => {
     setLoading(true)
@@ -127,7 +94,8 @@ const AdminNews: React.FC = () => {
       if (statusFilter !== 'all') params.set('status', statusFilter)
       if (searchQuery) params.set('search', searchQuery)
 
-      const json = await adminFetch(`/api/news/admin/all?${params}`)
+      const { data: json, error } = await adminFetch(`/api/news/admin/all?${params}`)
+      if (error) throw error
       const data: NewsArticle[] = json.data || []
 
       // Client-side category filter (API doesn't support it for admin)
@@ -148,8 +116,9 @@ const AdminNews: React.FC = () => {
   // ── Compute Stats ────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     try {
-      const json = await adminFetch('/api/news/admin/all?limit=9999')
-      const all: NewsArticle[] = json.data || []
+      const { data: fullResponse, error } = await adminFetch<any>('/api/news/admin/all?limit=9999')
+      if (error) throw error
+      const all: NewsArticle[] = fullResponse?.data || []
       const published = all.filter((a) => a.status === 'published').length
       const draft = all.filter((a) => a.status === 'draft').length
       const avgRead = all.length > 0 ? +(all.reduce((s, a) => s + a.readTime, 0) / all.length).toFixed(1) : 0

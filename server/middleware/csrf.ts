@@ -28,8 +28,17 @@ export const generateCsrfToken = (req: Request, res: Response): void => {
       token,
       createdAt: Date.now(),
     })
+
+    // Set CSRF token cookie so frontend can read it from document.cookie
+    res.cookie('csrfToken', token, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 1000 * 60 * 60, // 1 hour
+    })
     
-    // Return token to client
+    // Return token to client as well
     res.json({
       success: true,
       data: { token },
@@ -48,7 +57,10 @@ export const verifyCsrfToken = (req: Request, res: Response, next: NextFunction)
   }
 
   // ✅ Skip CSRF check for public auth endpoints (no auth required, protected by rate limiting)
-  if (req.path === '/api/auth/login' || req.path === '/api/auth/register') {
+  if (req.path === '/api/auth/login' || 
+      req.path === '/api/auth/register' || 
+      req.path === '/api/auth/check-email' || 
+      req.path === '/api/auth/check-phone') {
     return next()
   }
 

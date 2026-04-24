@@ -226,16 +226,16 @@ const AdminReviews: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
-                          {review.user.name.charAt(0).toUpperCase()}
+                          {(review.user?.name?.charAt(0) ?? '?').toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-medium text-slate-900 truncate">{review.user.name}</p>
+                          <p className="text-xs font-medium text-slate-900 truncate">{review.user?.name ?? 'Người dùng không xác định'}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-slate-900 line-clamp-1">{review.product.name}</p>
+                        <p className="text-xs font-medium text-slate-900 line-clamp-1">{review.product?.name ?? 'Sản phẩm không xác định'}</p>
                         {review.variant && <p className="text-xs text-slate-500 truncate">{review.variant.name}</p>}
                       </div>
                     </td>

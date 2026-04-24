@@ -7,43 +7,31 @@ const api = axios.create({
   withCredentials: true,
 })
 
-// ✅ CSRF token cache
-let csrfToken: string | null = null
-
-// ✅ Get fresh CSRF token
-const getCsrfToken = async (): Promise<string> => {
-  try {
-    if (!csrfToken) {
-      const response = await axios.post(
-        `${API_BASE_URL}/csrf-token`,
-        {},
-        { withCredentials: true }
-      )
-      csrfToken = response.data.data.token
-    }
-    return csrfToken || '' // ✅ Guarantee string return
-  } catch (error) {
-    console.error('❌ Failed to get CSRF token:', error)
-    throw error
-  }
+// ✅ Đọc CSRF token từ cookie (KHÔNG cache ở JS)
+const getCsrfFromCookie = (): string => {
+  const match = document.cookie.match(/(^| )csrfToken=([^;]+)/)
+  const token = match ? decodeURIComponent(match[2]) : ''
+  console.log('🔐 getCsrfFromCookie result:', {
+    found: !!token,
+    token: token ? token.substring(0, 20) + '...' : 'NOT FOUND',
+    allCookies: document.cookie.substring(0, 100),
+  })
+  return token
 }
 
 // Add token to requests
 api.interceptors.request.use(
-  async (config: InternalAxiosRequestConfig) => {
-    // ✅ Add access token
-    const token = localStorage.getItem('accessToken') // Fallback ke localStorage if needed
+  (config: InternalAxiosRequestConfig) => {
+    const token = localStorage.getItem('adminToken') || localStorage.getItem('accessToken')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
 
-    // ✅ Add CSRF token for mutations
+    // ✅ Add CSRF token for mutations (từ cookie)
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(config.method?.toUpperCase() || '')) {
-      try {
-        const csrf = await getCsrfToken()
+      const csrf = getCsrfFromCookie()
+      if (csrf) {
         config.headers['X-CSRF-Token'] = csrf
-      } catch (error) {
-        console.warn('⚠️ CSRF token not available, continuing without it')
       }
     }
 
@@ -55,10 +43,6 @@ api.interceptors.request.use(
 // Handle token refresh on 401
 api.interceptors.response.use(
   (response: AxiosResponse) => {
-    // ✅ Update CSRF token if returned
-    if (response.headers['x-csrf-token']) {
-      csrfToken = response.headers['x-csrf-token'] as string
-    }
     return response
   },
   async (error: AxiosError) => {
@@ -76,6 +60,7 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
+      const hadAdminToken = Boolean(localStorage.getItem('adminToken'))
       try {
         const response = await axios.post(
           `${API_BASE_URL}/auth/refresh-token`,
@@ -84,18 +69,18 @@ api.interceptors.response.use(
         )
         const { accessToken } = response.data.data
         localStorage.setItem('accessToken', accessToken)
+        if (hadAdminToken) {
+          localStorage.setItem('adminToken', accessToken)
+        }
 
         api.defaults.headers.common.Authorization = `Bearer ${accessToken}`
         originalRequest.headers.Authorization = `Bearer ${accessToken}`
 
-        // ✅ Reset CSRF token cache to fetch new one
-        csrfToken = null
-
         return api(originalRequest)
       } catch (refreshError) {
         localStorage.removeItem('accessToken')
+        localStorage.removeItem('adminToken')
         localStorage.removeItem('user')
-        // ✅ Emit event instead of hard redirect for smooth UX
         window.dispatchEvent(new Event('tokenExpired'))
         return Promise.reject(refreshError)
       }
@@ -106,4 +91,3 @@ api.interceptors.response.use(
 )
 
 export default api
-export { getCsrfToken }

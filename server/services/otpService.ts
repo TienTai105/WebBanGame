@@ -88,7 +88,7 @@ function getActionLabel(action: string): string {
     UPDATE_SETTINGS: 'cập nhật cài đặt hệ thống',
     DELETE_NEWS: 'xóa bài viết',
   }
-  return labels[action] || 'hành động'
+  return labels[action] || action || 'hành động'
 }
 
 /**

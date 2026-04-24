@@ -5,6 +5,7 @@ import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import RichTextEditor, { RichTextEditorHandle } from '../../components/admin/RichTextEditor'
 import { useAdminAuth } from '../../context/AdminAuthContext'
 import { errorToast, successToast } from '../../utils/toast'
+import { adminFetch } from '../../utils/adminFetch'
 
 const CATEGORIES = ['News', 'Review', 'Guide', 'Tutorial', 'Interview', 'Opinion', 'Video']
 
@@ -31,39 +32,6 @@ const NewsCreate: React.FC = () => {
   // SEO
   const [seoTitle, setSeoTitle] = useState('')
   const [seoDescription, setSeoDescription] = useState('')
-
-  // ── Admin Fetch ──────────────────────────────────────────
-  const adminFetch = useCallback(async (url: string, options?: RequestInit) => {
-    let token = localStorage.getItem('adminToken')
-    if (!token) throw new Error('No admin token found')
-
-    const makeHeaders = (t: string): Record<string, string> => ({
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${t}`,
-    })
-
-    let res = await fetch(url, { ...options, headers: makeHeaders(token), credentials: 'include' })
-
-    if (res.status === 401) {
-      const refreshRes = await fetch('/api/auth/refresh-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-      })
-      if (refreshRes.ok) {
-        const refreshData = await refreshRes.json()
-        const newToken = refreshData.data?.accessToken
-        if (newToken) {
-          localStorage.setItem('adminToken', newToken)
-          res = await fetch(url, { ...options, headers: makeHeaders(newToken), credentials: 'include' })
-        }
-      }
-    }
-
-    const json = await res.json()
-    if (!res.ok) throw new Error(json.message || 'Request failed')
-    return json
-  }, [])
 
   // ── Upload image ─────────────────────────────────────────
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

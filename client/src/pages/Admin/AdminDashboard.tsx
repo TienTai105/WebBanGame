@@ -8,7 +8,7 @@ import AdminLayout from '../../components/admin/AdminLayout'
 import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import ActionMenu from '../../components/admin/ActionMenu'
 import { errorToast } from '../../utils/toast'
-import adminApiCall from '../../utils/adminApi'
+import  {adminFetch}  from '../../utils/adminFetch'
 
 const ORDERS_PER_PAGE = 6
 
@@ -193,15 +193,19 @@ const AdminDashboard: React.FC = () => {
         const startDate = `${dateRange.startDate.getFullYear()}-${pad(dateRange.startDate.getMonth() + 1)}-${pad(dateRange.startDate.getDate())}`
         const endDate = `${dateRange.endDate.getFullYear()}-${pad(dateRange.endDate.getMonth() + 1)}-${pad(dateRange.endDate.getDate())}`
 
-        const { data, error } = await adminApiCall<DashboardStats>(
-          `/admin/dashboard/stats?startDate=${startDate}&endDate=${endDate}&comparisonType=${comparisonType}`
+        const { data, error } = await adminFetch<{ success: boolean; data: DashboardStats }>(
+          `/api/admin/dashboard/stats?startDate=${startDate}&endDate=${endDate}&comparisonType=${comparisonType}`
         )
 
         if (error) {
           throw error
         }
 
-        setStats(data)
+        if (!data?.data) {
+          throw new Error('Invalid dashboard stats response')
+        }
+
+        setStats(data.data)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Error loading dashboard'
         errorToast(message)

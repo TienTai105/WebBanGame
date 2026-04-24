@@ -3,7 +3,7 @@ import AdminLayout from '../../components/admin/AdminLayout'
 import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
 import ActionMenu, { ActionMenuItem } from '../../components/admin/ActionMenu'
-import adminApiCall from '../../utils/adminApi'
+import { adminFetch } from '../../utils/adminFetch'
 import { errorToast, successToast } from '../../utils/toast'
 
 // ── Types ──────────────────────────────────────────────────
@@ -138,15 +138,18 @@ const AdminInventory: React.FC = () => {
       if (statusFilter !== 'all') params.set('status', statusFilter)
       if (searchQuery.trim()) params.set('search', searchQuery.trim())
 
-      const { data, error } = await adminApiCall<{
+      const { data, error } = await adminFetch<{
+        success: boolean
+        data:{
         items: InventoryItem[]
         pagination: { page: number; total: number; pages: number }
-      }>(`/inventory/admin/all?${params}`)
+        }
+      }>(`/api/inventory/admin/all?${params}`)
 
       if (error) throw error
-      setItems(data?.items || [])
-      setTotalPages(data?.pagination?.pages || 1)
-      setTotalItems(data?.pagination?.total || 0)
+      setItems(data?.data?.items || [])
+      setTotalPages(data?.data?.pagination.pages || 1)
+      setTotalItems(data?.data?.pagination.total || 0)
     } catch (err: any) {
       errorToast(err.message || 'Không thể tải dữ liệu kho')
     } finally {
@@ -157,8 +160,11 @@ const AdminInventory: React.FC = () => {
   // ── Fetch stats ──────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     try {
-      const { data, error } = await adminApiCall<InventoryStats>('/inventory/admin/stats')
-      if (!error && data) setStats(data)
+      const { data: fullResponse, error } = await adminFetch<any>('/api/inventory/admin/stats')
+      if (!error && fullResponse) {
+        const statsData = fullResponse?.data || fullResponse
+        setStats(statsData)
+      }
     } catch { /* silent */ }
   }, [])
 
@@ -171,10 +177,10 @@ const AdminInventory: React.FC = () => {
       params.set('limit', '20')
       if (movementType !== 'all') params.set('type', movementType)
 
-      const { data, error } = await adminApiCall<{
+      const { data, error } = await adminFetch<{
         movements: StockMovement[]
         pagination: { pages: number }
-      }>(`/inventory/admin/movements?${params}`)
+      }>(`/api/inventory/admin/movements?${params}`)
 
       if (error) throw error
       setMovements(data?.movements || [])
@@ -213,7 +219,7 @@ const AdminInventory: React.FC = () => {
     setSaving(true)
     try {
       const sku = editItem.variantSku || 'null'
-      const { error } = await adminApiCall(`/inventory/${editItem.productId}/${sku}`, {
+      const { error } = await adminFetch(`/api/inventory/${editItem.productId}/${sku}`, {
         method: 'PUT',
         body: JSON.stringify(editForm),
         headers: otpToken ? { otpToken } : undefined,
@@ -328,7 +334,7 @@ const AdminInventory: React.FC = () => {
             <span className="material-symbols-outlined absolute -right-2 -bottom-2 text-6xl text-slate-100 opacity-30">{card.icon}</span>
             <span className="uppercase tracking-widest text-slate-400 text-[10px] font-bold">{card.label}</span>
             <div className="flex items-end gap-2">
-              <span className={`text-3xl font-extrabold ${card.textColor}`}>{card.value.toLocaleString()}</span>
+              <span className={`text-3xl font-extrabold ${card.textColor}`}>{Number(card.value ?? 0).toLocaleString()}</span>
               {card.alert && (
                 <span className="flex items-center gap-1 text-[10px] text-red-500 font-bold mb-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> CẦN XỬ LÝ

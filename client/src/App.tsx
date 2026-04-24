@@ -206,6 +206,24 @@ function AppRootContent() {
   const navigate = useNavigate()
   const isAdminRoute = location.pathname.startsWith('/admin')
 
+  // ✅ Fetch CSRF token on app load
+  useEffect(() => {
+    const fetchCsrfToken = async () => {
+      try {
+        await fetch('/api/csrf-token', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        console.log('✅ CSRF token fetched and cookie set')
+      } catch (error) {
+        console.warn('⚠️ Failed to fetch CSRF token:', error)
+      }
+    }
+
+    fetchCsrfToken()
+  }, [])
+
   // ✅ Listen to token expiration event
   useEffect(() => {
     const handleTokenExpired = () => {

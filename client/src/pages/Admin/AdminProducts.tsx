@@ -6,7 +6,7 @@ import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationMo
 import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
 import VariantManagementModal, { ProductVariant } from '../../components/admin/VariantManagementModal'
 import ActionMenu from '../../components/admin/ActionMenu'
-import adminApiCall from '../../utils/adminApi'
+import { adminFetch } from '../../utils/adminFetch'
 import { errorToast, successToast } from '../../utils/toast'
 
 // Format price to VND
@@ -95,8 +95,8 @@ const AdminProducts: React.FC = () => {
           ...(filters.search && { search: filters.search }),
         })
 
-        const { data, error } = await adminApiCall<any>(
-          `/admin/products?${queryParams.toString()}`
+        const { data, error } = await adminFetch<any>(
+          `/api/admin/products?${queryParams.toString()}`
         )
 
 
@@ -145,7 +145,7 @@ const AdminProducts: React.FC = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const { data, error } = await adminApiCall<any>('/categories')
+        const { data, error } = await adminFetch<any>('/api/categories')
         console.log('Categories API Response:', { data, error })
         if (error) {
           console.error('Error fetching categories:', error)
@@ -244,7 +244,7 @@ const AdminProducts: React.FC = () => {
       if (deleteModal.isBulkDelete) {
         // Bulk delete
         const deletePromises = Array.from(selectedProducts).map((productId) =>
-          adminApiCall(`/admin/products/${productId}`, { method: 'DELETE', headers })
+          adminFetch(`/api/admin/products/${productId}`, { method: 'DELETE', headers })
         )
         const results = await Promise.all(deletePromises)
         const errors = results.filter((r) => r.error)
@@ -260,7 +260,7 @@ const AdminProducts: React.FC = () => {
         }
       } else {
         // Single delete
-        const { error } = await adminApiCall(`/admin/products/${deleteModal.productId}`, {
+        const { error } = await adminFetch(`/api/admin/products/${deleteModal.productId}`, {
           method: 'DELETE',
           headers,
         })

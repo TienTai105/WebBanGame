@@ -4,7 +4,7 @@ import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import ActionMenu, { ActionMenuItem } from '../../components/admin/ActionMenu'
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal'
 import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
-import adminApiCall from '../../utils/adminApi'
+import { adminFetch } from '../../utils/adminFetch'
 import { errorToast, successToast } from '../../utils/toast'
 
 // ── Types ──────────────────────────────────────────────────
@@ -83,11 +83,12 @@ const AdminComments: React.FC = () => {
       params.set('limit', String(LIMIT))
       if (statusFilter !== 'all') params.set('status', statusFilter)
 
-      const { data, error } = await adminApiCall<any>(`/admin/comments?${params}`)
+      const { data: fullResponse, error } = await adminFetch<any>(`/api/admin/comments?${params}`)
       if (error) throw error
-      setComments(data?.comments || [])
+      const commentsData = fullResponse?.data || fullResponse
+      setComments(commentsData?.comments || [])
 
-      const pagination = data?.pagination
+      const pagination = commentsData?.pagination
       if (pagination) {
         setTotalPages(pagination.pages || 1)
         setTotalItems(pagination.total || 0)
@@ -101,13 +102,14 @@ const AdminComments: React.FC = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      const { data, error } = await adminApiCall<any>('/admin/comments/stats')
+      const { data: fullResponse, error } = await adminFetch<any>('/api/admin/comments/stats')
       if (error) throw error
+      const statsData = fullResponse?.data || fullResponse
       setStats({
-        total: data?.total || 0,
-        pending: data?.pending || 0,
-        approved: data?.approved || 0,
-        rejected: data?.rejected || 0,
+        total: statsData?.total || 0,
+        pending: statsData?.pending || 0,
+        approved: statsData?.approved || 0,
+        rejected: statsData?.rejected || 0,
       })
     } catch { /* silent */ }
   }, [])
@@ -118,7 +120,7 @@ const AdminComments: React.FC = () => {
   // ── Update status ────────────────────────────────────────
   const handleUpdateStatus = async (comment: Comment, newStatus: string) => {
     try {
-      const { error } = await adminApiCall(`/admin/comments/${comment._id}/status`, {
+      const { error } = await adminFetch(`/api/admin/comments/${comment._id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       })
@@ -145,7 +147,7 @@ const AdminComments: React.FC = () => {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      const { error } = await adminApiCall(`/admin/comments/${deleteTarget._id}`, {
+      const { error } = await adminFetch(`/api/admin/comments/${deleteTarget._id}`, {
         method: 'DELETE',
         headers: otpToken ? { otpToken } : undefined,
       })

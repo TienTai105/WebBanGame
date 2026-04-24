@@ -5,6 +5,7 @@ import ActionMenu, { ActionMenuItem } from '../../components/admin/ActionMenu'
 import { errorToast, successToast } from '../../utils/toast'
 import { getSocket } from '../../utils/socket'
 import { STAFF_PERMISSIONS } from '../../context/AdminAuthContext'
+import { adminFetch } from '../../utils/adminFetch'
 
 // ── Types ──────────────────────────────────────────────────
 interface User {
@@ -14,6 +15,7 @@ interface User {
   phone?: string
   role: 'customer' | 'staff' | 'admin'
   permissions?: string[]
+  defaultOTP?: string
   isActive: boolean
   avatar?: string
   lastLogin?: string
@@ -120,46 +122,8 @@ const AdminUsers: React.FC = () => {
   const [logsFilter, setLogsFilter] = useState<string>('all')
 
   // ── Authenticated fetch ──────────────────────────────────
-  const adminFetch = useCallback(async (url: string, options?: RequestInit) => {
-    let token = localStorage.getItem('adminToken')
-    if (!token) throw new Error('No admin token found')
 
-    const makeHeaders = (t: string) => ({
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${t}`,
-      ...options?.headers,
-    })
-
-    let res = await fetch(url, { ...options, headers: makeHeaders(token), credentials: 'include' })
-
-    if (res.status === 401) {
-      const refreshRes = await fetch('/api/auth/refresh-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-      })
-      if (refreshRes.ok) {
-        const refreshData = await refreshRes.json()
-        const newToken = refreshData.data?.accessToken
-        if (newToken) {
-          localStorage.setItem('adminToken', newToken)
-          res = await fetch(url, { ...options, headers: makeHeaders(newToken), credentials: 'include' })
-        }
-      }
-      if (res.status === 401) {
-        localStorage.removeItem('adminToken')
-        localStorage.removeItem('adminUser')
-        window.location.href = '/login'
-        throw new Error('Phiên đăng nhập hết hạn')
-      }
-    }
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}))
-      throw new Error(errData.message || `Lỗi server: ${res.status}`)
-    }
-    return res.json()
-  }, [])
+  // Use shared adminFetch helper imported from utils/adminFetch
 
   // ── Fetch users ──────────────────────────────────────────
   const fetchUsers = useCallback(async () => {
@@ -172,7 +136,8 @@ const AdminUsers: React.FC = () => {
       if (activeTab !== 'all') params.set('role', activeTab)
       if (searchQuery.trim()) params.set('search', searchQuery.trim())
 
-      const json = await adminFetch(`/api/admin/users?${params}`)
+      const { data: json, error } = await adminFetch(`/api/admin/users?${params}`)
+      if (error) throw error
       setUsers(json.data?.users || [])
       setTotalPages(json.data?.pagination?.pages || 1)
       setTotalUsers(json.data?.pagination?.total || 0)
@@ -186,7 +151,8 @@ const AdminUsers: React.FC = () => {
   // ── Fetch stats ──────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     try {
-      const json = await adminFetch('/api/admin/users/stats')
+      const { data: json, error } = await adminFetch('/api/admin/users/stats')
+      if (error) throw error
       if (json.data) setStats(json.data)
     } catch { /* silent */ }
   }, [adminFetch])
@@ -194,7 +160,8 @@ const AdminUsers: React.FC = () => {
   // ── Fetch audit logs ─────────────────────────────────────
   const fetchAuditLogs = useCallback(async () => {
     try {
-      const json = await adminFetch('/api/admin/audit-logs?entity=User&limit=5&adminOnly=true')
+      const { data: json, error } = await adminFetch('/api/admin/audit-logs?entity=User&limit=5&adminOnly=true')
+      if (error) throw error
       if (json.data?.logs) setAuditLogs(json.data.logs)
     } catch { /* silent */ }
   }, [adminFetch])
@@ -213,7 +180,8 @@ const AdminUsers: React.FC = () => {
       params.set('limit', '10')
       params.set('adminOnly', 'true')
       if (logsFilter !== 'all') params.set('action', logsFilter)
-      const json = await adminFetch(`/api/admin/audit-logs?${params}`)
+      const { data: json, error } = await adminFetch(`/api/admin/audit-logs?${params}`)
+      if (error) throw error
       if (json.data) {
         setAllLogs(json.data.logs || [])
         setLogsTotalPages(json.data.pagination?.pages || 1)
@@ -253,7 +221,8 @@ const AdminUsers: React.FC = () => {
   // ── Toggle active ────────────────────────────────────────
   const handleToggleActive = async (user: User) => {
     try {
-      const json = await adminFetch(`/api/admin/users/${user._id}/toggle-active`, { method: 'PUT' })
+      const { data: json, error } = await adminFetch(`/api/admin/users/${user._id}/toggle-active`, { method: 'PUT' })
+      if (error) throw error
       successToast(json.message || 'Cập nhật thành công')
       fetchUsers()
       fetchStats()
@@ -315,7 +284,8 @@ const AdminUsers: React.FC = () => {
   // ── Reset password ───────────────────────────────────────
   const handleResetPassword = async (user: User) => {
     try {
-      const json = await adminFetch(`/api/admin/users/${user._id}/reset-password`, { method: 'POST' })
+      const { data: json, error } = await adminFetch(`/api/admin/users/${user._id}/reset-password`, { method: 'POST' })
+      if (error) throw error
       successToast(json.message || 'Đã gửi email đặt lại mật khẩu')
     } catch (err: any) {
       errorToast(err.message || 'Không thể gửi email')
@@ -370,7 +340,7 @@ const AdminUsers: React.FC = () => {
         icon: 'shield_person',
         label: 'Quản lý quyền',
         color: 'indigo',
-        onClick: () => { setSelectedUser(user); setSelectedPermissions(user.permissions || []); setDefaultOTP(''); setEditingPermissions(true); setEditingRole(false) },
+        onClick: () => { setSelectedUser(user); setSelectedPermissions(user.permissions || []); setDefaultOTP(user.defaultOTP || ''); setEditingPermissions(true); setEditingRole(false) },
       })
     }
     items.push({ icon: 'lock_reset', label: 'Đặt lại mật khẩu', color: 'default', onClick: () => handleResetPassword(user) })
@@ -1021,7 +991,7 @@ const AdminUsers: React.FC = () => {
                     )}
                     {selectedUser.role === 'staff' && (
                       <button
-                        onClick={() => { setSelectedPermissions(selectedUser.permissions || []); setDefaultOTP(''); setEditingPermissions(true); setEditingRole(false) }}
+                        onClick={() => { setSelectedPermissions(selectedUser.permissions || []); setDefaultOTP(selectedUser.defaultOTP || ''); setEditingPermissions(true); setEditingRole(false) }}
                         className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-600 transition-all"
                       >
                         <span className="material-symbols-outlined text-base">shield_person</span>

@@ -6,6 +6,7 @@ import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationMo
 import OTPVerificationModal from '../../components/admin/OTPVerificationModal'
 import PromotionModal from '../../components/admin/PromotionModal'
 import { errorToast, successToast } from '../../utils/toast'
+import { adminFetch } from '../../utils/adminFetch'
 
 // ── Types ──────────────────────────────────────────────────
 interface Promotion {
@@ -88,39 +89,6 @@ const AdminPromotions: React.FC = () => {
   const [modalPromotion, setModalPromotion] = useState<Promotion | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
 
-  // ── Admin Fetch ────────────────────────────────────────
-  const adminFetch = useCallback(async (url: string, options?: RequestInit) => {
-    let token = localStorage.getItem('adminToken')
-    if (!token) throw new Error('No admin token')
-
-    const makeHeaders = (t: string): Record<string, string> => ({
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${t}`,
-    })
-
-    let res = await fetch(url, { ...options, headers: makeHeaders(token), credentials: 'include' })
-
-    if (res.status === 401) {
-      const refreshRes = await fetch('/api/auth/refresh-token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-      })
-      if (refreshRes.ok) {
-        const refreshData = await refreshRes.json()
-        const newToken = refreshData.data?.accessToken
-        if (newToken) {
-          localStorage.setItem('adminToken', newToken)
-          res = await fetch(url, { ...options, headers: makeHeaders(newToken), credentials: 'include' })
-        }
-      }
-    }
-
-    const json = await res.json()
-    if (!res.ok) throw new Error(json.message || json.error || 'Request failed')
-    return json
-  }, [])
-
   // ── Fetch promotions ───────────────────────────────────
   const fetchPromotions = useCallback(async () => {
     setLoading(true)
@@ -134,7 +102,8 @@ const AdminPromotions: React.FC = () => {
       if (typeFilter !== 'all') params.set('type', typeFilter)
       if (statusFilter !== 'all') params.set('status', statusFilter)
 
-      const json = await adminFetch(`/api/promotions/admin/all?${params}`)
+      const { data: json, error } = await adminFetch(`/api/promotions/admin/all?${params}`)
+      if (error) throw error
       setPromotions(json.data || [])
       setStats(json.stats || { activeCount: 0, totalRedemptions: 0, total: 0 })
       setTotalPages(json.pagination?.totalPages || 1)
@@ -194,7 +163,8 @@ const AdminPromotions: React.FC = () => {
   const openViewModal = async (promo: Promotion) => {
     setLoadingDetail(true)
     try {
-      const json = await adminFetch(`/api/promotions/admin/${promo._id}`)
+      const { data: json, error } = await adminFetch(`/api/promotions/admin/${promo._id}`)
+      if (error) throw error
       setModalPromotion(json.data)
       setModalMode('view')
       setModalOpen(true)
@@ -208,7 +178,8 @@ const AdminPromotions: React.FC = () => {
   const openEditModal = async (promo: Promotion) => {
     setLoadingDetail(true)
     try {
-      const json = await adminFetch(`/api/promotions/admin/${promo._id}`)
+      const { data: json, error } = await adminFetch(`/api/promotions/admin/${promo._id}`)
+      if (error) throw error
       setModalPromotion(json.data)
       setModalMode('edit')
       setModalOpen(true)

@@ -37,9 +37,17 @@ const ContactForm: React.FC = () => {
     setIsLoading(true)
 
     try {
+      const csrfToken = document.cookie
+  .split('; ')
+  .find(row => row.startsWith('csrfToken='))
+  ?.split('=')[1]
       const response = await fetch('/api/contact', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: { 
+    'Content-Type': 'application/json',
+    ...(csrfToken && { 'X-CSRF-Token': csrfToken }),
+  },
         body: JSON.stringify(formData),
       })
 

@@ -16,6 +16,45 @@ type NotificationType =
   | 'new_user'
   | 'admin_message'
 
+const getAdminAndStaffUsers = async () => {
+  return User.find({ role: { $in: ['admin', 'staff'] } })
+}
+
+const broadcastToAdminAndStaff = async (
+  type: NotificationType,
+  title: string,
+  message: string,
+  link?: string,
+  metadata?: any
+) => {
+  const admins = await getAdminAndStaffUsers()
+  if (!admins || admins.length === 0) {
+    console.warn('⚠️ [broadcastToAdminAndStaff] No admin/staff users found')
+    return
+  }
+
+  const notifications = await Promise.all(
+    admins.map(async (admin) => {
+      const notification = await createNotification(admin._id.toString(), type, title, message, {
+        link,
+        metadata,
+      })
+      return notification
+    })
+  )
+
+  notifications.forEach((notification) => {
+    emitUserNotification(notification.user.toString(), {
+      _id: notification._id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      isRead: notification.isRead,
+      createdAt: notification.createdAt,
+    })
+  })
+}
+
 /**
  * Create order notification for user
  */
@@ -143,15 +182,12 @@ export const notifyOrderCancelled = async (userId: string, orderId: string, reas
  */
 export const notifyAdminReviewPending = async (adminId: string, reviewId: string, productName: string) => {
   try {
-    await createNotification(
-      adminId,
+    await broadcastToAdminAndStaff(
       'review_pending',
       'Đánh giá chờ phê duyệt',
       `Bài đánh giá cho "${productName}" chờ phê duyệt của bạn.`,
-      {
-        link: `/admin/reviews?id=${reviewId}`,
-        metadata: { reviewId, productName },
-      }
+      `/admin/reviews?id=${reviewId}`,
+      { reviewId, productName }
     )
   } catch (error) {
     console.error('Error notifying admin review pending:', error)
@@ -236,15 +272,12 @@ export const notifyPromotionCreated = async (promotionId: string, promotionTitle
  */
 export const notifyAdminInventoryLow = async (adminId: string, productName: string, quantity: number, threshold: number) => {
   try {
-    await createNotification(
-      adminId,
+    await broadcastToAdminAndStaff(
       'inventory_low',
       'Cảnh báo tồn kho thấp',
       `"${productName}" có tồn kho chỉ ${quantity} (ngưỡng: ${threshold}).`,
-      {
-        link: `/admin/inventory`,
-        metadata: { productName, quantity, threshold },
-      }
+      `/admin/inventory`,
+      { productName, quantity, threshold }
     )
   } catch (error) {
     console.error('Error notifying admin inventory low:', error)
@@ -256,15 +289,12 @@ export const notifyAdminInventoryLow = async (adminId: string, productName: stri
  */
 export const notifyAdminNewUser = async (adminId: string, userName: string, userEmail: string) => {
   try {
-    await createNotification(
-      adminId,
+    await broadcastToAdminAndStaff(
       'new_user',
       'Người dùng mới đăng ký',
       `${userName} (${userEmail}) vừa đăng ký tài khoản.`,
-      {
-        link: `/admin/users`,
-        metadata: { userName, userEmail },
-      }
+      `/admin/users`,
+      { userName, userEmail }
     )
   } catch (error) {
     console.error('Error notifying admin new user:', error)
@@ -276,26 +306,13 @@ export const notifyAdminNewUser = async (adminId: string, userName: string, user
  */
 export const notifyAdminContactMessage = async (adminId: string, senderName: string, subject: string) => {
   try {
-    const notification = await createNotification(
-      adminId,
+    await broadcastToAdminAndStaff(
       'contact_message',
       'Tin nhắn liên hệ mới',
       `${senderName} đã gửi tin nhắn: "${subject}".`,
-      {
-        link: `/admin/contacts`,
-        metadata: { senderName, subject },
-      }
+      `/admin/contacts`,
+      { senderName, subject }
     )
-
-    // Emit real-time socket notification to admin
-    emitUserNotification(adminId, {
-      _id: notification._id,
-      type: 'contact_message',
-      title: 'Tin nhắn liên hệ mới',
-      message: `${senderName} đã gửi tin nhắn: "${subject}".`,
-      isRead: false,
-      createdAt: notification.createdAt,
-    })
   } catch (error) {
     console.error('Error notifying admin contact message:', error)
   }
@@ -306,10 +323,7 @@ export const notifyAdminContactMessage = async (adminId: string, senderName: str
  */
 export const notifyAdminMessage = async (adminId: string, title: string, message: string, link?: string, metadata?: any) => {
   try {
-    await createNotification(adminId, 'admin_message', title, message, {
-      link,
-      metadata,
-    })
+    await broadcastToAdminAndStaff('admin_message', title, message, link, metadata)
   } catch (error) {
     console.error('Error sending admin message:', error)
   }
@@ -321,44 +335,16 @@ export const notifyAdminMessage = async (adminId: string, title: string, message
 export const notifyAdminNewReview = async (reviewId: string, productName: string, userName: string, rating: number) => {
   try {
     console.log('📢 [notifyAdminNewReview] Starting notification process:', { reviewId, productName, userName, rating })
-    
-    // Get all admins from database
-    const admins = await User.find({ role: 'admin' })
-    console.log('📢 [notifyAdminNewReview] Found admins:', admins.length, admins.map(a => ({ id: a._id, email: a.email })))
 
-    if (admins.length === 0) {
-      console.warn('⚠️ [notifyAdminNewReview] No admins found in database!')
-      return
-    }
+    await broadcastToAdminAndStaff(
+      'review_pending',
+      'Đánh giá chờ phê duyệt',
+      `${userName} đã viết đánh giá ${rating}⭐ cho "${productName}".`,
+      `/admin/reviews?filter=pending`,
+      { reviewId, productName, userName, rating }
+    )
 
-    for (const admin of admins) {
-      try {
-        console.log(`📢 [notifyAdminNewReview] Creating notification for admin: ${admin._id}`)
-        const notification = await createNotification(
-          admin._id.toString(),
-          'review_pending',
-          'Đánh giá chờ phê duyệt',
-          `${userName} đã viết đánh giá ${rating}⭐ cho "${productName}".`,
-          {
-            link: `/admin/reviews?filter=pending`,
-            metadata: { reviewId, productName, userName, rating },
-          }
-        )
-        console.log(`✅ [notifyAdminNewReview] Notification created for admin: ${admin._id}`, notification._id)
-
-        // Emit real-time socket notification to admin
-        emitUserNotification(admin._id.toString(), {
-          _id: notification._id,
-          type: 'review_pending',
-          title: 'Đánh giá chờ phê duyệt',
-          message: `${userName} đã viết đánh giá ${rating}⭐ cho "${productName}".`,
-          isRead: false,
-          createdAt: notification.createdAt,
-        })
-      } catch (adminError: any) {
-        console.error(`❌ Failed to notify admin ${admin._id}:`, adminError.message)
-      }
-    }
+    console.log('✅ [notifyAdminNewReview] Broadcast notification sent to all admin/staff')
   } catch (error) {
     console.error('❌ Error notifying admins about new review:', error)
   }

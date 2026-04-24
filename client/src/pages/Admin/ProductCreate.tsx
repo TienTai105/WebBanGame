@@ -5,7 +5,7 @@ import AdminBreadcrumb from '../../components/admin/AdminBreadcrumb'
 import DeleteConfirmationModal from '../../components/admin/DeleteConfirmationModal'
 import EditVariantModal from '../../components/admin/EditVariantModal'
 import RichTextEditor, { RichTextEditorHandle } from '../../components/admin/RichTextEditor'
-import adminApiCall from '../../utils/adminApi'
+import { adminFetch } from '../../utils/adminFetch'
 import { errorToast, successToast } from '../../utils/toast'
 import { ProductVariant } from '../../components/admin/VariantManagementModal'
 
@@ -166,9 +166,9 @@ const ProductCreate: React.FC = () => {
     const fetchMetadata = async () => {
       try {
         const [catRes, genreRes, platformRes] = await Promise.all([
-          adminApiCall<any>('/categories'),
-          adminApiCall<any>('/genres'),
-          adminApiCall<any>('/platforms'),
+          adminFetch<any>('/categories'),
+          adminFetch<any>('/genres'),
+          adminFetch<any>('/platforms'),
         ])
 
         let categoriesArray: Category[] = []
@@ -684,7 +684,7 @@ const ProductCreate: React.FC = () => {
         descriptionLength: createPayload.description?.length || 0,
       })
 
-      const { error } = await adminApiCall('/admin/products', {
+      const { error } = await adminFetch('/api/admin/products', {
         method: 'POST',
         body: JSON.stringify(createPayload),
       })

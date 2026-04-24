@@ -89,7 +89,7 @@ export const requireOTPVerification = async (
     return
   }
 
-  const { otpToken } = req.headers
+  const otpToken = (req.header('otpToken') as string) || (req.header('x-otp-token') as string)
 
   if (!otpToken) {
     res.status(400).json({

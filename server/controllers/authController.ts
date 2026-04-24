@@ -369,3 +369,43 @@ export const changePassword = async (req: Request, res: Response): Promise<void>
     res.status(500).json({ success: false, message: error.message })
   }
 }
+
+// ✅ NEW: Check if email exists (for registration form validation)
+export const checkEmailExists = async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body
+
+  if (!email) {
+    res.status(400).json({ success: false, message: 'Email is required' })
+    return
+  }
+
+  try {
+    const user = await User.findOne({ email: email.toLowerCase().trim() })
+    res.json({
+      exists: !!user,
+    })
+  } catch (error: any) {
+    console.error('❌ [CHECK_EMAIL] Error:', error)
+    res.status(500).json({ exists: false })
+  }
+}
+
+// ✅ NEW: Check if phone exists (for registration form validation)
+export const checkPhoneExists = async (req: Request, res: Response): Promise<void> => {
+  const { phone } = req.body
+
+  if (!phone) {
+    res.status(400).json({ success: false, message: 'Phone is required' })
+    return
+  }
+
+  try {
+    const user = await User.findOne({ phone: phone.trim() })
+    res.json({
+      exists: !!user,
+    })
+  } catch (error: any) {
+    console.error('❌ [CHECK_PHONE] Error:', error)
+    res.status(500).json({ exists: false })
+  }
+}

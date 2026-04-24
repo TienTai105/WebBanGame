@@ -638,7 +638,7 @@ export const getAdminUsers = async (req: AdminRequest, res: Response): Promise<v
 
     const skip = ((Number(page) || 1) - 1) * (Number(limit) || 20)
     const users = await User.find(query)
-      .select('name email phone role isActive avatar createdAt updatedAt lastLogin lastActivity')
+      .select('name email phone role isActive avatar permissions defaultOTP createdAt updatedAt lastLogin lastActivity')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit) || 20)

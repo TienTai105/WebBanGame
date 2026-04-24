@@ -809,7 +809,7 @@ Security:
 ✅ Validation: React Hook Form + Zod
 ✅ CORS: Backend config
 ✅ HTTPS: Production only
-✅ XSS: Sanitize user input
+✅ : Sanitize user input
 
 Testing (Next phase):
 ⏳ Unit: Jest + React Testing Library

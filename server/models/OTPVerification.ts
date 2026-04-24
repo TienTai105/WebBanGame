@@ -28,16 +28,7 @@ const otpVerificationSchema = new Schema<IOTPVerification>(
     action: {
       type: String,
       required: true,
-      enum: [
-        'EDIT_PRODUCT',
-        'DELETE_PRODUCT',
-        'EDIT_ORDER',
-        'REFUND_ORDER',
-        'CHANGE_ROLE',
-        'DELETE_USER',
-        'UPDATE_SETTINGS',
-        'DELETE_NEWS',
-      ],
+      trim: true,
     },
     actionData: {
       type: Schema.Types.Mixed,

@@ -50,9 +50,7 @@ const OTPVerificationModal: React.FC<OTPVerificationModalProps> = ({
     }
   }, [isOpen])
 
-  if (!isOpen || user?.role === 'admin') return null
-
-  const handleSendOTP = async () => {
+  const handleSendOTP = React.useCallback(async () => {
     setIsLoading(true)
     setError('')
     try {
@@ -67,7 +65,15 @@ const OTPVerificationModal: React.FC<OTPVerificationModalProps> = ({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [generateOTP, actionDescription])
+
+  useEffect(() => {
+    if (isOpen && user?.role !== 'admin' && step === 'confirm') {
+      handleSendOTP()
+    }
+  }, [isOpen, user?.role, step, handleSendOTP])
+
+  if (!isOpen || user?.role === 'admin') return null
 
   const handleCodeChange = (index: number, value: string) => {
     if (value.length > 1) {

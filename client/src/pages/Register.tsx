@@ -1,6 +1,6 @@
-import { FC, useState, useMemo } from 'react'
+import { FC, useState, useMemo, useEffect} from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, User, Mail, Phone, Lock, Chrome, Facebook } from 'lucide-react'
+import { Eye, EyeOff, User, Mail, Phone, Lock, Chrome, Facebook, Check, X } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { yupResolver } from '@hookform/resolvers/yup'
 import Button from '../components/atomic/Button'
@@ -8,12 +8,28 @@ import Checkbox from '../components/atomic/Checkbox'
 import { successToast, warningToast } from '../utils/toast'
 import { registerValidationSchema, RegisterFormData } from '../validations/authValidation'
 
+// Debounce helper
+const useDebounce = <T,>(value: T, delay: number) => {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay)
+    return () => clearTimeout(handler)
+  }, [value, delay])
+  return debouncedValue
+}
+
 const Register: FC = () => {
   const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [acceptTerms, setAcceptTerms] = useState(false)
+
+  // Email/Phone duplicate check
+  const [checkingEmail, setCheckingEmail] = useState(false)
+  const [emailExists, setEmailExists] = useState<boolean | null>(null)
+  const [checkingPhone, setCheckingPhone] = useState(false)
+  const [phoneExists, setPhoneExists] = useState<boolean | null>(null)
 
   const {
     register,
@@ -24,25 +40,99 @@ const Register: FC = () => {
     resolver: yupResolver(registerValidationSchema),
   })
 
-  // Password strength calculator
+  // Watch email and phone inputs
+  const email = watch('email')
+  const phone = watch('phone')
+  const debouncedEmail = useDebounce(email, 500)
+  const debouncedPhone = useDebounce(phone, 500)
+
+  // Check email exists
+  useEffect(() => {
+    if (!debouncedEmail || !debouncedEmail.includes('@')) {
+      setEmailExists(null)
+      return
+    }
+
+    const controller = new AbortController()
+
+    const checkEmail = async () => {
+      setCheckingEmail(true)
+      try {
+        const res = await fetch('/api/auth/check-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: debouncedEmail }),
+        })
+        const data = await res.json()
+        setEmailExists(data.exists)
+      } catch (error) {
+        console.error('Error checking email:', error)
+      } finally {
+        setCheckingEmail(false)
+      }
+    }
+    checkEmail()
+    return () => controller.abort()
+  }, [debouncedEmail])
+
+  // Check phone exists
+  useEffect(() => {
+    if (!debouncedPhone || debouncedPhone.length < 9) {
+      setPhoneExists(null)
+      return
+    }
+    const controller = new AbortController()
+    const checkPhone = async () => {
+      setCheckingPhone(true)
+      try {
+        const res = await fetch('/api/auth/check-phone', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: debouncedPhone }),
+        })
+        const data = await res.json()
+        setPhoneExists(data.exists)
+      } catch (error) {
+        console.error('Error checking phone:', error)
+      } finally {
+        setCheckingPhone(false)
+      }
+    }
+    checkPhone()
+    return () => controller.abort()
+  }, [debouncedPhone])
+
+  // Password strength calculator with detailed hints
   const password = watch('password')
   const passwordStrength = useMemo(() => {
-    if (!password) return { level: 0, label: '', color: '' }
-    let strength = 0
-    if (password.length >= 6) strength++
-    if (password.length >= 8) strength++
-    if (/[A-Z]/.test(password)) strength++
-    if (/[0-9]/.test(password)) strength++
-    if (/[^A-Za-z0-9]/.test(password)) strength++
+    if (!password) return { level: 0, label: '', color: '', hints: [] }
 
-    if (strength <= 2) return { level: 1, label: 'Yếu', color: 'text-red-400 bg-red-500/20' }
-    if (strength <= 3) return { level: 2, label: 'Trung Bình', color: 'text-yellow-400 bg-yellow-500/20' }
-    return { level: 3, label: 'Mạnh', color: 'text-emerald-400 bg-emerald-500/20' }
+    const hints = [
+      { label: 'Ít nhất 6 ký tự', met: password.length >= 6 },
+      { label: 'Có chữ viết hoa (A-Z)', met: /[A-Z]/.test(password) },
+      { label: 'Có chữ số (0-9)', met: /[0-9]/.test(password) },
+      { label: 'Có ký tự đặc biệt (!@#$%...)', met: /[^A-Za-z0-9]/.test(password) },
+    ]
+
+    let strength = hints.filter(h => h.met).length
+    if (strength <= 2) return { level: 1, label: 'Yếu', color: 'text-red-400 bg-red-500/20', hints }
+    if (strength <= 3) return { level: 2, label: 'Trung Bình', color: 'text-yellow-400 bg-yellow-500/20', hints }
+    return { level: 3, label: 'Mạnh', color: 'text-emerald-400 bg-emerald-500/20', hints }
   }, [password])
 
   const onSubmit = async (data: RegisterFormData) => {
     if (!acceptTerms) {
       warningToast('Bạn phải chấp nhận điều khoản và chính sách')
+      return
+    }
+
+    // Check if email/phone already exists
+    if (emailExists) {
+      warningToast('Email này đã được đăng ký')
+      return
+    }
+    if (phoneExists) {
+      warningToast('Số điện thoại này đã được đăng ký')
       return
     }
 
@@ -153,16 +243,28 @@ const Register: FC = () => {
                   type="email"
                   placeholder="your@email.com"
                   {...register('email')}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-12 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                   style={{
                     WebkitAutofillBoxShadow: '0 0 0 1000px rgb(30, 27, 75) inset',
                     WebkitAutofillTextFillColor: '#ffffff',
                     colorScheme: 'dark',
                   } as any}
                 />
+                {checkingEmail && (
+                  <div className="absolute right-3 top-3 w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                )}
+                {!checkingEmail && emailExists === false && (
+                  <Check className="absolute right-3 top-3 w-5 h-5 text-emerald-400" />
+                )}
+                {!checkingEmail && emailExists === true && (
+                  <X className="absolute right-3 top-3 w-5 h-5 text-red-400" />
+                )}
               </div>
               {errors.email && (
                 <p className="text-red-400 text-xs mt-1">{errors.email.message}</p>
+              )}
+              {emailExists && (
+                <p className="text-red-400 text-xs mt-1">Email này đã được đăng ký</p>
               )}
             </div>
 
@@ -177,11 +279,23 @@ const Register: FC = () => {
                   type="tel"
                   placeholder="0987654321"
                   {...register('phone')}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-10 pr-12 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                 />
+                {checkingPhone && (
+                  <div className="absolute right-3 top-3 w-5 h-5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                )}
+                {!checkingPhone && phoneExists === false && (
+                  <Check className="absolute right-3 top-3 w-5 h-5 text-emerald-400" />
+                )}
+                {!checkingPhone && phoneExists === true && (
+                  <X className="absolute right-3 top-3 w-5 h-5 text-red-400" />
+                )}
               </div>
               {errors.phone && (
                 <p className="text-red-400 text-xs mt-1">{errors.phone.message}</p>
+              )}
+              {phoneExists && (
+                <p className="text-red-400 text-xs mt-1">Số điện thoại này đã được đăng ký</p>
               )}
             </div>
 
@@ -218,25 +332,38 @@ const Register: FC = () => {
               {errors.password && (
                 <p className="text-red-400 text-xs mt-1">{errors.password.message}</p>
               )}
-              {/* Password Strength Indicator */}
+              {/* Password Strength Indicator with Hints */}
               {password && (
-                <div className="mt-2 p-2 bg-slate-800/50 rounded">
-                  <div className="flex items-center gap-2 mb-1">
+                <div className="mt-2 p-3 bg-slate-800/50 rounded">
+                  <div className="flex items-center gap-2 mb-2">
                     <div className="text-xs text-slate-400">Độ mạnh:</div>
                     <div className={`text-xs font-semibold ${passwordStrength.color} px-2 py-1 rounded`}>
                       {passwordStrength.label}
                     </div>
                   </div>
-                  <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden mb-3">
                     <div
-                      className={`h-full transition-all ${
-                        passwordStrength.level === 1
+                      className={`h-full transition-all ${passwordStrength.level === 1
                           ? 'w-1/3 bg-red-500'
                           : passwordStrength.level === 2
                             ? 'w-2/3 bg-yellow-500'
                             : 'w-full bg-emerald-500'
-                      }`}
+                        }`}
                     />
+                  </div>
+                  <div className="space-y-1">
+                    {passwordStrength.hints.map((hint, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs">
+                        {hint.met ? (
+                          <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                        ) : (
+                          <X className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                        )}
+                        <span className={hint.met ? 'text-slate-400' : 'text-slate-500'}>
+                          {hint.label}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -303,7 +430,10 @@ const Register: FC = () => {
               variant="primary"
               size="lg"
               className="w-full"
-              disabled={isLoading}
+              disabled={isLoading || checkingEmail ||
+                checkingPhone ||
+                emailExists === true ||
+                phoneExists === true}
             >
               {isLoading ? 'Đang đăng ký...' : 'Đăng Ký'}
             </Button>
