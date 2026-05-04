@@ -586,7 +586,7 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
 
   console.log(`📦 Current order status: ${order.orderStatus}, Payment status: ${order.paymentStatus}`)
 
-  if (order.orderStatus !== 'pending' && order.orderStatus !== 'processing') {
+  if (order.orderStatus !== 'pending' && order.orderStatus !== 'processing' && order.orderStatus !== 'cancelled') {
     return res.status(400).json({
       success: false,
       message: 'Chỉ có thể hủy đơn hàng chưa được giao hoặc đang xử lý',
@@ -606,31 +606,36 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
     try {
       // Check if order is confirmed/paid (Momo) or unpaid (COD)
       const isConfirmed = order.paymentStatus === 'paid' || !!order.stockConfirmedAt
-      console.log(`💾 Releasing stock for ${order.orderItems.length} items... (isConfirmed: ${isConfirmed})`)
-      await inventoryService.releaseStockOnCancel(order.orderItems as any, order._id.toString(), isConfirmed)
+      console.log(`💾 Releasing stock for ${order.orderItems.length} items... (isConfirmed: ${isConfirmed}, paymentMethod: ${order.paymentMethod})`)
+      await inventoryService.releaseStockOnCancel(order.orderItems as any, order._id.toString(), isConfirmed, order.paymentMethod)
       console.log(`✅ Stock released successfully from ${isConfirmed ? 'SOLD' : 'RESERVED'} pool`)
     } catch (err) {
       console.error('⚠️ Error releasing stock on cancel:', err)
     }
+  } else if (order.orderStatus === 'cancelled') {
+    console.log(`⏭️ Order already cancelled - skipping stock release`)
   } else {
     console.log(`⏭️ Skipping stock release - Status: ${order.orderStatus}`)
   }
 
-  order.orderStatus = 'cancelled'
-  await order.save()
+  // Only change status if not already cancelled
+  if (order.orderStatus !== 'cancelled') {
+    order.orderStatus = 'cancelled'
+    await order.save()
 
-  // Audit log for order cancellation
-  try {
-    const AuditLog = (await import('../models/AuditLog.js')).default
-    await AuditLog.create({
-      action: 'STATUS_CHANGE',
-      entity: 'Order',
-      entityId: order._id,
-      changes: { orderStatus: { old: 'pending', new: 'cancelled' } },
-      userId: (req as any).user?._id,
-      ipAddress: req.ip,
-    })
-  } catch {}
+    // Audit log for order cancellation
+    try {
+      const AuditLog = (await import('../models/AuditLog.js')).default
+      await AuditLog.create({
+        action: 'STATUS_CHANGE',
+        entity: 'Order',
+        entityId: order._id,
+        changes: { orderStatus: { old: order.orderStatus, new: 'cancelled' } },
+        userId: (req as any).user?._id,
+        ipAddress: req.ip,
+      })
+    } catch {}
+  }
 
   console.log(`✔️ Order cancelled successfully: ${order._id}`)
 
@@ -677,8 +682,8 @@ export const deleteOrder = asyncHandler(async (req: Request, res: Response) => {
     try {
       // Check if order is confirmed/paid (Momo) or unpaid (COD)
       const isConfirmed = order.paymentStatus === 'paid' || !!order.stockConfirmedAt
-      console.log(`💾 Releasing stock for ${order.orderItems.length} items before deletion... (isConfirmed: ${isConfirmed})`)
-      await inventoryService.releaseStockOnCancel(order.orderItems as any, order._id.toString(), isConfirmed)
+      console.log(`💾 Releasing stock for ${order.orderItems.length} items before deletion... (isConfirmed: ${isConfirmed}, paymentMethod: ${order.paymentMethod})`)
+      await inventoryService.releaseStockOnCancel(order.orderItems as any, order._id.toString(), isConfirmed, order.paymentMethod)
       console.log(`✅ Stock released successfully from ${isConfirmed ? 'SOLD' : 'RESERVED'} pool`)
     } catch (err) {
       console.error('⚠️ Error releasing stock on delete:', err)

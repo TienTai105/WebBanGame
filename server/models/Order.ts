@@ -38,6 +38,8 @@ interface IOrder extends Document {
   trackingNumber?: string
   reservedAt?: Date
   reservationExpiresAt?: Date
+  isExtended?: boolean                // ✅ Track if reservation has been extended (only 1 extension allowed)
+  paymentStartedAt?: Date | null
   holdId?: string
   momoRequestId?: string | null
   momoOrderId?: string | null        // Momo's unique orderId per attempt (new on each retry)
@@ -153,6 +155,11 @@ const orderSchema = new Schema<IOrder>(
     trackingNumber: String,
     reservedAt: Date,
     reservationExpiresAt: Date,
+    isExtended: {
+      type: Boolean,
+      default: false,  // ✅ Track if reservation has been extended
+    },
+    paymentStartedAt: Date,
     holdId: String,
     momoRequestId: {
       type: String,

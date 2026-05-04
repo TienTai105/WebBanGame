@@ -89,9 +89,9 @@ const PackingSlipTab: React.FC<PackingSlipTabProps> = ({ adminFetch }) => {
       if (activeTab !== 'all') params.set('status', activeTab)
 
       const json = await adminFetch(`/api/packingslips?${params}`)
-      setPackingSlips(json.data || [])
-      setTotalSlips(json.total || 0)
-      setTotalPages(json.pages || 1)
+      setPackingSlips(Array.isArray(json.data?.data) ? json.data.data : [])
+      setTotalSlips(json.data?.total || 0)
+      setTotalPages(json.data?.pages || 1)
     } catch (err: any) {
       errorToast(err.message || 'Không thể tải danh sách phiếu đóng gói')
     } finally {
@@ -111,7 +111,7 @@ const PackingSlipTab: React.FC<PackingSlipTabProps> = ({ adminFetch }) => {
           : `/api/packingslips?limit=1&status=${status}`
         try {
           const json = await adminFetch(url)
-          counts[status] = json.total ?? 0
+          counts[status] = json.data?.total ?? 0
         } catch {}
       })
       await Promise.all(promises)
@@ -128,7 +128,7 @@ const PackingSlipTab: React.FC<PackingSlipTabProps> = ({ adminFetch }) => {
   }, [fetchStatusCounts])
 
   // Filter search
-  const filteredSlips = packingSlips.filter((slip) => {
+  const filteredSlips = Array.isArray(packingSlips) ? packingSlips.filter((slip) => {
     if (!searchQuery.trim()) return true
     const q = searchQuery.toLowerCase()
     return (
@@ -136,7 +136,7 @@ const PackingSlipTab: React.FC<PackingSlipTabProps> = ({ adminFetch }) => {
       slip.shippingAddress.name.toLowerCase().includes(q) ||
       slip.shippingAddress.phone.toLowerCase().includes(q)
     )
-  })
+  }) : []
 
   // Handle print
   const handlePrint = (slip: PackingSlip) => {

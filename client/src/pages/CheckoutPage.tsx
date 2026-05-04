@@ -150,24 +150,52 @@ const CheckoutPage: FC = () => {
   }, [isEditingAddress, savedAddresses.length])
 
   // ── Payment Method & Hold ──────────────────────────────────────────────
+  const RETRY_ORDER_STORAGE_KEY = 'momoRetryOrderId'
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
-  const [retryOrderId, setRetryOrderId] = useState<string | null>(null)  // Store retry orderId from URL
+  const [retryOrderId, setRetryOrderId] = useState<string | null>(null)  // Store retry orderId from URL or session
+  const [showRetryWarning, setShowRetryWarning] = useState(false)
   const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [showExpiryModal, setShowExpiryModal] = useState(false)
+  const [isHoldExtended, setIsHoldExtended] = useState(false)  // ✅ Track if hold has been extended (only 1 extension allowed)
   
   // ── Detect retry payment scenario ──────────────────────────────────────
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search)
     const orderId = searchParams.get('orderId')
     const isRetryPayment = orderId && searchParams.get('retry') === 'true'
-    
-    if (isRetryPayment && orderId) {
-      setRetryOrderId(orderId)  // Store orderId in state
+    const isMomoReturn = orderId && searchParams.get('momoReturn') === 'true'
+
+    // Check if we have a retry order from URL or sessionStorage
+    let finalOrderId = orderId
+    let shouldShowWarning = !!isRetryPayment
+
+    if (!finalOrderId) {
+      // Try to restore from sessionStorage
+      finalOrderId = sessionStorage.getItem(RETRY_ORDER_STORAGE_KEY)
+      if (finalOrderId) {
+        shouldShowWarning = true
+        console.log('[RETRY] Restoring retry orderId from session storage:', finalOrderId)
+      }
+    }
+
+    // If coming from Momo callback, also show warning
+    if (isMomoReturn && finalOrderId) {
+      shouldShowWarning = true
+    }
+
+    if ((isRetryPayment || isMomoReturn || finalOrderId) && finalOrderId) {
+      setRetryOrderId(finalOrderId)
+      sessionStorage.setItem(RETRY_ORDER_STORAGE_KEY, finalOrderId)
       console.log('[RETRY] Setting Momo as payment method')
       setPaymentMethod('momo')
-      
-      // Show warning banner
-      warningToast('Vui lòng hoàn tất thanh toán trong 30 phút, nếu không đơn sẽ bị xóa tự động')
-      
+      setShowRetryWarning(shouldShowWarning)
+
+      if (isRetryPayment) {
+        warningToast('Vui lòng hoàn tất thanh toán trong 30 phút, nếu không đơn sẽ bị xóa tự động')
+      } else if (shouldShowWarning && !isRetryPayment) {
+        warningToast('Tiếp tục thanh toán Momo với đơn hàng trước đó')
+      }
+
       // Auto-scroll to payment section after a short delay
       setTimeout(() => {
         const paymentSection = document.querySelector('[data-payment-section]')
@@ -184,10 +212,12 @@ const CheckoutPage: FC = () => {
   const [holdSecondsLeft, setHoldSecondsLeft] = useState<number | null>(null)
   const holdCreated = useRef(false)
   const skipReleaseOnUnmount = useRef(false)
+  const autoCancelTriggered = useRef(false)  // ✅ Prevent auto-cancel from triggering multiple times
 
-  const createCheckoutHold = useCallback(async () => {
-    if (holdCreated.current || items.length === 0) return
-    holdCreated.current = true
+  const createCheckoutHold = useCallback(async (): Promise<boolean> => {
+    if (holdCreated.current) return true
+    if (items.length === 0) return false
+
     try {
       const res = await api.post('/checkout/hold', {
         items: items.map(i => ({
@@ -198,7 +228,9 @@ const CheckoutPage: FC = () => {
       })
       setHoldId(res.data.data.holdId)
       setHoldExpiresAt(new Date(res.data.data.reservedUntil))
+      holdCreated.current = true
       console.log('Checkout hold created:', res.data.data.holdId)
+      return true
     } catch (err: any) {
       const msg = err?.response?.data?.message || 'Không thể giữ hàng'
       const status = err?.response?.status
@@ -207,7 +239,7 @@ const CheckoutPage: FC = () => {
       // For 401 (auth error), log but don't interrupt checkout - user might not have valid token yet
       if (status === 401) {
         console.log('Auth error on hold creation - continuing without hold')
-        return
+        return false
       }
       
       // Show warning toast for other errors
@@ -217,6 +249,7 @@ const CheckoutPage: FC = () => {
       if (status === 409) {
         navigate('/cart')
       }
+      return false
     }
   }, [items, navigate])
 
@@ -300,6 +333,7 @@ const CheckoutPage: FC = () => {
         // ✅ Payment success!
         if (order.paymentStatus === 'paid') {
           console.log('[POLL] Payment confirmed! Redirecting...')
+          sessionStorage.removeItem(RETRY_ORDER_STORAGE_KEY)
           if (pollInterval) clearInterval(pollInterval)
           setTimeout(() => navigate(`/order-confirm?orderId=${retryOrderId}`), 1000)
           return
@@ -337,6 +371,50 @@ const CheckoutPage: FC = () => {
     }
   }, [retryOrderId, navigate])
 
+  useEffect(() => {
+    const handleMomoReturnMessage = async (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      const data = event.data
+      if (!data || data.type !== 'MOMO_RETURN') return
+
+      const { orderId, resultCode, transId } = data
+      if (!orderId) return
+
+      try {
+        // Check if resultCode indicates failure (0 = success, anything else = failure)
+        const isFailureCode = resultCode && Number(resultCode) !== 0
+
+        const query = resultCode && transId ? `?resultCode=${resultCode}&transId=${transId}` : ''
+        const res = await api.get(`/payment/momo/status/${orderId}${query}`)
+        const order = res.data.data
+
+        if (order.paymentStatus === 'paid') {
+          sessionStorage.removeItem(RETRY_ORDER_STORAGE_KEY)
+          successToast('Thanh toán Momo thành công!')
+          navigate(`/order-confirm?orderId=${orderId}`)
+          return
+        }
+
+        // If payment failed (either from resultCode or order status), show warning and retry
+        if (isFailureCode || order.paymentStatus === 'failed') {
+          errorToast('Thanh toán không thành công. Vui lòng thử lại.')
+          // Keep orderId in sessionStorage and navigate back to checkout with params
+          sessionStorage.setItem(RETRY_ORDER_STORAGE_KEY, orderId)
+          navigate(`/checkout?orderId=${orderId}&momoReturn=true`)
+          return
+        }
+
+        // Nếu vẫn unpaid, giữ nguyên trang và tiếp tục chờ
+        console.log('[MOMO RETURN] Payment still unpaid, continuing wait...')
+      } catch (err: any) {
+        console.error('[MOMO RETURN] Failed to process return message:', err)
+      }
+    }
+
+    window.addEventListener('message', handleMomoReturnMessage)
+    return () => window.removeEventListener('message', handleMomoReturnMessage)
+  }, [navigate])
+
   // Release hold when user leaves checkout without placing order
   useEffect(() => {
     return () => {
@@ -360,11 +438,31 @@ const CheckoutPage: FC = () => {
     const tick = () => {
       const diff = Math.max(0, Math.floor((holdExpiresAt.getTime() - Date.now()) / 1000))
       setHoldSecondsLeft(diff)
+
+      // ✅ Auto-cancel if countdown = 0 and already extended (only 1 extension allowed)
+      if (diff === 0) {
+        if (isHoldExtended && !autoCancelTriggered.current) {
+          console.log('⏱️ Hold expired 2nd time after extension - AUTO-CANCELLING order')
+          autoCancelTriggered.current = true  // ✅ Prevent triggering again
+          errorToast('Thời gian giữ hàng đã hết (đã gia hạn 1 lần). Đơn hàng sẽ bị hủy tự động.')
+          // Auto-cancel order after short delay to show toast
+          setTimeout(() => {
+            handleCancelOrder()
+          }, 1500)
+          return
+        }
+        
+        // Show expiry modal when countdown reaches 0 for first time
+        if (!showExpiryModal) {
+          setShowExpiryModal(true)
+        }
+      }
     }
     tick()
     const interval = setInterval(tick, 1000)
     return () => clearInterval(interval)
-  }, [holdExpiresAt])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdExpiresAt, showExpiryModal, isHoldExtended])
 
   const formatCountdown = (s: number) => {
     const m = Math.floor(s / 60)
@@ -373,8 +471,8 @@ const CheckoutPage: FC = () => {
   }
 
   // Function to reset/refresh hold (called by [Giữ lại] button)
-  const resetHoldCountdown = useCallback(async () => {
-    console.log('[Giữ lại] clicked - resetting hold countdown')
+  const resetHoldCountdown = useCallback(async (extendMinutes: number = 15) => {
+    console.log(`[Giữ lại] clicked - extending hold by ${extendMinutes} minutes`)
     try {
       // Release old hold if exists
       if (holdId) {
@@ -388,12 +486,88 @@ const CheckoutPage: FC = () => {
       setHoldSecondsLeft(null)
       // Create fresh hold
       await createCheckoutHold()
-      successToast('Đã giữ lại hàng thêm 15 phút')
+      successToast(`Đã giữ lại hàng thêm ${extendMinutes} phút`)
     } catch (err: any) {
       console.error('Error resetting hold:', err)
       errorToast('Không thể giữ lại hàng, vui lòng thử lại')
     }
   }, [holdId, createCheckoutHold])
+
+  // Handle expiry modal actions
+  const handleExtendHold = async () => {
+    try {
+      if (holdId) {
+        // Extend existing hold by 5 minutes
+        const res = await api.put(`/checkout/hold/${holdId}/extend`, { extendMinutes: 5 })
+        if (res.data.success) {
+          const newExpiry = new Date(res.data.data.reservedUntil)
+          setHoldExpiresAt(newExpiry)
+          setHoldSecondsLeft(Math.max(0, Math.floor((newExpiry.getTime() - Date.now()) / 1000)))
+          setIsHoldExtended(true)  // ✅ Mark hold as extended (only extension allowed)
+          successToast('Đã gia hạn thời gian giữ hàng thêm 5 phút. Đây là lần gia hạn duy nhất!')
+          // ✅ Close modal AFTER state updates complete
+          setShowExpiryModal(false)
+        } else {
+          // ✅ Show error if extension not allowed or other issues
+          errorToast(res.data.message || 'Không thể gia hạn thời gian giữ hàng')
+          // Keep modal open on failure so user can retry
+        }
+      } else {
+        // Fallback: create new hold if no existing hold
+        await resetHoldCountdown(5)
+        setIsHoldExtended(true)  // ✅ Mark as extended
+        successToast('Đã gia hạn thêm 5 phút. Đây là lần gia hạn duy nhất!')
+        // ✅ Close modal after fallback completes
+        setShowExpiryModal(false)
+      }
+    } catch (err: any) {
+      console.error('Extend hold error:', err)
+      errorToast('Không thể gia hạn thời gian giữ hàng, vui lòng thử lại')
+      // Keep modal open on error so user can retry
+    }
+  }
+
+  const handleCancelOrder = useCallback(async () => {
+    setShowExpiryModal(false)
+
+    try {
+      if (retryOrderId) {
+        // Use cancel endpoint for existing orders
+        const res = await api.put(`/orders/${retryOrderId}/cancel`)
+        if (res.data.success) {
+          sessionStorage.removeItem(RETRY_ORDER_STORAGE_KEY)
+          setRetryOrderId(null)
+          successToast('Đơn hàng đã được hủy, tồn kho đã được trả lại')
+          clearCart()
+          navigate('/cart', { replace: true })
+        } else {
+          errorToast(res.data.message || 'Không thể hủy đơn hàng')
+        }
+      } else {
+        // No order created yet - just release hold and clear cart
+        if (holdId) {
+          try {
+            await api.post(`/checkout/hold/${holdId}/release`)
+            console.log('Hold released on cancel')
+          } catch (err) {
+            console.error('Error releasing hold:', err)
+          }
+        }
+        clearCart()
+        navigate('/cart', { replace: true })
+      }
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Lỗi khi hủy đơn hàng'
+      errorToast(msg)
+      console.error('Cancel Order Error:', err)
+      // If cancel fails, still reset checkout view
+      sessionStorage.removeItem(RETRY_ORDER_STORAGE_KEY)
+      setRetryOrderId(null)
+      clearCart()
+      navigate('/cart', { replace: true })
+    }
+  }, [retryOrderId, holdId, clearCart, navigate])
+
   // ─────────────────────────────────────────────────────────────────────
 
   const [appliedCodes, setAppliedCodes] = useState<{ code: string; amount: number; type: 'discount' | 'shipping' }[]>([])
@@ -434,19 +608,26 @@ const CheckoutPage: FC = () => {
     setShowCancelDialog(false)
 
     try {
-      const res = await api.delete(`/orders/${retryOrderId}`)
+      const res = await api.put(`/orders/${retryOrderId}/cancel`)
       if (res.data.success) {
-        successToast('Đơn hàng đã được xóa hoàn toàn, tồn kho đã được trả lại')
+        sessionStorage.removeItem(RETRY_ORDER_STORAGE_KEY)
+        setRetryOrderId(null)
+        successToast('Đơn hàng đã được huỷ thành công, tồn kho đã được trả lại')
         clearCart()
-        // Remove retry params and go to cart
         navigate('/cart', { replace: true })
       } else {
-        errorToast(res.data.message || 'Không thể xóa đơn hàng')
+        errorToast(res.data.message || 'Không thể hủy đơn hàng')
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Lỗi khi xóa đơn hàng'
+      const msg = err?.response?.data?.message || 'Lỗi khi hủy đơn hàng'
       errorToast(msg)
-      console.error('Delete Order Error:', err)
+      console.error('Cancel Order Error:', err)
+      if (msg.includes('Chỉ có thể hủy đơn hàng')) {
+        sessionStorage.removeItem(RETRY_ORDER_STORAGE_KEY)
+        setRetryOrderId(null)
+        clearCart()
+        navigate('/cart', { replace: true })
+      }
     }
   }
 
@@ -471,8 +652,14 @@ const CheckoutPage: FC = () => {
       return
     }
 
-    // Check if this is a retry payment (check retryOrderId state OR URL params as fallback)
+    // Check if this is a retry payment (check retryOrderId state, session storage, OR URL params)
     let checkRetryOrderId = retryOrderId
+    if (!checkRetryOrderId) {
+      checkRetryOrderId = sessionStorage.getItem(RETRY_ORDER_STORAGE_KEY)
+      if (checkRetryOrderId) {
+        console.log('[RETRY] Restoring retryOrderId from sessionStorage on submit')
+      }
+    }
     if (!checkRetryOrderId) {
       const searchParams = new URLSearchParams(location.search)
       const urlOrderId = searchParams.get('orderId')
@@ -490,15 +677,19 @@ const CheckoutPage: FC = () => {
       try {
         // For Momo retry: directly init payment with existing order
         if (paymentMethod === 'momo') {
-          const payRes = await api.post('/payment/momo/init', { orderId: checkRetryOrderId })
+          const payRes = await api.post('/payment/momo/init', { orderId: checkRetryOrderId, retry: true })
           console.log('Momo Retry Init Response:', payRes.data)
           
           // Keep hold while redirecting to Momo
           skipReleaseOnUnmount.current = true
           
-          // Redirect to Momo payment URL
+          // Open Momo payment in a new tab so checkout page stays visible
           if (payRes.data.data?.payUrl) {
-            window.location.href = payRes.data.data.payUrl
+            const paymentWindow = window.open(payRes.data.data.payUrl, '_blank')
+            if (!paymentWindow) {
+              errorToast('Không thể mở trang thanh toán Momo. Vui lòng cho phép popup hoặc thử lại')
+              console.error('Missing payUrl in Momo response:', payRes.data)
+            }
           } else {
             errorToast('Không nhận được URL thanh toán từ Momo. ' + (payRes.data.message || ''))
             console.error('Missing payUrl in Momo response:', payRes.data)
@@ -556,7 +747,11 @@ const CheckoutPage: FC = () => {
       // This allows both users to enter checkout simultaneously
       if (!holdId) {
         console.log('[SPEC 4.5.2] Creating hold when clicking "Xác nhận đặt hàng"...')
-        await createCheckoutHold()
+        const holdCreatedSuccess = await createCheckoutHold()
+        if (!holdCreatedSuccess) {
+          console.log('Hold creation failed - aborting order placement')
+          return
+        }
       }
       
       const res = await api.post('/orders', {
@@ -580,22 +775,29 @@ const CheckoutPage: FC = () => {
         },
       })
 
-      // Hold is consumed by backend — prevent release on unmount
-      setHoldId(null)
+      // Hold will be released by cron or user explicitly - don't set to null
+      // We still need holdId to extend hold if countdown expires before payment
 
       const { data: order } = res.data
 
       // For Momo: init payment and redirect to Momo, after success Momo will redirect to order-confirm
       if (paymentMethod === 'momo') {
         successToast(`Đơn hàng ${order.orderCode} đã được tạo!`)
+        sessionStorage.setItem(RETRY_ORDER_STORAGE_KEY, order._id)
+        setRetryOrderId(order._id)
         // Don't clear cart yet - will be cleared after payment succeeds on OrderConfirmPage
         try {
           const payRes = await api.post('/payment/momo/init', { orderId: order._id })
           console.log('💳 Momo Init Response:', payRes.data)
           
-          // Redirect to Momo payment URL
+          // Open Momo payment in a new tab so the checkout page stays visible
           if (payRes.data.data?.payUrl) {
-            window.location.href = payRes.data.data.payUrl
+            skipReleaseOnUnmount.current = true
+            const paymentWindow = window.open(payRes.data.data.payUrl, 'momoPayment')
+            if (!paymentWindow) {
+              errorToast('Không thể mở trang thanh toán Momo. Vui lòng cho phép popup hoặc thử lại')
+              console.error('❌ Failed to open Momo payment in new tab')
+            }
           } else {
             errorToast('Không nhận được URL thanh toán từ Momo. ' + (payRes.data.message || ''))
             console.error('❌ Missing payUrl in Momo response:', payRes.data)
@@ -608,6 +810,7 @@ const CheckoutPage: FC = () => {
       }
 
       // For COD: redirect to order-confirm with orderId
+      skipReleaseOnUnmount.current = true  // Prevent hold release since order is placed
       clearCart() // Clear cart for COD (no payment step needed)
       successToast(`Đơn hàng ${order.orderCode} đã được tạo!`)
       navigate(`/order-confirm?orderId=${order._id}`)
@@ -1148,8 +1351,8 @@ const CheckoutPage: FC = () => {
             <div className="lg:col-span-1">
               <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 sticky top-20 space-y-4">
 
-                {/* Retry Payment Warning - Show when retrying */}
-                {retryOrderId && (
+                {/* Retry Payment Warning - Show only when actual retry mode is active */}
+                {showRetryWarning && retryOrderId && (
                   <div className="bg-gradient-to-r from-orange-900/40 to-amber-900/40 border border-orange-500/50 rounded-lg p-4">
                     <div className="flex items-start gap-2">
                       <span className="text-orange-400 text-lg mt-0.5">⚠️</span>
@@ -1179,12 +1382,6 @@ const CheckoutPage: FC = () => {
                     <p className="text-xs text-red-300/70">
                       Hết thời gian giữ hàng hoặc thoát trang sẽ bỏ phiếu yêu cầu
                     </p>
-                    <button
-                      onClick={resetHoldCountdown}
-                      className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded transition-colors"
-                    >
-                      [Giữ lại]
-                    </button>
                   </div>
                 )}
 
@@ -1416,6 +1613,30 @@ const CheckoutPage: FC = () => {
         confirmText="Hủy thanh toán"
         cancelText="Giữ lại"
         variant="danger"
+      />
+
+      {/* Hold Expiry Modal */}
+      <ConfirmDialog
+        isOpen={showExpiryModal}
+        title="Đã hết thời gian giữ hàng"
+        message={
+          <div className="space-y-3">
+            <p>Thời gian giữ hàng đã hết. Bạn muốn làm gì tiếp theo?</p>
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+              <p className="text-sm text-amber-300">
+                <strong>Lưu ý:</strong> Nếu không gia hạn, đơn hàng sẽ bị hủy và tồn kho sẽ được trả lại.
+                <p> Chỉ được phép gia hạn 1 lần duy nhất sau khi hết 5 phút lần đầu thì đơn hàng sẽ bị hủy.</p>
+              </p>
+            </div>
+          </div>
+        }
+        onConfirm={handleExtendHold}
+        onCancel={handleCancelOrder}
+        onDismiss={() => setShowExpiryModal(false)}
+        closeOnOverlayClick={false}
+        confirmText="Gia hạn 5 phút"
+        cancelText="Hủy đơn hàng"
+        variant="warning"
       />
     </div>
   )

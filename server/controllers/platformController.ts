@@ -8,7 +8,10 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
 
 // Get all platforms
 export const getPlatforms = asyncHandler(async (req: Request, res: Response) => {
-  const platforms = await Platform.find().sort({ createdAt: -1 })
+  const platforms = await Platform.find()
+    .select('name slug logo createdAt')
+    .sort({ createdAt: -1 })
+    .lean()
 
   res.status(200).json({
     success: true,

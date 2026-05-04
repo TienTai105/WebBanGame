@@ -1,6 +1,12 @@
 import { Request, Response } from 'express'
 import Product from '../models/Product.js'
 import Inventory from '../models/Inventory.js'
+import { getCache, setCache, invalidateCacheByPattern } from '../services/cacheService.js'
+
+const buildProductCacheKey = (query: any): string => {
+  const { page = 1, limit = 12, populate = 'false', ...filters } = query
+  return `products:${JSON.stringify({ page, limit, populate, ...filters })}`
+}
 
 export const getProducts = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -24,21 +30,11 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
 
     const skip = ((Number(page) - 1) * Number(limit)) as number
     const filter: any = { isActive: true }
+    const extraFilters: any[] = []
 
     // Category filter
     if (category) {
       filter.categoryId = category
-    }
-
-
-    const searchFilter: any[] = []
-    if (search) {
-      searchFilter.push(
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { 'variants.sku': { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } }
-      )
     }
 
     // Brand filter (single or multiple)
@@ -53,7 +49,7 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       filter.platforms = { $in: platformArray }
     }
 
-    // ✅ NEW: Genre filter (single or multiple)
+    // Genre filter (single or multiple)
     if (genres) {
       const genreArray = Array.isArray(genres) ? genres : [genres]
       filter.genres = { $in: genreArray }
@@ -76,22 +72,23 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       filter.soldCount = { $gte: 3000 }
     }
 
-    // ✅ NEW: Minimum rating filter
+    // Minimum rating filter
     if (minRating) {
       filter.ratingAverage = { $gte: Number(minRating) }
     }
 
-    // ✅ NEW: In-stock only filter
+    // In-stock only filter
     if (inStockOnly === 'true') {
-      filter.$or = [
-        { stock: { $gt: 0 } },
-        { 'variants': { $elemMatch: { stock: { $gt: 0 } } } }
-      ]
+      extraFilters.push({
+        $or: [
+          { stock: { $gt: 0 } },
+          { variants: { $elemMatch: { stock: { $gt: 0 } } } }
+        ]
+      })
     }
 
-    // ✅ IMPROVED: Price range filter - fixed $or conflict with search
-    if ((minPrice || maxPrice) && searchFilter.length === 0) {
-      // If no search, use $or directly
+    // Price range filter
+    if (minPrice || maxPrice) {
       const priceFilter: any = {}
       if (minPrice) {
         priceFilter.$gte = Number(minPrice)
@@ -99,41 +96,26 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       if (maxPrice) {
         priceFilter.$lte = Number(maxPrice)
       }
-      filter.$or = [
-        { finalPrice: priceFilter },
-        { price: priceFilter }
-      ]
-    } else if ((minPrice || maxPrice) && searchFilter.length > 0) {
-      // If search exists, combine with $and to avoid $or conflict
-      const priceFilter: any = {}
-      if (minPrice) {
-        priceFilter.$gte = Number(minPrice)
-      }
-      if (maxPrice) {
-        priceFilter.$lte = Number(maxPrice)
-      }
-      filter.$and = [
-        { $or: searchFilter },
-        {
-          $or: [
-            { finalPrice: priceFilter },
-            { price: priceFilter }
-          ]
-        }
-      ]
-    } else if (searchFilter.length > 0) {
-      // Search only, no price filter
-      filter.$or = searchFilter
+      extraFilters.push({
+        $or: [
+          { finalPrice: priceFilter },
+          { price: priceFilter }
+        ]
+      })
+    }
+
+    if (extraFilters.length > 0) {
+      filter.$and = extraFilters
     }
 
     // Determine sort order
     let sortOrder: any = { createdAt: -1 } // Default: newest
     switch (sort) {
       case 'priceAsc':
-        sortOrder = { finalPrice: 1 }
+        sortOrder = { finalPrice: 1, createdAt: -1 }
         break
       case 'priceDesc':
-        sortOrder = { finalPrice: -1 }
+        sortOrder = { finalPrice: -1, createdAt: -1 }
         break
       case 'bestSellers':
         sortOrder = { soldCount: -1, createdAt: -1 }
@@ -149,58 +131,65 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
         sortOrder = { createdAt: -1 }
     }
 
-    // ✅ IMPROVED: Select specific fields to reduce payload + improve performance
-    // Note: Consider adding text index on name, description, tags for faster full-text search:
-    // db.products.createIndex({ name: 'text', description: 'text', tags: 'text' })
-    let products = await Product.find(filter)
-      .select('name slug finalPrice price minPrice maxPrice brand platforms genres ratingAverage ratingCount soldCount images discount views') // ← Optimized fields
-      .populate('categoryId', 'name')
-      .populate('brand', 'name')
-      .populate('platforms', 'name')
-      .populate('genres', 'name')
-      .sort(sortOrder)
-
-    // ✅ NEW: Sort by search relevance if search query exists
-    if (search && searchFilter.length > 0) {
-      const searchLower = String(search).toLowerCase()
-      products.sort((a: any, b: any) => {
-        const aName = (a.name || '').toLowerCase()
-        const bName = (b.name || '').toLowerCase()
-
-        // Exact match gets highest priority
-        if (aName === searchLower) return -1
-        if (bName === searchLower) return 1
-
-        // Prefix match gets second priority
-        if (aName.startsWith(searchLower) && !bName.startsWith(searchLower)) return -1
-        if (!aName.startsWith(searchLower) && bName.startsWith(searchLower)) return 1
-
-        // Both start with search or both don't - keep original sort
-        return 0
-      })
+    // ✅ OPTIMIZED: Use text search with score for search queries
+    let searchScore: any = null
+    if (search) {
+      filter.$text = { $search: search }
+      searchScore = { score: { $meta: 'textScore' } }
+      sortOrder = { score: { $meta: 'textScore' }, ...sortOrder }
     }
 
-    // Apply pagination after sorting
-    const paginatedProducts = products.slice(skip, skip + Number(limit))
+    const cacheKey = buildProductCacheKey(req.query)
+    const cachedResponse = await getCache<any>(cacheKey)
+    if (cachedResponse) {
+      res.json(cachedResponse)
+      return
+    }
 
-    const total = await Product.countDocuments(filter)
-    // Tính tổng số trang
+    // ✅ OPTIMIZED: Use lean() for better performance, selective populate
+    const query = Product.find(filter)
+      .select('name slug finalPrice price minPrice maxPrice brand platforms genres ratingAverage ratingCount soldCount images discount views')
+      .sort(sortOrder)
+      .skip(skip)
+      .limit(Number(limit))
+      .lean()
+
+    // Only populate if needed (for display names)
+    if (req.query.populate === 'true') {
+      query.populate('categoryId', 'name')
+           .populate('brand', 'name')
+           .populate('platforms', 'name')
+           .populate('genres', 'name')
+    }
+
+    // Execute query with pagination in parallel with count
+    const [products, total] = await Promise.all([
+      query,
+      Product.countDocuments(filter),
+    ])
+
     const pages = Math.ceil(total / Number(limit))
-    // Kiểm tra có trang tiếp theo không
     const hasMore = Number(page) < pages
-    res.json({
+    const response = {
       success: true,
       data: {
-        products: paginatedProducts,
+        products,
         total,
         page: Number(page),
         pages,
         hasMore,
         limit: Number(limit),
       },
+    }
+
+    await setCache(cacheKey, response, 45)
+    res.json(response)
+  } catch (error) {
+    console.error('Error fetching products:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
     })
-  } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message })
   }
 }
 
@@ -243,20 +232,31 @@ export const getProductBySlug = async (req: Request, res: Response): Promise<voi
 export const getTrendingProducts = async (req: Request, res: Response): Promise<void> => {
   try {
     const { limit = 10 } = req.query
+    const cacheKey = `products:trending:${Number(limit)}`
+    const cachedResponse = await getCache<any>(cacheKey)
+    if (cachedResponse) {
+      res.json(cachedResponse)
+      return
+    }
 
     const products = await Product.find({ isActive: true })
+      .select('name slug finalPrice price images discount views categoryId')
       .populate('categoryId', 'name')
       .sort({ views: -1, createdAt: -1 })
       .limit(Number(limit))
+      .lean()
 
-    res.json({
+    const response = {
       success: true,
       data: {
         products,
         total: products.length,
         limit: Number(limit),
       },
-    })
+    }
+
+    await setCache(cacheKey, response, 120)
+    res.json(response)
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message })
   }
@@ -265,20 +265,31 @@ export const getTrendingProducts = async (req: Request, res: Response): Promise<
 export const getBestSellers = async (req: Request, res: Response): Promise<void> => {
   try {
     const { limit = 10 } = req.query
+    const cacheKey = `products:bestsellers:${Number(limit)}`
+    const cachedResponse = await getCache<any>(cacheKey)
+    if (cachedResponse) {
+      res.json(cachedResponse)
+      return
+    }
 
     const products = await Product.find({ isActive: true })
+      .select('name slug finalPrice price images discount soldCount categoryId')
       .populate('categoryId', 'name')
       .sort({ soldCount: -1, createdAt: -1 })
       .limit(Number(limit))
+      .lean()
 
-    res.json({
+    const response = {
       success: true,
       data: {
         products,
         total: products.length,
         limit: Number(limit),
       },
-    })
+    }
+
+    await setCache(cacheKey, response, 120)
+    res.json(response)
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message })
   }
@@ -288,13 +299,21 @@ export const getProductsByCategory = async (req: Request, res: Response): Promis
   try {
     const { category } = req.params
     const { limit = 10 } = req.query
+    const cacheKey = `products:category:${category}:limit:${Number(limit)}`
+    const cachedResponse = await getCache<any>(cacheKey)
+    if (cachedResponse) {
+      res.json(cachedResponse)
+      return
+    }
 
     const products = await Product.find({ category, isActive: true })
+      .select('name slug finalPrice price images discount categoryId')
       .populate('categoryId', 'name')
       .sort({ createdAt: -1 })
       .limit(Number(limit))
+      .lean()
 
-    res.json({
+    const response = {
       success: true,
       data: {
         products,
@@ -302,7 +321,10 @@ export const getProductsByCategory = async (req: Request, res: Response): Promis
         category,
         limit: Number(limit),
       },
-    })
+    }
+
+    await setCache(cacheKey, response, 60)
+    res.json(response)
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message })
   }
@@ -312,24 +334,31 @@ export const getProductsByTag = async (req: Request, res: Response): Promise<voi
   try {
     const { tag } = req.params
     const { limit = 10, page = 1 } = req.query
+    const cacheKey = `products:tag:${tag}:page:${Number(page)}:limit:${Number(limit)}`
+    const cachedResponse = await getCache<any>(cacheKey)
+    if (cachedResponse) {
+      res.json(cachedResponse)
+      return
+    }
+
     const skip = ((Number(page) - 1) * Number(limit)) as number
-
-    // Case-insensitive tag search
-    const products = await Product.find({
+    const filter = {
       tags: { $regex: `^${tag}$`, $options: 'i' },
-      isActive: true
-    })
-      .populate('categoryId', 'name')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
+      isActive: true,
+    }
 
-    const total = await Product.countDocuments({
-      tags: { $regex: `^${tag}$`, $options: 'i' },
-      isActive: true
-    })
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .select('name slug finalPrice price images discount categoryId')
+        .populate('categoryId', 'name')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      Product.countDocuments(filter),
+    ])
 
-    res.json({
+    const response = {
       success: true,
       data: {
         products,
@@ -338,7 +367,10 @@ export const getProductsByTag = async (req: Request, res: Response): Promise<voi
         limit: Number(limit),
         tag,
       },
-    })
+    }
+
+    await setCache(cacheKey, response, 60)
+    res.json(response)
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message })
   }
@@ -394,6 +426,8 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
         damaged: 0,
       })
     }
+
+    await invalidateCacheByPattern('products:*')
 
     res.status(201).json({
       success: true,
@@ -470,6 +504,8 @@ export const updateProduct = async (req: Request, res: Response): Promise<void> 
       }
     }
 
+    await invalidateCacheByPattern('products:*')
+
     res.json({ success: true, data: product, message: 'Product updated successfully' })
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message })
@@ -485,6 +521,8 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ success: false, message: 'Product not found' })
       return
     }
+
+    await invalidateCacheByPattern('products:*')
 
     res.json({ success: true, data: product, message: 'Product deleted successfully' })
   } catch (error: any) {

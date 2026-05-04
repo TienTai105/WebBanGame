@@ -12,6 +12,7 @@ interface ICheckoutHold extends Document {
   items: ICheckoutHoldItem[]
   reservedUntil: Date
   released: boolean
+  isExtended: boolean  // ✅ Track if hold has been extended (only 1 extension allowed)
   createdAt: Date
   updatedAt: Date
 }
@@ -45,6 +46,11 @@ const checkoutHoldSchema = new Schema<ICheckoutHold>(
     released: {
       type: Boolean,
       default: false,
+    },
+    isExtended: {
+      type: Boolean,
+      default: false,  // ✅ Track if hold has been extended
+      index: true,
     },
   },
   { timestamps: true }

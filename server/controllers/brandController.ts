@@ -8,7 +8,10 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
 
 // Get all brands
 export const getBrands = asyncHandler(async (req: Request, res: Response) => {
-  const brands = await Brand.find().sort({ createdAt: -1 })
+  const brands = await Brand.find()
+    .select('name slug logo createdAt')
+    .sort({ createdAt: -1 })
+    .lean()
 
   res.status(200).json({
     success: true,

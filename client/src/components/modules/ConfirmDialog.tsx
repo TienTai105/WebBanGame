@@ -10,6 +10,8 @@ interface ConfirmDialogProps {
   message: string | ReactNode
   onConfirm: () => void
   onCancel: () => void
+  onDismiss?: () => void
+  closeOnOverlayClick?: boolean
   confirmText?: string
   cancelText?: string
   variant?: ConfirmVariant
@@ -22,6 +24,8 @@ const ConfirmDialog: FC<ConfirmDialogProps> = ({
   message,
   onConfirm,
   onCancel,
+  onDismiss,
+  closeOnOverlayClick = true,
   confirmText = 'Xác nhận',
   cancelText = 'Hủy',
   variant = 'danger',
@@ -62,7 +66,11 @@ const ConfirmDialog: FC<ConfirmDialogProps> = ({
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40"
-          onClick={onCancel}
+          onClick={() => {
+            if (!closeOnOverlayClick) return
+            if (onDismiss) onDismiss()
+            else onCancel()
+          }}
         />
       )}
 
@@ -75,7 +83,10 @@ const ConfirmDialog: FC<ConfirmDialogProps> = ({
         <div className="bg-slate-900 border border-slate-800 rounded-lg shadow-2xl">
           {/* Close Button */}
           <button
-            onClick={onCancel}
+            onClick={() => {
+              if (onDismiss) onDismiss()
+              else onCancel()
+            }}
             className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />

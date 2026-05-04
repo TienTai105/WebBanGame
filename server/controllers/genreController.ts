@@ -8,7 +8,10 @@ const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => P
 
 // Get all genres
 export const getGenres = asyncHandler(async (req: Request, res: Response) => {
-  const genres = await Genre.find().sort({ createdAt: -1 })
+  const genres = await Genre.find()
+    .select('name slug createdAt')
+    .sort({ createdAt: -1 })
+    .lean()
 
   res.status(200).json({
     success: true,

@@ -108,18 +108,36 @@ class InventoryService {
 
   /**
    * Release reserved stock back to available (payment failed / order cancelled)
+   * Uses optimistic locking to prevent race conditions with confirm operations
    */
-  async releaseStock(items: OrderItem[], orderId: string): Promise<void> {
+  async releaseStock(
+    items: OrderItem[],
+    orderId: string,
+    options?: { reason?: string; notes?: string; referenceType?: string }
+  ): Promise<void> {
     for (const item of items) {
       const productId = item.product.toString()
       const variantSku = item.variantSku || null
 
-      const query = variantSku ? 
-        { productId, variantSku } : 
+      const query = variantSku ?
+        { productId, variantSku } :
         { productId, $or: [{ variantSku: null }, { variantSku: { $exists: false } }] }
 
+      // Optimistic locking: get current state first
+      const currentInventory = await Inventory.findOne(query)
+      if (!currentInventory || currentInventory.reserved < item.quantity) {
+        console.error(`⚠️ Cannot release stock for ${variantSku || productId}, order ${orderId}: insufficient reserved (${currentInventory?.reserved || 0} < ${item.quantity})`)
+        continue
+      }
+
+      // Atomic update with version check
       const inventory = await Inventory.findOneAndUpdate(
-        { ...query, reserved: { $gte: item.quantity } },
+        {
+          ...query,
+          reserved: { $gte: item.quantity }, // Ensure still has enough reserved
+          // Prevent race with confirm: if sold increased recently, stock might have been confirmed
+          sold: { $lte: currentInventory.sold } // Sold should not have increased
+        },
         {
           $inc: { reserved: -item.quantity, available: item.quantity },
           $set: { lastUpdated: new Date() },
@@ -128,9 +146,13 @@ class InventoryService {
       )
 
       if (!inventory) {
-        console.error(`Could not release stock for ${variantSku || productId}, order ${orderId}`)
+        console.error(`⚠️ Race condition detected: Could not release stock for ${variantSku || productId}, order ${orderId} (stock may have been confirmed)`)
         continue
       }
+
+      const reason = options?.reason || 'Huỷ đơn / thanh toán thất bại'
+      const notes = options?.notes || `Released for order: ${orderId}`
+      const referenceType = options?.referenceType || 'Order'
 
       await StockMovement.create({
         inventoryId: inventory._id,
@@ -138,9 +160,9 @@ class InventoryService {
         variantSku,
         type: 'UNRESERVED',
         quantity: item.quantity,
-        reason: 'Huỷ đơn / thanh toán thất bại',
-        reference: { type: 'Order', id: orderId },
-        notes: `Released for order: ${orderId}`,
+        reason,
+        reference: { type: referenceType, id: orderId },
+        notes,
       })
     }
   }
@@ -149,10 +171,19 @@ class InventoryService {
    * Release stock when cancelling order - handles both reserved and sold inventory
    * (In case order was confirmed/paid before cancellation)
    */
-  async releaseStockOnCancel(items: OrderItem[], orderId: string, isConfirmed: boolean = false): Promise<void> {
+  async releaseStockOnCancel(
+    items: OrderItem[],
+    orderId: string,
+    isConfirmed: boolean = false,
+    paymentMethod: string = 'COD'
+  ): Promise<void> {
     for (const item of items) {
       const productId = item.product.toString()
       const variantSku = item.variantSku || null
+      const paymentLabel = paymentMethod === 'Momo' ? 'Momo' : paymentMethod === 'COD' ? 'COD' : paymentMethod
+      const cancelReason = paymentMethod === 'Momo'
+        ? 'Huỷ đơn hàng Momo chưa thanh toán'
+        : 'Huỷ đơn hàng (COD)'
 
       const query = variantSku ? 
         { productId, variantSku } : 
@@ -160,7 +191,7 @@ class InventoryService {
 
       // If order was confirmed/paid (Momo), stock is in SOLD pool - release ONLY from SOLD
       if (isConfirmed) {
-        console.log(`💳 [CONFIRMED MOMO] Releasing ${item.quantity} from SOLD pool for ${variantSku || productId}`)
+        console.log(`💳 [CONFIRMED ${paymentLabel}] Releasing ${item.quantity} from SOLD pool for ${variantSku || productId}`)
         const inventory = await Inventory.findOneAndUpdate(
           { ...query, sold: { $gte: item.quantity } },
           {
@@ -171,25 +202,25 @@ class InventoryService {
         )
 
         if (inventory) {
-          console.log(`✅ [CONFIRMED] Released ${item.quantity} from SOLD pool for ${variantSku || productId}`)
+          console.log(`✅ [CONFIRMED ${paymentLabel}] Released ${item.quantity} from SOLD pool for ${variantSku || productId}`)
           await StockMovement.create({
             inventoryId: inventory._id,
             productId: new mongoose.Types.ObjectId(productId),
             variantSku,
             type: 'REFUNDED',
             quantity: item.quantity,
-            reason: 'Hoàn lại hàng do huỷ đơn (thanh toán Momo)',
+            reason: `Hoàn lại hàng do huỷ đơn (thanh toán ${paymentLabel})`,
             reference: { type: 'Order', id: orderId },
             notes: `Refunded from sold (confirmed order): ${orderId}`,
           })
           continue
         } else {
-          console.error(`❌ [CONFIRMED] Cannot find ${item.quantity} in SOLD pool - stock inconsistency!`)
+          console.error(`❌ [CONFIRMED ${paymentLabel}] Cannot find ${item.quantity} in SOLD pool - stock inconsistency!`)
           continue
         }
       }
 
-      // If order is unpaid (COD), stock is in RESERVED pool - try RESERVED first
+      // If order is unpaid, stock is in RESERVED pool - try RESERVED first
       // First try: release from reserved pool (for unpaid orders)
       let inventory = await Inventory.findOneAndUpdate(
         { ...query, reserved: { $gte: item.quantity } },
@@ -201,16 +232,16 @@ class InventoryService {
       )
 
       if (inventory) {
-        console.log(`✅ [UNPAID COD] Released ${item.quantity} from RESERVED pool for ${variantSku || productId}`)
+        console.log(`✅ [UNPAID ${paymentLabel}] Released ${item.quantity} from RESERVED pool for ${variantSku || productId}`)
         await StockMovement.create({
           inventoryId: inventory._id,
           productId: new mongoose.Types.ObjectId(productId),
           variantSku,
           type: 'UNRESERVED',
           quantity: item.quantity,
-          reason: 'Huỷ đơn hàng (COD)',
+          reason: cancelReason,
           reference: { type: 'Order', id: orderId },
-          notes: `Released from reserved (unpaid order): ${orderId}`,
+          notes: `Released from reserved (${paymentLabel} unpaid order): ${orderId}`,
         })
         continue
       }
@@ -226,16 +257,16 @@ class InventoryService {
       )
 
       if (inventory) {
-        console.log(`⚠️ [FALLBACK] Released ${item.quantity} from SOLD pool for ${variantSku || productId}`)
+        console.log(`⚠️ [FALLBACK ${paymentLabel}] Released ${item.quantity} from SOLD pool for ${variantSku || productId}`)
         await StockMovement.create({
           inventoryId: inventory._id,
           productId: new mongoose.Types.ObjectId(productId),
           variantSku,
           type: 'REFUNDED',
           quantity: item.quantity,
-          reason: 'Hoàn lại hàng - fallback release',
+          reason: `Hoàn lại hàng - fallback release (${paymentLabel})`,
           reference: { type: 'Order', id: orderId },
-          notes: `Fallback release from sold: ${orderId}`,
+          notes: `Fallback release from sold (${paymentLabel}): ${orderId}`,
         })
         continue
       }
@@ -247,18 +278,32 @@ class InventoryService {
 
   /**
    * Confirm order - move reserved → sold (called after payment confirmed)
+   * Uses optimistic locking to prevent race conditions with release operations
    */
   async confirmOrderStock(items: OrderItem[], orderId: string): Promise<void> {
     for (const item of items) {
       const productId = item.product.toString()
       const variantSku = item.variantSku || null
 
-      const query = variantSku ? 
-        { productId, variantSku } : 
+      const query = variantSku ?
+        { productId, variantSku } :
         { productId, $or: [{ variantSku: null }, { variantSku: { $exists: false } }] }
 
+      // Optimistic locking: get current reserved amount first
+      const currentInventory = await Inventory.findOne(query)
+      if (!currentInventory || currentInventory.reserved < item.quantity) {
+        console.error(`⚠️ Cannot confirm stock for ${variantSku || productId}, order ${orderId}: insufficient reserved (${currentInventory?.reserved || 0} < ${item.quantity})`)
+        continue
+      }
+
+      // Atomic update with version check
       const inventory = await Inventory.findOneAndUpdate(
-        { ...query, reserved: { $gte: item.quantity } },
+        {
+          ...query,
+          reserved: { $gte: item.quantity }, // Ensure still has enough reserved
+          // Prevent race with release: if available increased recently, stock might have been released
+          available: { $lte: currentInventory.available } // Available should not have increased
+        },
         {
           $inc: { reserved: -item.quantity, sold: item.quantity },
           $set: { lastUpdated: new Date() },
@@ -267,7 +312,7 @@ class InventoryService {
       )
 
       if (!inventory) {
-        console.error(`⚠️ Could not confirm stock for ${variantSku || productId}, order ${orderId}`)
+        console.error(`⚠️ Race condition detected: Could not confirm stock for ${variantSku || productId}, order ${orderId} (stock may have been released)`)
         continue
       }
 
@@ -293,28 +338,47 @@ class InventoryService {
 
   /**
    * Release expired reservations (for cron job)
+   * PRIORITY: If stockConfirmedAt exists, payment already succeeded, so DON'T release
    */
-  async releaseExpiredReservations(): Promise<number> {
+  async releaseExpiredReservations(batchSize: number = 50): Promise<number> {
     const Order = (await import('../models/Order.js')).default
+    const now = new Date()
+    const momoInProgressGrace = new Date(now.getTime() - 15 * 60 * 1000)
 
     // Only expire unpaid online-payment orders still in pending status
     // COD orders have no expiry (reservationExpiresAt = null)
+    // For Momo orders with a payment request already started, keep the hold for a short grace period
+    // CRITICAL: Exclude orders where stockConfirmedAt is set (payment may be confirming)
     const expired = await Order.find({
       orderStatus: 'pending',
       paymentStatus: 'unpaid',
       paymentMethod: { $ne: 'COD' },
-      reservationExpiresAt: { $lt: new Date() },
+      reservationExpiresAt: { $lt: now },
+      stockConfirmedAt: null,  // ← Do NOT release if stock was already confirmed
+      $or: [
+        { momoRequestId: null },
+        { momoRequestId: { $exists: false } },
+        { paymentStartedAt: { $lt: momoInProgressGrace } },
+      ],
     })
+      .sort({ reservationExpiresAt: 1 })
+      .limit(batchSize)
 
     let count = 0
     for (const order of expired) {
       try {
-        await this.releaseStock(order.orderItems as any, order._id.toString())
+        const releaseReason = order.paymentMethod === 'Momo'
+          ? 'Cronjob trả hàng - Hủy đơn Momo chưa thanh toán / quá hạn thanh toán'
+          : 'Cronjob trả hàng - Hủy đơn thanh toán thất bại'
+        await this.releaseStock(order.orderItems as any, order._id.toString(), {
+          reason: releaseReason,
+          notes: `Released expired reservation for order ${order.orderCode} (${order.paymentMethod})`,
+        })
         await Order.findByIdAndUpdate(order._id, { orderStatus: 'failed' })
         count++
-        console.log(`⏰ Released expired reservation: ${order.orderCode}`)
+        console.log(`⏰ Released expired reservation: ${order.orderCode} (${order._id}, ${order.paymentMethod})`)
       } catch (err) {
-        console.error(`❌ Error releasing order ${order.orderCode}:`, err)
+        console.error(`❌ Error releasing order ${order.orderCode} (${order._id}):`, err)
       }
     }
 

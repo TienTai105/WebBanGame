@@ -174,6 +174,16 @@ newsSchema.index({ category: 1 })
 newsSchema.index({ tags: 1 })
 newsSchema.index({ featured: 1, status: 1 })
 
+// ✅ NEW: Text index to speed up news search
+newsSchema.index({ title: 'text', excerpt: 'text', tags: 'text' }, {
+  weights: {
+    title: 10,
+    excerpt: 5,
+    tags: 2,
+  },
+  name: 'news_text_search',
+})
+
 // Virtual to calculate read time from content (300 words per minute average)
 newsSchema.virtual('calculatedReadTime').get(function (this: INews) {
   const wordCount = this.content.split(/\s+/).length

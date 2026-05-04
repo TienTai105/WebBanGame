@@ -117,3 +117,79 @@ export const releaseHold = asyncHandler(async (req: Request, res: Response) => {
   console.log(`✅ Hold released successfully: ${holdId}`)
   res.status(200).json({ success: true, message: 'Hold released' })
 })
+
+/**
+ * PUT /api/checkout/hold/:holdId/extend
+ * Extend hold duration by specified minutes (default 5 minutes)
+ * ✅ Only needs holdId (unique identifier), no userId verification needed
+ * ✅ Only allows ONE extension per hold
+ */
+export const extendHold = asyncHandler(async (req: Request, res: Response) => {
+  const { holdId } = req.params
+  const { extendMinutes = 5 } = req.body
+
+  // ✅ Only lookup by holdId (sufficient unique identifier)
+  const hold = await CheckoutHold.findOne({ holdId, released: false })
+
+  if (hold) {
+    // ✅ Check if already extended - only allow 1 extension
+    if (hold.isExtended) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Đã gia hạn 1 lần rồi, không thể gia hạn thêm' 
+      })
+    }
+
+    // Extend from now if the hold has already expired, otherwise extend from the current reservedUntil
+    const now = new Date().getTime()
+    const currentExpiry = hold.reservedUntil
+    const baseTime = Math.max(now, currentExpiry.getTime())
+    const newReservedUntil = new Date(baseTime + extendMinutes * 60 * 1000)
+    hold.reservedUntil = newReservedUntil
+    hold.isExtended = true  // ✅ Mark as extended
+    await hold.save()
+
+    console.log(`⏰ Hold extended (1st & last): ${holdId} by ${extendMinutes} minutes, old expiry: ${currentExpiry.toISOString()}, new expiry: ${newReservedUntil.toISOString()}`)
+
+    return res.status(200).json({
+      success: true,
+      message: `Hold extended by ${extendMinutes} minutes (this is the only extension allowed)`,
+      data: { holdId, reservedUntil: newReservedUntil, isExtended: true }
+    })
+  }
+
+  // If no active checkout hold exists, try extending the order reservation directly
+  const Order = (await import('../models/Order.js')).default
+  const order = await Order.findOne({ holdId, orderStatus: 'pending', paymentStatus: 'unpaid' })
+  if (!order) {
+    return res.status(404).json({ success: false, message: 'Hold not found or already released' })
+  }
+
+  if (!order.reservationExpiresAt) {
+    return res.status(400).json({ success: false, message: 'No active reservation found for this order' })
+  }
+
+  // ✅ Check if order was already extended
+  if (order.isExtended) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Đã gia hạn 1 lần rồi, không thể gia hạn thêm' 
+    })
+  }
+
+  const now = new Date().getTime()
+  const currentExpiry = order.reservationExpiresAt
+  const baseTime = Math.max(now, currentExpiry.getTime())
+  const newReservedUntil = new Date(baseTime + extendMinutes * 60 * 1000)
+  order.reservationExpiresAt = newReservedUntil
+  order.isExtended = true  // ✅ Mark as extended
+  await order.save()
+
+  console.log(`⏰ Order reservation extended (1st & last) for hold ${holdId}: old expiry ${currentExpiry.toISOString()}, new expiry ${newReservedUntil.toISOString()}`)
+
+  return res.status(200).json({
+    success: true,
+    message: `Hold extended by ${extendMinutes} minutes (this is the only extension allowed)`,
+    data: { holdId, reservedUntil: newReservedUntil, isExtended: true }
+  })
+})

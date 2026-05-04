@@ -1,12 +1,14 @@
 import express, { Express, Request, Response, NextFunction } from 'express'
 import { createServer } from 'http'
 import cors from 'cors'
+import compression from 'compression'
 import helmet from 'helmet'
 import morgan from 'morgan'
 import cookieParser from 'cookie-parser'
 import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
 import connectDB from './config/db.js'
+import { connectRedis } from './services/cacheService.js'
 import { errorHandler } from './middleware/auth.js'
 import { verifyCsrfToken, generateCsrfToken } from './middleware/csrf.js' // ✅ Add CSRF import
 import { sanitizeInput } from './middleware/sanitize.js' // ✅ Add XSS protection
@@ -79,6 +81,7 @@ app.use(morgan('combined')) // Logging
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ limit: '10mb', extended: true }))
 app.use(cookieParser())
+app.use(compression())
 
 // ✅ XSS Protection Middleware
 app.use(sanitizeInput)
@@ -155,11 +158,17 @@ app.use((req: Request, res: Response) => {
 app.use(errorHandler)
 
 const PORT = process.env.PORT || 5000
-const httpServer = createServer(app)
-initSocket(httpServer)
 
-const server = httpServer.listen(PORT, () => {
-  console.log(`
+const startServer = async (): Promise<void> => {
+  await connectDB()
+  await connectRedis()
+  startCronJobs()
+
+  const httpServer = createServer(app)
+  initSocket(httpServer)
+
+  const server = httpServer.listen(PORT, () => {
+    console.log(`
 ╔════════════════════════════════════════════╗
 ║  🎮 WebBanGame Server                      ║
 ║  ✓ Running on http://localhost:${PORT}      ║
@@ -167,13 +176,18 @@ const server = httpServer.listen(PORT, () => {
 ║  ✓ Socket.IO enabled                       ║
 ╚════════════════════════════════════════════╝
   `)
-})
-
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server')
-  server.close(() => {
-    console.log('HTTP server closed')
-    process.exit(0)
   })
+
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM signal received: closing HTTP server')
+    server.close(() => {
+      console.log('HTTP server closed')
+      process.exit(0)
+    })
+  })
+}
+
+startServer().catch((error) => {
+  console.error('Failed to start server:', error)
+  process.exit(1)
 })

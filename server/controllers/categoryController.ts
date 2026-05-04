@@ -3,7 +3,10 @@ import Category from '../models/Category.js'
 
 export const getCategories = async (req: Request, res: Response): Promise<void> => {
   try {
-    const categories = await Category.find().sort({ level: 1, name: 1 })
+    const categories = await Category.find()
+      .select('name slug level parentId')
+      .sort({ level: 1, name: 1 })
+      .lean()
 
     res.json({
       success: true,

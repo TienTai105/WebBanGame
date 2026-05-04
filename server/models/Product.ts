@@ -287,6 +287,30 @@ productSchema.index({ brand: 1 })
 productSchema.index({ platforms: 1 })
 productSchema.index({ genres: 1 })
 
+// ✅ NEW: Text index for search performance
+productSchema.index({
+  name: 'text',
+  description: 'text',
+  tags: 'text',
+  'variants.sku': 'text'
+}, {
+  weights: {
+    name: 10,
+    description: 5,
+    tags: 3,
+    'variants.sku': 2
+  },
+  name: 'products_text_search'
+})
+
+// ✅ NEW: Compound indexes for sort performance
+productSchema.index({ finalPrice: 1, createdAt: -1 }) // priceAsc
+productSchema.index({ finalPrice: -1, createdAt: -1 }) // priceDesc
+productSchema.index({ soldCount: -1, createdAt: -1 }) // bestSellers
+productSchema.index({ views: -1, createdAt: -1 }) // trending
+productSchema.index({ ratingAverage: -1, createdAt: -1 }) // rating
+productSchema.index({ createdAt: -1 }) // newest (default)
+
 const Product: Model<IProduct> = mongoose.model<IProduct>('Product', productSchema)
 export default Product
 export type { IProduct, IProductVariant }

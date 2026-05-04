@@ -6,6 +6,10 @@ import { sendOrderConfirmationEmail } from '../services/emailService.js'
 import { notifyOrderCompleted } from '../services/notificationService.js'
 import packingSlipService from '../services/packingSlipService.js'
 
+const MOMO_RESERVATION_GRACE_MS = 15 * 60 * 1000
+
+const isMomoSuccessCode = (code: unknown): boolean => code !== null && code !== undefined && code !== '' && Number(code) === 0
+
 const asyncHandler = (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) =>
   (req: Request, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch((err: any) => next(err))
@@ -38,11 +42,11 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
   }
 
   try {
-    // Detect retry: If order already has momoRequestId from previous attempt, this is a retry!
-    const isRetry = !!order.momoRequestId
-    
-    if (isRetry) {
-      console.log(`🔄 [MOMO RETRY] User calling init again for order ${order.orderCode}, momoRetryCount=${order.momoRetryCount}`)
+    // Detect retry: caller explicitly requested a new Momo payment attempt
+    const isRetry = req.body.retry === true || req.body.retry === 'true'
+
+    if (isRetry && order.momoRequestId) {
+      console.log(`[MOMO RETRY] User calling init again for order ${order.orderCode}, momoRetryCount=${order.momoRetryCount}`)
       order.momoRetryCount = (order.momoRetryCount || 0) + 1
       order.momoRequestId = null  // Reset to create new payment
       await order.save()
@@ -51,6 +55,13 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
     // Only return cached if truly first attempt (no momoRequestId at all)
     if (order.momoRequestId && !isRetry) {
       const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173'
+      const requestedExpiry = new Date(Date.now() + MOMO_RESERVATION_GRACE_MS)
+      if (!order.reservationExpiresAt || order.reservationExpiresAt < requestedExpiry) {
+        order.reservationExpiresAt = requestedExpiry
+      }
+      order.paymentStartedAt = new Date()
+      await order.save()
+
       console.log(`📌 [MOMO CACHED] Returning cached payUrl for order ${order.orderCode}, retryCount=${order.momoRetryCount}`)
       return res.status(200).json({
         success: true,
@@ -77,7 +88,7 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
       orderId: momoOrderId,
       amount: Math.round(order.finalPrice),
       orderInfo: `Order ${order.orderCode}`,  // Use ASCII only, no Vietnamese characters
-      redirectUrl: `${baseUrl}/checkout?orderId=${order._id}&retry=true`,
+      redirectUrl: `${baseUrl}/momo-return?orderId=${order._id}&retry=true`,
       ipnUrl: `${process.env.SERVER_URL || 'http://localhost:5000'}/api/payment/momo/callback`,
       extraData: order._id.toString(),  // Pass MongoDB ID for callback lookup
     })
@@ -87,6 +98,11 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
       // Success - save requestId and merchant momoOrderId for later status queries
       order.momoRequestId = momoResponse.requestId
       order.momoOrderId = momoOrderId
+      order.paymentStartedAt = new Date()
+      const requestedExpiry = new Date(Date.now() + MOMO_RESERVATION_GRACE_MS)
+      if (!order.reservationExpiresAt || order.reservationExpiresAt < requestedExpiry) {
+        order.reservationExpiresAt = requestedExpiry
+      }
       await order.save()
 
       return res.status(200).json({
@@ -101,7 +117,7 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
         },
       })
     } else {
-      console.error('❌ [MOMO INIT] Momo API error response:', {
+      console.error('[MOMO INIT] Momo API error response:', {
         resultCode: momoResponse.resultCode,
         message: momoResponse.message,
         orderId: order.orderCode,
@@ -114,7 +130,7 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
       })
     }
   } catch (err: any) {
-    console.error('❌ Momo init error:', err)
+    console.error('Momo init error:', err)
     return res.status(500).json({
       success: false,
       message: err.message || 'Failed to initialize Momo payment',
@@ -127,11 +143,11 @@ export const initMomoPayment = asyncHandler(async (req: Request, res: Response) 
  * Momo sends IPN callback after payment
  */
 export const momoCallback = asyncHandler(async (req: Request, res: Response) => {
-  console.log('🔔 [MOMO CALLBACK] RECEIVED REQUEST - Body:', JSON.stringify(req.body, null, 2))
+  console.log('[MOMO CALLBACK] RECEIVED REQUEST - Body:', JSON.stringify(req.body, null, 2))
   
   const { orderId, resultCode, transId, requestId, extraData } = req.body
 
-  console.log('� [DEBUG] Extracted data:')
+  console.log('[DEBUG] Extracted data:')
   console.log('  - orderId (Momo custom ID):', orderId)
   console.log('  - extraData (MongoDB ID):', extraData)
   console.log('  - resultCode:', resultCode)
@@ -139,13 +155,13 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
 
   // Use extraData (MongoDB _id) to find order, NOT orderId (custom Momo orderId)
   const mongoDbOrderId = extraData || orderId
-  console.log('🔔 [DEBUG] Using mongoDbOrderId for lookup:', mongoDbOrderId)
+  console.log('[DEBUG] Using mongoDbOrderId for lookup:', mongoDbOrderId)
   
   const order = await Order.findById(mongoDbOrderId)
-  console.log(`🔔 [DEBUG] Order after findById:`, order ? `FOUND - ${order.orderCode}` : 'NOT FOUND')
+  console.log(`[DEBUG] Order after findById:`, order ? `FOUND - ${order.orderCode}` : 'NOT FOUND')
   
   if (!order) {
-    console.error('❌ [MOMO CALLBACK] Order not found for ID:', orderId)
+    console.error('[MOMO CALLBACK] Order not found for ID:', orderId)
     return res.status(404).json({ success: false, message: 'Order not found' })
   }
 
@@ -156,7 +172,7 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
   // }
 
   // resultCode 0 = success, anything else = failed
-  if (resultCode === 0) {
+  if (isMomoSuccessCode(resultCode)) {
     // Payment successful
     if (order.paymentStatus === 'paid') {
       // Already processed
@@ -172,16 +188,18 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
         console.error('⚠️ Stock confirm failed:', err.message)
       }
     } else {
-      console.log(`⏭️ [MOMO] Order ${order.orderCode} stock already confirmed at ${order.stockConfirmedAt}`)
+      console.log(`[MOMO] Order ${order.orderCode} stock already confirmed at ${order.stockConfirmedAt}`)
     }
 
     // Mark order as paid
     order.paymentStatus = 'paid'
     order.momoTransactionId = transId
+    order.paymentStartedAt = null
+    order.momoRequestId = null
     await order.save()
 
     // Send order confirmation email after payment success
-    console.log(`📧 Momo payment confirmed (resultCode: ${resultCode}) - sending confirmation email for order ${order.orderCode}`)
+    console.log(`Momo payment confirmed (resultCode: ${resultCode}) - sending confirmation email for order ${order.orderCode}`)
     try {
       const populatedOrder = await Order.findById(order._id)
         .populate('user')
@@ -196,10 +214,10 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
       }
       
       const customerEmail = populatedOrder?.shippingAddress.email || (populatedOrder?.user as any)?.email
-      console.log(`📧 Momo Email attempt - shippingAddress.email: ${populatedOrder?.shippingAddress.email}, user.email: ${(populatedOrder?.user as any)?.email}, final: ${customerEmail}`)
+      console.log(`Momo Email attempt - shippingAddress.email: ${populatedOrder?.shippingAddress.email}, user.email: ${(populatedOrder?.user as any)?.email}, final: ${customerEmail}`)
       
       if (customerEmail) {
-        console.log(`📨 Sending Momo order confirmation email to ${customerEmail}`)
+        console.log(`Sending Momo order confirmation email to ${customerEmail}`)
         const emailPayload = {
           to: customerEmail,
           orderCode: populatedOrder.orderCode,
@@ -269,6 +287,7 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
       if (!order.stockConfirmedAt) {
         order.paymentStatus = 'failed'
         order.momoRequestId = null  // Reset so new QR can be generated
+        order.paymentStartedAt = null
         order.failedAt = new Date() // Track when payment failed for auto-cleanup
         await order.save()
         console.log(`✅ Order marked as failed (kept in DB for retry): ${order._id}`)
@@ -293,7 +312,7 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
 
   // Check for Momo redirect success params (for test environment fallback)
   const { resultCode, transId } = req.query
-  const isMomoRedirectSuccess = resultCode === '0' && transId
+  const isMomoRedirectSuccess = isMomoSuccessCode(resultCode) && transId
 
   console.log(`🔍 [MOMO STATUS] Checking status for order: ${orderId}`)
   console.log(`🔍 [MOMO STATUS] Momo redirect params: resultCode=${resultCode}, transId=${transId}`)
@@ -341,6 +360,8 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
       // Mark order as paid
       order.paymentStatus = 'paid'
       order.momoTransactionId = transId as string
+      order.paymentStartedAt = null
+      order.momoRequestId = null
       await order.save()
 
       console.log(`✅ [MOMO REDIRECT SUCCESS] Order confirmed: ${order.orderCode}`)
@@ -439,7 +460,7 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
       console.log(`📊 [MOMO STATUS] Query result:`, momoStatus)
 
       // resultCode 0 = payment successful
-      if (momoStatus.resultCode === 0) {
+      if (isMomoSuccessCode(momoStatus.resultCode)) {
         console.log('✅ MOMO PAYMENT DETECTED VIA QUERY - Updating order to paid')
         
         // Confirm order stock (move reserved → sold) - ONLY if not already confirmed
@@ -457,6 +478,8 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
         // Mark order as paid
         order.paymentStatus = 'paid'
         order.momoTransactionId = momoStatus.transId || `QUERY_${Date.now()}`
+        order.paymentStartedAt = null
+        order.momoRequestId = null
         await order.save()
 
         // Send order confirmation email after payment success
@@ -546,33 +569,9 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
           },
         })
       } else {
-        // Payment failed - KEEP order with failed status for retry
-        console.log(`❌ MOMO PAYMENT FAILED FROM QUERY - Result Code: ${momoStatus.resultCode} - Marking order as failed`)
-        
-        try {
-          // Do not release reserved stock here; keep it until the hold expires or user retries.
-          order.paymentStatus = 'failed'
-          order.momoRequestId = null
-          order.failedAt = new Date() // Track when payment failed for auto-cleanup
-          await order.save()
-          console.log(`✅ Order marked as failed (kept in DB for retry): ${order._id}`)
-        } catch (err: any) {
-          console.error('⚠️ Error handling failed payment:', err.message)
-        }
-
-        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
-        res.set('Pragma', 'no-cache')
-        res.set('Expires', '0')
-        return res.status(200).json({
-          success: true,
-          data: {
-            paymentStatus: order.paymentStatus,
-            orderStatus: order.orderStatus,
-            momoTransactionId: order.momoTransactionId,
-            redirectUrl: `/orders/${order._id}`,
-          },
-          message: 'Giao dịch không thành công. Vui lòng thanh toán lại hoặc chọn phương thức thanh toán khác.',
-        })
+        // Payment not yet confirmed or failed at query level.
+        console.log(`ℹ️ [MOMO QUERY] Payment not confirmed yet for order ${order._id} - resultCode: ${momoStatus.resultCode}`)
+        // Keep order unpaid until we receive a definitive callback or redirect success.
       }
     } catch (err: any) {
       console.error('⚠️ Momo query error:', err.message)

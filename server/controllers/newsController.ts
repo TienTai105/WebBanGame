@@ -39,11 +39,7 @@ export const getNews = async (req: Request, res: Response): Promise<void> => {
 
     // Search filter
     if (search) {
-      filter.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { excerpt: { $regex: search, $options: 'i' } },
-        { tags: { $regex: search, $options: 'i' } },
-      ]
+      filter.$text = { $search: String(search) }
     }
 
     // Sorting
@@ -59,13 +55,16 @@ export const getNews = async (req: Request, res: Response): Promise<void> => {
       sortQuery = { views: -1 }
     }
 
-    const total = await News.countDocuments(filter)
-    const news = await News.find(filter)
-      .populate('author', 'name email avatar')
-      .sort(sortQuery)
-      .skip(skip)
-      .limit(Number(limit))
-      .lean()
+    const [total, news] = await Promise.all([
+      News.countDocuments(filter),
+      News.find(filter)
+        .select('title slug excerpt featuredImage category tags publishedAt views featured author')
+        .populate('author', 'name email avatar')
+        .sort(sortQuery)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+    ])
 
     res.status(200).json({
       success: true,
@@ -144,7 +143,9 @@ export const getNewsBySlug = async (req: Request, res: Response): Promise<void> 
       { slug, status: 'published' },
       { $inc: { views: 1 } },
       { new: true }
-    ).populate('author', 'name email avatar')
+    )
+      .populate('author', 'name email avatar')
+      .lean()
 
     if (!news) {
       res.status(404).json({
@@ -160,6 +161,7 @@ export const getNewsBySlug = async (req: Request, res: Response): Promise<void> 
       status: 'published',
       _id: { $ne: news._id },
     })
+      .select('title slug excerpt featuredImage publishedAt views author')
       .populate('author', 'name email avatar')
       .sort({ publishedAt: -1 })
       .limit(3)

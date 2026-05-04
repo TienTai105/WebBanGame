@@ -14,6 +14,7 @@ import ProductList from './pages/ProductList'
 import CartPage from './pages/CartPage'
 import CheckoutPage from './pages/CheckoutPage'
 import OrderConfirmPage from './pages/OrderConfirmPage'
+import MomoReturnPage from './pages/MomoReturnPage'
 import ProductDetailPage from './pages/ProductDetailPage'
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -178,6 +179,7 @@ function UserAppContent() {
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/momo-return" element={<MomoReturnPage />} />
           <Route path="/order-confirm" element={<OrderConfirmPage />} />
           <Route path="/news" element={<NewsListPage />} />
           <Route path="/news/:slug" element={<NewsDetailPage />} />

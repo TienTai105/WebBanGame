@@ -3,25 +3,45 @@ import inventoryService from '../services/inventoryService.js'
 import CheckoutHold from '../models/CheckoutHold.js'
 import Order from '../models/Order.js'
 
+const CRON_SCHEDULE = '*/2 * * * *'
+const MAX_HOLD_RELEASE_BATCH = 25
+const MAX_FAILED_ORDER_BATCH = 25
+const HOLD_GRACE_WINDOW_MS = 5 * 60 * 1000 // 5 minutes grace window after expiry
+let isCronJobRunning = false
+
 /**
  * Start all background cron jobs.
  * Called once during server startup.
  */
 export const startCronJobs = (): void => {
-  // Every 5 minutes: release expired checkout holds (user left checkout page without ordering)
-  cron.schedule('*/5 * * * *', async () => {
+  cron.schedule(CRON_SCHEDULE, async () => {
+    if (isCronJobRunning) {
+      console.log('[Cron] Previous cleanup still running, skipping this run')
+      return
+    }
+
+    isCronJobRunning = true
+    const startTime = Date.now()
+    console.log('[Cron] Cleanup started')
+
     try {
       // Release expired order reservations (online payment orders only)
-      const count = await inventoryService.releaseExpiredReservations()
-      if (count > 0) {
-        console.log(`⏰ [Cron] Released ${count} expired order reservation(s)`)
+      const orderCount = await inventoryService.releaseExpiredReservations(MAX_FAILED_ORDER_BATCH)
+      if (orderCount > 0) {
+        console.log(`[Cron] Released ${orderCount} expired order reservation(s)`)
       }
 
       // Release expired checkout holds (user left checkout without placing order)
+      // Only release if expired + grace window has passed
+      const now = new Date()
+      const graceExpiryTime = new Date(now.getTime() - HOLD_GRACE_WINDOW_MS)
       const expiredHolds = await CheckoutHold.find({
         released: false,
-        reservedUntil: { $lt: new Date() },
+        reservedUntil: { $lt: graceExpiryTime },  // Expired + grace window
       })
+        .sort({ reservedUntil: 1 })
+        .limit(MAX_HOLD_RELEASE_BATCH)
+
       for (const hold of expiredHolds) {
         try {
           await inventoryService.releaseStock(
@@ -30,55 +50,31 @@ export const startCronJobs = (): void => {
               variantSku: i.variantSku || undefined,
               quantity: i.quantity,
             })),
-            `hold:${hold.holdId}`
+            `hold:${hold.holdId}`,
+            {
+              reason: 'Cronjob trả hàng - Checkout hold hết thời gian giữ hàng',
+              notes: `Released expired checkout hold: ${hold.holdId}`,
+              referenceType: 'CheckoutHold'
+            }
           )
           hold.released = true
           await hold.save()
         } catch (e) {
-          console.error(`⚠️ [Cron] Failed to release hold ${hold.holdId}:`, e)
+          console.error(`[Cron] Failed to release hold ${hold.holdId}:`, e)
         }
       }
+
       if (expiredHolds.length > 0) {
-        console.log(`⏰ [Cron] Released ${expiredHolds.length} expired checkout hold(s)`)
+        console.log(`[Cron] Released ${expiredHolds.length} expired checkout hold(s)`)
       }
     } catch (err) {
-      console.error('❌ [Cron] Cleanup job failed:', err)
+      console.error('[Cron] Cleanup job failed:', err)
+    } finally {
+      isCronJobRunning = false
+      const durationMs = Date.now() - startTime
+      console.log(`[Cron] Cleanup finished in ${durationMs}ms`)
     }
   })
 
-  // Every 5 minutes: delete orders where payment failed > 30 minutes ago
-  cron.schedule('*/5 * * * *', async () => {
-    try {
-      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000)
-      const expiredFailedOrders = await Order.find({
-        paymentStatus: 'failed',
-        failedAt: { $lt: thirtyMinutesAgo },
-      })
-
-      if (expiredFailedOrders.length > 0) {
-        for (const order of expiredFailedOrders) {
-          try {
-            // Release any reserved stock before deleting
-            if (order.orderItems && order.orderItems.length > 0) {
-              await inventoryService.releaseStock(
-                order.orderItems as any,
-                order._id.toString()
-              ).catch((err: any) => 
-                console.log(`⚠️ [Cron] Stock release failed for order ${order._id}:`, err.message)
-              )
-            }
-            // Delete the expired failed order
-            await Order.deleteOne({ _id: order._id })
-          } catch (err: any) {
-            console.error(`⚠️ [Cron] Failed to delete expired failed order ${order._id}:`, err.message)
-          }
-        }
-        console.log(`⏰ [Cron] Deleted ${expiredFailedOrders.length} expired failed order(s)`)
-      }
-    } catch (err) {
-      console.error('❌ [Cron] Failed order cleanup job failed:', err)
-    }
-  })
-
-  console.log('✓ Cron jobs started (reservation + checkout hold + failed order cleanup every 5 min)')
+  console.log(`✓ Cron jobs started (reservation + checkout hold + failed order cleanup every 2 min)`)
 }
