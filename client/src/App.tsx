@@ -18,6 +18,7 @@ import MomoReturnPage from './pages/MomoReturnPage'
 import ProductDetailPage from './pages/ProductDetailPage'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ResetPassword from './pages/ResetPassword'
 import NewsListPage from './pages/NewsListPage'
 import NewsDetailPage from './pages/NewsDetailPage'
 import PromotionPage from './pages/PromotionPage'
@@ -191,6 +192,7 @@ function UserAppContent() {
           <Route path="/orders/:orderId" element={<OrderDetailsPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
       </main>
 

@@ -1106,8 +1106,90 @@ export const sendOrderStatusUpdateEmail = async (emailData: {
   }
 }
 
+/**
+ * Send password reset OTP email
+ */
+export const sendResetOTPEmail = async (to: string, otp: string): Promise<void> => {
+  try {
+    const htmlBody = `
+      <div style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 32px;">
+        <div style="max-width: 600px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; overflow: hidden;">
+          <!-- Header -->
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 32px 24px; text-align: center;">
+            <h1 style="margin: 0; font-size: 28px; font-weight: 700;">VOLTRIX</h1>
+            <p style="margin: 8px 0 0 0; font-size: 14px; opacity: 0.9;">Yêu cầu đặt lại mật khẩu</p>
+          </div>
+
+          <!-- Content -->
+          <div style="padding: 40px 32px;">
+            <p style="font-size: 16px; color: #333; margin-bottom: 24px;">Xin chào,</p>
+
+            <p style="font-size: 14px; color: #666; line-height: 1.8; margin-bottom: 28px;">
+              Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản VOLTRIX của mình. 
+              Sử dụng mã OTP dưới đây để xác nhận yêu cầu:
+            </p>
+
+            <!-- OTP Box -->
+            <div style="background: #f8f9fa; border: 2px solid #667eea; padding: 28px; border-radius: 8px; text-align: center; margin: 32px 0;">
+              <p style="font-size: 13px; color: #7f8c8d; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Mã xác nhận của bạn</p>
+              <p style="font-size: 36px; font-weight: 700; color: #667eea; margin: 0; letter-spacing: 4px; font-family: 'Courier New', monospace;">${otp}</p>
+            </div>
+
+            <!-- Expiry Warning -->
+            <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 16px; border-radius: 4px; margin-bottom: 28px;">
+              <p style="font-size: 14px; color: #856404; margin: 0;">
+                ⏰ <strong>Lưu ý:</strong> Mã OTP này sẽ hết hạn trong <strong>5 phút</strong>. 
+                Vui lòng nhập mã này nhanh chóng.
+              </p>
+            </div>
+
+            <!-- Security Warning -->
+            <div style="background: #f0f0f0; padding: 16px; border-radius: 4px; margin-bottom: 28px;">
+              <p style="font-size: 13px; color: #666; margin: 0; line-height: 1.8;">
+                🔒 <strong>Bảo mật:</strong> Không bao giờ chia sẻ mã OTP này với bất kỳ ai. 
+                VOLTRIX Admin sẽ không bao giờ yêu cầu mã này qua email hoặc tin nhắn.
+              </p>
+            </div>
+
+            <!-- Next Steps -->
+            <div style="background: #e8f4f8; border-left: 4px solid #3498db; padding: 16px; border-radius: 4px;">
+              <p style="font-size: 14px; color: #2c3e50; margin: 0; line-height: 1.8;">
+                <strong>Bước tiếp theo:</strong> Quay lại trang đặt lại mật khẩu và nhập mã OTP trên. 
+                Sau đó, bạn sẽ tạo mật khẩu mới cho tài khoản.
+              </p>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div style="background: #f8f9fa; color: #7f8c8d; text-align: center; font-size: 12px; padding: 24px 32px; border-top: 1px solid #ecf0f1;">
+            <p style="margin: 0 0 8px 0;">Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
+            <p style="margin: 0;">&copy; ${new Date().getFullYear()} VOLTRIX. All rights reserved.</p>
+          </div>
+        </div>
+      </div>
+    `
+
+    await transporter.sendMail({
+      from: process.env.GMAIL_USER,
+      to,
+      subject: '[VOLTRIX] Mã xác nhận đặt lại mật khẩu',
+      html: htmlBody,
+    })
+
+    console.log(`✅ Password reset OTP email sent to ${to}`)
+  } catch (error: any) {
+    console.error(`❌ Failed to send password reset OTP email:`, {
+      to,
+      message: error?.message,
+      code: error?.code,
+    })
+    throw error
+  }
+}
+
 export default {
   sendOrderConfirmationEmail,
   sendVerificationEmail,
   sendOrderStatusUpdateEmail,
+  sendResetOTPEmail,
 }

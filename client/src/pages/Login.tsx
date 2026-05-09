@@ -4,6 +4,7 @@ import { Eye, EyeOff, Mail, Lock, Chrome, Facebook } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { yupResolver } from '@hookform/resolvers/yup'
 import Button from '../components/atomic/Button'
+import ForgotPasswordModal from '../components/ForgotPasswordModal'
 import { successToast, warningToast } from '../utils/toast'
 import { loginValidationSchema, LoginFormData } from '../validations/authValidation'
 import { connectSocket } from '../utils/socket'
@@ -13,6 +14,7 @@ const Login: FC = () => {
   const location = useLocation()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false)
 
   const {
     register,
@@ -190,7 +192,7 @@ const Login: FC = () => {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={() => navigate('/forgot-password')}
+                onClick={() => setShowForgotPasswordModal(true)}
                 className="text-indigo-400 hover:text-indigo-300 text-sm font-semibold transition-colors"
               >
                 Quên mật khẩu?
@@ -259,6 +261,12 @@ const Login: FC = () => {
           ✓ Tài khoản an toàn 100% - Chúng tôi không bao giờ chia sẻ thông tin của bạn
         </p>
       </div>
+
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal
+        isOpen={showForgotPasswordModal}
+        onClose={() => setShowForgotPasswordModal(false)}
+      />
     </div>
   )
 }

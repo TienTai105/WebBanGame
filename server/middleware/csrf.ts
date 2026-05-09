@@ -60,7 +60,10 @@ export const verifyCsrfToken = (req: Request, res: Response, next: NextFunction)
   if (req.path === '/api/auth/login' || 
       req.path === '/api/auth/register' || 
       req.path === '/api/auth/check-email' || 
-      req.path === '/api/auth/check-phone') {
+      req.path === '/api/auth/check-phone' ||
+      req.path === '/api/auth/forgot-password' ||
+      req.path === '/api/auth/reset-password'||
+      req.path === '/api/auth/verify-reset-otp') {
     return next()
   }
 

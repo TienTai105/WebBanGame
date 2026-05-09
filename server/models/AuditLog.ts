@@ -2,7 +2,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose'
 
 interface IAuditLog extends Document {
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'STATUS_CHANGE' | 'EXPORT' | 'IMPORT' | 'LOGIN'
-  entity: 'Product' | 'Order' | 'Inventory' | 'User' | 'Promotion' | 'Shipment' | 'News' | 'Review' | 'Comment' | 'Contact'
+  entity: 'Product' | 'Order' | 'Inventory' | 'User' | 'Promotion' | 'Shipment' | 'News' | 'Review' | 'Comment' | 'Contact' | 'PasswordReset'
   entityId: mongoose.Types.ObjectId | string
   oldValue?: any                                    // toàn bộ document cũ
   newValue?: any                                    // toàn bộ document mới
@@ -27,7 +27,7 @@ const auditLogSchema = new Schema<IAuditLog>(
     },
     entity: {
       type: String,
-      enum: ['Product', 'Order', 'Inventory', 'User', 'Promotion', 'Shipment', 'News', 'Review', 'Comment', 'Contact'],
+      enum: ['Product', 'Order', 'Inventory', 'User', 'Promotion', 'Shipment', 'News', 'Review', 'Comment', 'Contact', 'PasswordReset'],
       required: [true, 'Entity required'],
       index: true,
     },

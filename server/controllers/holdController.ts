@@ -29,7 +29,12 @@ export const createHold = asyncHandler(async (req: Request, res: Response) => {
           variantSku: i.variantSku || undefined,
           quantity: i.quantity,
         })),
-        `hold:${existing.holdId}`
+        `hold:${existing.holdId}`,
+        {
+          reason: 'User tạo hold mới - giải phóng hold cũ',
+          notes: `Released old hold: ${existing.holdId}`,
+          referenceType: 'CheckoutHold'
+        }
       )
     } catch (e) {
       console.error('⚠️ Failed to release old hold:', e)
@@ -52,6 +57,8 @@ export const createHold = asyncHandler(async (req: Request, res: Response) => {
 
   const holdId = nanoid(12)
   const reservedUntil = new Date(Date.now() + HOLD_DURATION_MS)
+  
+  console.log(`🕐 [CREATE HOLD] holdId: ${holdId}, now: ${new Date().toISOString()}, reservedUntil: ${reservedUntil.toISOString()}, duration: ${HOLD_DURATION_MS}ms (${HOLD_DURATION_MS / 1000 / 60} minutes)`)
 
   const holdItems = items.map((i: any) => ({
     productId: i.productId,
@@ -105,7 +112,12 @@ export const releaseHold = asyncHandler(async (req: Request, res: Response) => {
         variantSku: i.variantSku || undefined,
         quantity: i.quantity,
       })),
-      `hold:${holdId}`
+      `hold:${holdId}`,
+      {
+        reason: 'User hủy thanh toán - giải phóng hold',
+        notes: `Released checkout hold: ${holdId}`,
+        referenceType: 'CheckoutHold'
+      }
     )
   } catch (e) {
     console.error('⚠️ Failed to release hold:', e)
@@ -148,6 +160,18 @@ export const extendHold = asyncHandler(async (req: Request, res: Response) => {
     hold.reservedUntil = newReservedUntil
     hold.isExtended = true  // ✅ Mark as extended
     await hold.save()
+
+    // ✅ ALSO: Update the associated order's reservationExpiresAt (if exists)
+    const Order = (await import('../models/Order.js')).default
+    if (hold.holdId) {
+      const order = await Order.findOne({ holdId: hold.holdId })
+      if (order) {
+        order.reservationExpiresAt = newReservedUntil
+        order.isExtended = true
+        await order.save()
+        console.log(`⏰ Updated order ${order._id} reservationExpiresAt to ${newReservedUntil.toISOString()}`)
+      }
+    }
 
     console.log(`⏰ Hold extended (1st & last): ${holdId} by ${extendMinutes} minutes, old expiry: ${currentExpiry.toISOString()}, new expiry: ${newReservedUntil.toISOString()}`)
 

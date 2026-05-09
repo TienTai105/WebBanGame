@@ -191,11 +191,23 @@ export const momoCallback = asyncHandler(async (req: Request, res: Response) => 
       console.log(`[MOMO] Order ${order.orderCode} stock already confirmed at ${order.stockConfirmedAt}`)
     }
 
-    // Mark order as paid
+    // Mark order as paid and move status out of pending so cronjob won't cancel it
     order.paymentStatus = 'paid'
+    order.orderStatus = 'processing'
     order.momoTransactionId = transId
     order.paymentStartedAt = null
     order.momoRequestId = null
+
+    if (order.holdId) {
+      const CheckoutHold = (await import('../models/CheckoutHold.js')).default
+      const hold = await CheckoutHold.findOne({ holdId: order.holdId })
+      if (hold && !hold.released) {
+        hold.released = true
+        await hold.save()
+        console.log(`✅ Marked hold ${order.holdId} as released after payment success`)
+      }
+    }
+
     await order.save()
 
     // Send order confirmation email after payment success
@@ -357,11 +369,23 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
       await inventoryService.confirmOrderStock(order.orderItems as any, order._id.toString())
       order.stockConfirmedAt = new Date()
 
-      // Mark order as paid
+      // Mark order as paid and move status out of pending so cronjob won't cancel it
       order.paymentStatus = 'paid'
+      order.orderStatus = 'processing'
       order.momoTransactionId = transId as string
       order.paymentStartedAt = null
       order.momoRequestId = null
+
+      if (order.holdId) {
+        const CheckoutHold = (await import('../models/CheckoutHold.js')).default
+        const hold = await CheckoutHold.findOne({ holdId: order.holdId })
+        if (hold && !hold.released) {
+          hold.released = true
+          await hold.save()
+          console.log(`✅ Marked hold ${order.holdId} as released after redirect payment success`)
+        }
+      }
+
       await order.save()
 
       console.log(`✅ [MOMO REDIRECT SUCCESS] Order confirmed: ${order.orderCode}`)
@@ -475,11 +499,23 @@ export const getMomoPaymentStatus = asyncHandler(async (req: Request, res: Respo
           console.log(`⏭️ [MOMO QUERY] Order ${order.orderCode} stock already confirmed at ${order.stockConfirmedAt}`)
         }
 
-        // Mark order as paid
+        // Mark order as paid and move status out of pending so cronjob won't cancel it
         order.paymentStatus = 'paid'
+        order.orderStatus = 'processing'
         order.momoTransactionId = momoStatus.transId || `QUERY_${Date.now()}`
         order.paymentStartedAt = null
         order.momoRequestId = null
+
+        if (order.holdId) {
+          const CheckoutHold = (await import('../models/CheckoutHold.js')).default
+          const hold = await CheckoutHold.findOne({ holdId: order.holdId })
+          if (hold && !hold.released) {
+            hold.released = true
+            await hold.save()
+            console.log(`✅ Marked hold ${order.holdId} as released after query payment success`)
+          }
+        }
+
         await order.save()
 
         // Send order confirmation email after payment success

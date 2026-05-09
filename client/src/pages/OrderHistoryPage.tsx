@@ -27,6 +27,11 @@ interface Order {
   paymentStatus: 'paid' | 'unpaid' | 'failed'
   createdAt: string
   updatedAt: string
+  // ✅ NEW: For pending orders
+  canResume?: boolean
+  holdStatus?: string
+  timeLeft?: number
+  resumeUrl?: string
 }
 
 interface PaginatedResponse {
@@ -48,11 +53,22 @@ const OrderHistoryPage: FC = () => {
   const filterDetailsRef = useRef<HTMLDetailsElement>(null)
   const [user, setUser] = useState<UserData | null>(null)
   const [orders, setOrders] = useState<Order[]>([])
+  const [pendingOrders, setPendingOrders] = useState<Order[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isLoadingPending, setIsLoadingPending] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [filterStatus, setFilterStatus] = useState<string>('')
+
+  const filterOptions = [
+    { value: '', label: 'All Orders' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'shipped', label: 'Shipped' },
+    { value: 'processing', label: 'Processing' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'cancelled', label: 'Cancelled' },
+  ]
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken')
@@ -63,6 +79,7 @@ const OrderHistoryPage: FC = () => {
 
     fetchUserData()
     fetchOrders()
+    fetchPendingOrders()
   }, [currentPage, filterStatus, navigate])
 
   const fetchUserData = async () => {
@@ -71,6 +88,22 @@ const OrderHistoryPage: FC = () => {
       setUser(response.data.data.user)
     } catch (err) {
       console.error('Failed to fetch user data:', err)
+    }
+  }
+
+  const fetchPendingOrders = async () => {
+    try {
+      setIsLoadingPending(true)
+      const response = await api.get('/orders/pending')
+      
+      if (response.data.success) {
+        setPendingOrders(response.data.data)
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch pending orders:', err)
+      // Don't show error toast for pending orders - it's not critical
+    } finally {
+      setIsLoadingPending(false)
     }
   }
 
@@ -121,14 +154,20 @@ const OrderHistoryPage: FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const filterOptions = [
-    { value: '', label: 'All Orders' },
-    { value: 'completed', label: 'Completed' },
-    { value: 'shipped', label: 'Shipped' },
-    { value: 'processing', label: 'Processing' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'cancelled', label: 'Cancelled' },
-  ]
+  const handleResumeCheckout = (order: Order) => {
+    if (order.resumeUrl) {
+      navigate(order.resumeUrl)
+    } else {
+      // Fallback: navigate to checkout with orderId
+      navigate(`/checkout?orderId=${order._id}&resume=true`)
+    }
+  }
+
+  const formatTimeLeft = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
+  }
 
   return (
     <main
@@ -215,6 +254,72 @@ const OrderHistoryPage: FC = () => {
                 </details>
               </div>
             </div>
+
+            {/* ✅ NEW: Pending Orders Section */}
+            {!isLoadingPending && pendingOrders.length > 0 && (
+              <div className="mb-8">
+                <div className="bg-gradient-to-br from-orange-500/10 to-red-500/10 border border-orange-500/30 rounded-xl p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Icon name="schedule" size="md" className="text-orange-400" />
+                    <h2 className="text-xl font-bold text-white">Đơn hàng chờ thanh toán</h2>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {pendingOrders.map((order) => {
+                      const timeLeft = order.timeLeft || 0
+                      const isExpiringSoon = timeLeft < 300 // Less than 5 minutes
+                      
+                      return (
+                        <div
+                          key={order._id}
+                          className="bg-slate-900/50 border border-orange-500/20 rounded-lg p-4 hover:border-orange-500/40 transition"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <p className="text-slate-400 text-xs font-bold">ORDER CODE</p>
+                                <p className="text-white font-bold text-sm">#{order.orderCode}</p>
+                              </div>
+                              
+                              <div className="flex items-center gap-4 text-sm">
+                                <span className="text-slate-400">
+                                  {order.orderItems.length} sản phẩm
+                                </span>
+                                <span className="text-slate-400">
+                                  {order.finalPrice.toLocaleString('vi-VN')}₫
+                                </span>
+                                <span className={cn(
+                                  "font-medium",
+                                  isExpiringSoon ? "text-red-400" : "text-orange-400"
+                                )}>
+                                  ⏱️ {formatTimeLeft(timeLeft)} còn lại
+                                </span>
+                              </div>
+                              
+                              {isExpiringSoon && (
+                                <p className="text-red-400 text-xs mt-1">
+                                  ⚠️ Thời gian giữ hàng sắp hết! Vui lòng thanh toán ngay.
+                                </p>
+                              )}
+                            </div>
+                            
+                            <Button
+                              onClick={() => handleResumeCheckout(order)}
+                              variant="primary"
+                              size="sm"
+                              className="bg-orange-600 hover:bg-orange-700 text-white font-medium"
+                            >
+                              <Icon name="play_arrow" size="sm" className="mr-2" />
+                              Tiếp tục thanh toán
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Loading State */}
             {isLoading && (

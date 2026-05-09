@@ -11,6 +11,11 @@ router.post('/refresh-token', asyncHandler(authController.refreshToken))
 router.post('/check-email', asyncHandler(authController.checkEmailExists))
 router.post('/check-phone', asyncHandler(authController.checkPhoneExists))
 
+// Forgot Password Routes
+router.post('/forgot-password', asyncHandler(authController.forgotPassword))
+router.post('/verify-reset-otp', asyncHandler(authController.verifyResetOTP))
+router.post('/reset-password', asyncHandler(authController.resetPassword))
+
 // Protected routes
 router.post('/logout', protect, asyncHandler(authController.logout))
 router.get('/me', protect, asyncHandler(authController.getCurrentUser))

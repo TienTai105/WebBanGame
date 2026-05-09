@@ -49,6 +49,7 @@ interface OrderData {
   finalPrice: number
   createdAt: string
   updatedAt: string
+  resumeUrl?: string
 }
 
 const OrderDetailsPage: FC = () => {
@@ -198,6 +199,26 @@ const OrderDetailsPage: FC = () => {
                 <p className="font-bold text-red-400">Đơn hàng đã bị hủy</p>
                 <p className="text-sm text-red-300">Đơn hàng này đã được hủy vào lúc {new Date(order.updatedAt).toLocaleString('vi-VN')}</p>
               </div>
+            </div>
+          )}
+
+          {/* Resume Payment Banner */}
+          {order.resumeUrl && order.orderStatus === 'pending' && order.paymentMethod?.toLowerCase() === 'momo' && order.paymentStatus === 'unpaid' && (
+            <div className="mb-6 p-4 bg-orange-500/20 border border-orange-500/50 rounded-lg flex items-center gap-3">
+              <Icon name="schedule" size="md" className="text-orange-400 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-bold text-orange-400">Đơn hàng chờ thanh toán</p>
+                <p className="text-sm text-orange-300">Bạn có thể tiếp tục thanh toán đơn hàng này bằng Momo</p>
+              </div>
+              <Button
+                onClick={() => order.resumeUrl && navigate(order.resumeUrl)}
+                variant="primary"
+                size="sm"
+                className="bg-orange-600 hover:bg-orange-700 text-white font-medium"
+              >
+                <Icon name="play_arrow" size="sm" className="mr-2" />
+                Tiếp tục thanh toán
+              </Button>
             </div>
           )}
           
@@ -443,6 +464,19 @@ const OrderDetailsPage: FC = () => {
 
                 {/* Action Buttons */}
                 <div className="pt-4 space-y-3">
+                  {/* Resume Payment Button - HIGHEST PRIORITY */}
+                  {order.resumeUrl && order.orderStatus === 'pending' && order.paymentMethod?.toLowerCase() === 'momo' && order.paymentStatus === 'unpaid' && (
+                    <Button
+                      onClick={() => order.resumeUrl && navigate(order.resumeUrl)}
+                      variant="primary"
+                      size="md"
+                      className="w-full justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-bold"
+                    >
+                      <Icon name="play_arrow" size="sm" />
+                      Tiếp tục thanh toán
+                    </Button>
+                  )}
+
                   {order.orderStatus === 'cancelled' ? (
                     <>
                       <div className="w-full p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-center">

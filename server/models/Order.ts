@@ -46,6 +46,8 @@ interface IOrder extends Document {
   momoRetryCount?: number             // Track retry attempts for unique orderId generation
   momoTransactionId?: string
   stockConfirmedAt?: Date          // Track when stock was confirmed (prevent double-confirm)
+  stockReleased?: boolean           // Track if stock was already released (prevent double-release)
+  stockReleasedAt?: Date            // Track when stock was released
   failedAt?: Date                  // Track when payment failed (for auto-cleanup after 30 min)
   createdAt: Date
   updatedAt: Date

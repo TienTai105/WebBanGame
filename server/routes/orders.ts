@@ -1,6 +1,7 @@
 import express from 'express'
 import {
   getMyOrders,
+  getPendingOrders,
   getOrderById,
   createOrder,
   updateOrder,
@@ -16,6 +17,7 @@ const router = express.Router()
 
 // User routes (protected)
 router.get('/my-orders', protect, getMyOrders)
+router.get('/pending', protect, getPendingOrders)
 router.get('/:id', protect, getOrderById)
 router.post('/', protect, createOrder)
 router.put('/:id/cancel', protect, cancelOrder)

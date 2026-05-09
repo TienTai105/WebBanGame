@@ -3,8 +3,10 @@ import User from '../models/User.js'
 import AuditLog from '../models/AuditLog.js'
 import TokenBlacklist from '../models/TokenBlacklist.js'
 import jwt from 'jsonwebtoken'
+import crypto from 'crypto'
 import * as tokenUtils from '../utils/tokenUtils.js'
 import { validatePassword, getPasswordRequirements } from '../utils/passwordValidator.js'
+import { sendResetOTPEmail } from '../services/emailService.js'
 
 const generateTokens = async (user: { _id: string; email?: string; role?: string }) => {
   const accessToken = tokenUtils.generateAccessToken(user)
@@ -407,5 +409,356 @@ export const checkPhoneExists = async (req: Request, res: Response): Promise<voi
   } catch (error: any) {
     console.error('❌ [CHECK_PHONE] Error:', error)
     res.status(500).json({ exists: false })
+  }
+}
+
+/**
+ * Forgot Password - Send OTP to email
+ * POST /api/auth/forgot-password
+ */
+export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body
+
+  // Validation
+  if (!email) {
+    res.status(400).json({ success: false, message: 'Email is required' })
+    return
+  }
+
+  try {
+    // Find user by email - but NEVER reveal if email exists
+    const user = await User.findOne({ email: email.toLowerCase().trim() })
+
+    // Always return generic success message for security
+    // This prevents email enumeration attacks
+    const successResponse = {
+      success: true,
+      message: 'Nếu email của bạn tồn tại trong hệ thống, bạn sẽ nhận được email chứa mã OTP',
+    }
+
+    // If user doesn't exist, just return success (for security)
+    if (!user) {
+      console.log(`ℹ️ Forgot password request for non-existent email: ${email}`)
+      res.status(200).json(successResponse)
+      return
+    }
+
+    // Check rate limiting - only allow resend after 60 seconds
+    if (user.resetPasswordLastSent) {
+      const lastSentTime = new Date(user.resetPasswordLastSent).getTime()
+      const now = new Date().getTime()
+      const timeDiff = (now - lastSentTime) / 1000 // Convert to seconds
+
+      if (timeDiff < 60) {
+        res.status(429).json({
+          success: false,
+          message: `Vui lòng đợi ${Math.ceil(60 - timeDiff)} giây trước khi yêu cầu OTP mới`,
+        })
+        return
+      }
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString()
+
+    // Hash OTP using SHA256
+    const hashedOTP = crypto.createHash('sha256').update(otp).digest('hex')
+
+    // Set OTP expiry to 5 minutes from now
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000)
+
+    // Update user with OTP and expiry
+    user.resetPasswordOTP = hashedOTP
+    user.resetPasswordExpire = otpExpiry
+    user.resetPasswordAttempts = 0
+    user.resetPasswordLastSent = new Date()
+    await user.save()
+
+    // Send OTP email
+    await sendResetOTPEmail(user.email, otp)
+
+    // Log the request
+    await AuditLog.create({
+      action: 'CREATE',
+      entity: 'PasswordReset',
+      entityId: user._id,
+      userId: user._id,
+      userEmail: user.email,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      status: 'success',
+      reason: 'Forgot password OTP request',
+    })
+
+    res.status(200).json(successResponse)
+  } catch (error: any) {
+    console.error('❌ [FORGOT_PASSWORD] Error:', error)
+    // Return generic error message
+    res.status(500).json({
+      success: false,
+      message: 'Đã xảy ra lỗi khi xử lý yêu cầu của bạn',
+    })
+  }
+}
+
+/**
+ * Verify Reset OTP - Verify OTP and return reset token
+ * POST /api/auth/verify-reset-otp
+ */
+export const verifyResetOTP = async (req: Request, res: Response): Promise<void> => {
+  const { email, otp } = req.body
+
+  // Validation
+  if (!email || !otp) {
+    res.status(400).json({ success: false, message: 'Email and OTP are required' })
+    return
+  }
+
+  if (!/^\d{6}$/.test(otp)) {
+    res.status(400).json({ success: false, message: 'OTP must be 6 digits' })
+    return
+  }
+
+  try {
+    // Find user
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
+      '+resetPasswordOTP'
+    )
+
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' })
+      return
+    }
+
+    // Check if OTP exists and is not expired
+    if (!user.resetPasswordOTP || !user.resetPasswordExpire) {
+      res.status(400).json({
+        success: false,
+        message: 'OTP not found. Please request a new OTP',
+      })
+      return
+    }
+
+    // Check if OTP is expired
+    if (new Date() > new Date(user.resetPasswordExpire)) {
+      res.status(400).json({
+        success: false,
+        message: 'OTP has expired. Please request a new OTP',
+      })
+      return
+    }
+
+    // Hash incoming OTP and compare
+    const hashedIncomingOTP = crypto.createHash('sha256').update(otp).digest('hex')
+
+    if (hashedIncomingOTP !== user.resetPasswordOTP) {
+      // Increment attempts
+      user.resetPasswordAttempts = (user.resetPasswordAttempts || 0) + 1
+
+      // Lock account after 5 failed attempts
+      if (user.resetPasswordAttempts >= 5) {
+        user.resetPasswordOTP = null
+        user.resetPasswordExpire = null
+        await user.save()
+
+        await AuditLog.create({
+          action: 'UPDATE',
+          entity: 'PasswordReset',
+          entityId: user._id,
+          userId: user._id,
+          userEmail: user.email,
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          status: 'failed',
+          errorMessage: 'Too many failed OTP attempts',
+          reason: 'Password reset - locked after 5 attempts',
+        })
+
+        res.status(429).json({
+          success: false,
+          message: 'Quá nhiều lần thử sai OTP. Vui lòng yêu cầu OTP mới',
+        })
+        return
+      }
+
+      await user.save()
+
+      res.status(400).json({
+        success: false,
+        message: `OTP không chính xác. Còn ${5 - user.resetPasswordAttempts} lần thử`,
+      })
+      return
+    }
+
+    // OTP is valid - generate temporary reset token
+    // This token is valid for 15 minutes
+    const resetToken = jwt.sign(
+      {
+        userId: user._id,
+        email: user.email,
+        purpose: 'password_reset',
+      },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '15m' }
+    )
+
+    // Save reset token to database for validation
+    user.resetSessionToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex')
+    user.resetSessionExpire = new Date(Date.now() + 15 * 60 * 1000)
+    user.resetPasswordAttempts = 0 // Reset attempts on success
+    await user.save()
+
+    // Log successful OTP verification
+    await AuditLog.create({
+      action: 'UPDATE',
+      entity: 'PasswordReset',
+      entityId: user._id,
+      userId: user._id,
+      userEmail: user.email,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      status: 'success',
+      reason: 'OTP verified successfully',
+    })
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully',
+      data: {
+        resetToken,
+      },
+    })
+  } catch (error: any) {
+    console.error('❌ [VERIFY_RESET_OTP] Error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Đã xảy ra lỗi khi xác minh OTP',
+    })
+  }
+}
+
+/**
+ * Reset Password - Update password with reset token
+ * POST /api/auth/reset-password
+ */
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  const { email, newPassword, confirmPassword, resetToken } = req.body
+
+  // Validation
+  if (!email || !newPassword || !confirmPassword || !resetToken) {
+    res.status(400).json({ success: false, message: 'All fields are required' })
+    return
+  }
+
+  if (newPassword !== confirmPassword) {
+    res.status(400).json({ success: false, message: 'Passwords do not match' })
+    return
+  }
+
+  // Validate password strength
+  const passwordValidation = validatePassword(newPassword)
+  if (!passwordValidation.valid) {
+    res.status(400).json({
+      success: false,
+      message: 'Password does not meet security requirements',
+      errors: passwordValidation.errors,
+      requirements: getPasswordRequirements(),
+    })
+    return
+  }
+
+  try {
+    // Verify reset token
+    let decodedToken: any
+    try {
+      decodedToken = jwt.verify(resetToken, process.env.JWT_SECRET as string)
+    } catch (error) {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid or expired reset token',
+      })
+      return
+    }
+
+    // Check if token is for password reset
+    if (decodedToken.purpose !== 'password_reset') {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid reset token',
+      })
+      return
+    }
+
+    // Find user
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
+      '+resetSessionToken +password'
+    )
+
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' })
+      return
+    }
+
+    // Hash token and compare with database
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(resetToken)
+      .digest('hex')
+
+    if (hashedToken !== user.resetSessionToken) {
+      res.status(401).json({
+        success: false,
+        message: 'Invalid reset token',
+      })
+      return
+    }
+
+    // Check if token is expired
+    if (!user.resetSessionExpire || new Date() > new Date(user.resetSessionExpire)) {
+      res.status(401).json({
+        success: false,
+        message: 'Reset token has expired',
+      })
+      return
+    }
+
+    // Update password (will be hashed by pre-save hook)
+    user.password = newPassword
+
+    // Clear all reset fields
+    user.resetPasswordOTP = null
+    user.resetPasswordExpire = null
+    user.resetSessionToken = null
+    user.resetSessionExpire = null
+    user.resetPasswordAttempts = 0
+
+    await user.save()
+
+    // Log successful password reset
+    await AuditLog.create({
+      action: 'UPDATE',
+      entity: 'User',
+      entityId: user._id,
+      userId: user._id,
+      userEmail: user.email,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      status: 'success',
+      reason: 'Password reset successfully',
+    })
+
+    res.status(200).json({
+      success: true,
+      message: 'Mật khẩu đã được đặt lại thành công',
+    })
+  } catch (error: any) {
+    console.error('❌ [RESET_PASSWORD] Error:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Đã xảy ra lỗi khi đặt lại mật khẩu',
+    })
   }
 }

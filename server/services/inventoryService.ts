@@ -4,7 +4,7 @@ import StockMovement from '../models/StockMovement.js'
 
 interface OrderItem {
   product: mongoose.Types.ObjectId | string
-  variantSku?: string
+  variantSku?: string | null
   quantity: number
 }
 
@@ -115,6 +115,28 @@ class InventoryService {
     orderId: string,
     options?: { reason?: string; notes?: string; referenceType?: string }
   ): Promise<void> {
+    // ✅ Check if stock was already released to prevent double-release
+    const Order = (await import('../models/Order.js')).default
+    let orderLookupId: string | null = orderId
+
+    if (orderLookupId.startsWith('order:')) {
+      orderLookupId = orderLookupId.replace(/^order:/, '')
+    } else if (orderLookupId.startsWith('hold:')) {
+      orderLookupId = null
+    }
+
+    let order = null
+    if (orderLookupId && mongoose.Types.ObjectId.isValid(orderLookupId)) {
+      order = await Order.findById(orderLookupId)
+    }
+
+    if (order?.stockReleased) {
+      console.log(`⚠️ Stock already released for order ${orderLookupId || orderId} at ${order.stockReleasedAt}`)
+      return
+    }
+
+    let releaseCount = 0
+
     for (const item of items) {
       const productId = item.product.toString()
       const variantSku = item.variantSku || null
@@ -164,6 +186,20 @@ class InventoryService {
         reference: { type: referenceType, id: orderId },
         notes,
       })
+
+      releaseCount++
+    }
+
+    // ✅ Mark stock as released to prevent double-release only if we actually released inventory
+    if (releaseCount > 0 && orderLookupId && mongoose.Types.ObjectId.isValid(orderLookupId)) {
+      await Order.findByIdAndUpdate(orderLookupId, {
+        stockReleased: true,
+        stockReleasedAt: new Date()
+      })
+    } else if (orderLookupId && mongoose.Types.ObjectId.isValid(orderLookupId)) {
+      console.warn(`⚠️ releaseStock: no inventory released for order ${orderLookupId}, skipping stockReleased mark`) 
+    } else {
+      console.warn(`⚠️ releaseStock: cannot mark order as released because orderId is not a valid ObjectId: ${orderId}`)
     }
   }
 
@@ -175,15 +211,28 @@ class InventoryService {
     items: OrderItem[],
     orderId: string,
     isConfirmed: boolean = false,
-    paymentMethod: string = 'COD'
+    paymentMethod: string = 'COD',
+    customReason?: string  // ✅ NEW: Allow custom cancel reason
   ): Promise<void> {
+    // ✅ Check if stock was already released to prevent double-release
+    const Order = (await import('../models/Order.js')).default
+    const order = await Order.findById(orderId)
+    if (order?.stockReleased) {
+      console.log(`⚠️ Stock already released for order ${orderId} at ${order.stockReleasedAt}`)
+      return
+    }
+
+    let releaseCount = 0
+
     for (const item of items) {
       const productId = item.product.toString()
       const variantSku = item.variantSku || null
       const paymentLabel = paymentMethod === 'Momo' ? 'Momo' : paymentMethod === 'COD' ? 'COD' : paymentMethod
-      const cancelReason = paymentMethod === 'Momo'
-        ? 'Huỷ đơn hàng Momo chưa thanh toán'
-        : 'Huỷ đơn hàng (COD)'
+      
+      // ✅ Use custom reason if provided, otherwise default
+      const cancelReason = customReason || (paymentMethod === 'Momo'
+        ? 'Cronjob trả hàng - Huỷ đơn hàng Momo chưa thanh toán'
+        : 'Cronjob trả hàng - Huỷ đơn hàng (COD)')
 
       const query = variantSku ? 
         { productId, variantSku } : 
@@ -213,6 +262,7 @@ class InventoryService {
             reference: { type: 'Order', id: orderId },
             notes: `Refunded from sold (confirmed order): ${orderId}`,
           })
+          releaseCount++
           continue
         } else {
           console.error(`❌ [CONFIRMED ${paymentLabel}] Cannot find ${item.quantity} in SOLD pool - stock inconsistency!`)
@@ -220,9 +270,8 @@ class InventoryService {
         }
       }
 
-      // If order is unpaid, stock is in RESERVED pool - try RESERVED first
-      // First try: release from reserved pool (for unpaid orders)
-      let inventory = await Inventory.findOneAndUpdate(
+      // If order is unpaid, stock should be in RESERVED pool only
+      const inventory = await Inventory.findOneAndUpdate(
         { ...query, reserved: { $gte: item.quantity } },
         {
           $inc: { reserved: -item.quantity, available: item.quantity },
@@ -243,36 +292,23 @@ class InventoryService {
           reference: { type: 'Order', id: orderId },
           notes: `Released from reserved (${paymentLabel} unpaid order): ${orderId}`,
         })
+        releaseCount++
         continue
       }
 
-      // Second try: release from sold pool (fallback if stock was accidentally confirmed)
-      inventory = await Inventory.findOneAndUpdate(
-        { ...query, sold: { $gte: item.quantity } },
-        {
-          $inc: { sold: -item.quantity, available: item.quantity },
-          $set: { lastUpdated: new Date() },
-        },
-        { new: true }
-      )
+      // ❌ No fallback - if stock not in reserved pool, it's a data inconsistency
+      console.error(`❌ [UNPAID ${paymentLabel}] Stock not found in RESERVED pool for ${variantSku || productId} (order ${orderId}). Check inventory integrity!`)
+      continue
+    }
 
-      if (inventory) {
-        console.log(`⚠️ [FALLBACK ${paymentLabel}] Released ${item.quantity} from SOLD pool for ${variantSku || productId}`)
-        await StockMovement.create({
-          inventoryId: inventory._id,
-          productId: new mongoose.Types.ObjectId(productId),
-          variantSku,
-          type: 'REFUNDED',
-          quantity: item.quantity,
-          reason: `Hoàn lại hàng - fallback release (${paymentLabel})`,
-          reference: { type: 'Order', id: orderId },
-          notes: `Fallback release from sold (${paymentLabel}): ${orderId}`,
-        })
-        continue
-      }
-
-      // Could not find stock in either pool
-      console.error(`⚠️ Stock not found for ${variantSku || productId} (order ${orderId}). Check inventory integrity!`)
+    // ✅ Mark stock as released to prevent double-release only if we actually released inventory
+    if (releaseCount > 0) {
+      await Order.findByIdAndUpdate(orderId, {
+        stockReleased: true,
+        stockReleasedAt: new Date()
+      })
+    } else {
+      console.warn(`⚠️ releaseStockOnCancel: no inventory released for order ${orderId}, skipping stockReleased mark`)
     }
   }
 
@@ -352,7 +388,6 @@ class InventoryService {
     const expired = await Order.find({
       orderStatus: 'pending',
       paymentStatus: 'unpaid',
-      paymentMethod: { $ne: 'COD' },
       reservationExpiresAt: { $lt: now },
       stockConfirmedAt: null,  // ← Do NOT release if stock was already confirmed
       $or: [
@@ -367,6 +402,7 @@ class InventoryService {
     let count = 0
     for (const order of expired) {
       try {
+        await this.releaseStock(order.orderItems as any, order._id.toString())
         const releaseReason = order.paymentMethod === 'Momo'
           ? 'Cronjob trả hàng - Hủy đơn Momo chưa thanh toán / quá hạn thanh toán'
           : 'Cronjob trả hàng - Hủy đơn thanh toán thất bại'
@@ -376,14 +412,15 @@ class InventoryService {
         })
         await Order.findByIdAndUpdate(order._id, { orderStatus: 'failed' })
         count++
+        console.log(`⏰ Released expired reservation: ${order.orderCode}`)
         console.log(`⏰ Released expired reservation: ${order.orderCode} (${order._id}, ${order.paymentMethod})`)
       } catch (err) {
+        console.error(`❌ Error releasing order ${order.orderCode}:`, err)
         console.error(`❌ Error releasing order ${order.orderCode} (${order._id}):`, err)
       }
     }
-
-    return count
-  }
+  return count
 }
+  }
 
 export default new InventoryService()

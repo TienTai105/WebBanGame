@@ -39,6 +39,12 @@ interface IUser extends Document {
   isActive: boolean
   lastLogin?: Date
   lastActivity?: Date
+  resetPasswordOTP?: string | null                // Hashed OTP for password reset
+  resetPasswordExpire?: Date | null               // OTP expiry time
+  resetSessionToken?: string | null              // Temporary reset token after OTP verification
+  resetSessionExpire?: Date | null                // Reset token expiry time
+  resetPasswordAttempts?: number                   // Rate limiting for OTP attempts
+  resetPasswordLastSent?: Date | null             // Last OTP send time for resend throttling
   matchPassword(enteredPassword: string): Promise<boolean>
   createdAt: Date
   updatedAt: Date
@@ -117,6 +123,32 @@ const userSchema = new Schema<IUser>(
       type: Date,
       default: null,
       index: true,
+    },
+    resetPasswordOTP: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    resetPasswordExpire: {
+      type: Date,
+      default: null,
+    },
+    resetSessionToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    resetSessionExpire: {
+      type: Date,
+      default: null,
+    },
+    resetPasswordAttempts: {
+      type: Number,
+      default: 0,
+    },
+    resetPasswordLastSent: {
+      type: Date,
+      default: null,
     },
   },
   { timestamps: true }

@@ -59,6 +59,72 @@ export const getMyOrders = asyncHandler(async (req: Request, res: Response) => {
   })
 })
 
+// ✅ NEW: Get user's pending orders that can be resumed
+export const getPendingOrders = asyncHandler(async (req: Request, res: Response) => {
+  const userId = (req as any).user._id
+
+  // Find orders that are pending payment and still have active reservation
+  const pendingOrders = await Order.find({
+    user: userId,
+    paymentStatus: 'unpaid',
+    orderStatus: 'pending',
+    // Only include orders with active reservation (not expired)
+    reservationExpiresAt: { $gt: new Date() },
+  })
+    .populate({
+      path: 'orderItems.product',
+      select: 'name slug images price',
+    })
+    .sort({ createdAt: -1 })
+
+  // Filter orders that still have valid hold
+  const resumableOrders = []
+  for (const order of pendingOrders) {
+    let canResume = false
+    let holdStatus = 'expired'
+    let timeLeft = 0
+
+    if (order.holdId) {
+      // Check if hold still exists and is not released
+      const hold = await CheckoutHold.findOne({
+        holdId: order.holdId,
+        released: false,
+        reservedUntil: { $gt: new Date() },
+      })
+
+      if (hold) {
+        canResume = true
+        holdStatus = 'active'
+        timeLeft = Math.max(0, Math.floor((hold.reservedUntil.getTime() - Date.now()) / 1000))
+      }
+    } else if (order.reservationExpiresAt) {
+      // No hold but has reservation time (COD orders)
+      const now = new Date()
+      if (order.reservationExpiresAt > now) {
+        canResume = true
+        holdStatus = 'reservation'
+        timeLeft = Math.max(0, Math.floor((order.reservationExpiresAt.getTime() - now.getTime()) / 1000))
+      }
+    }
+
+    if (canResume) {
+      resumableOrders.push({
+        ...order.toObject(),
+        canResume,
+        holdStatus,
+        timeLeft,
+        resumeUrl: `/checkout?orderId=${order._id}&resume=true`,
+      })
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    count: resumableOrders.length,
+    data: resumableOrders,
+  })
+})
+
 // Get order by ID (user can view own, admin can view any)
 export const getOrderById = asyncHandler(async (req: Request, res: Response) => {
   const order = await Order.findById(req.params.id)
@@ -105,9 +171,37 @@ export const getOrderById = asyncHandler(async (req: Request, res: Response) => 
   res.set('Pragma', 'no-cache')
   res.set('Expires', '0')
 
+  // Add resumeUrl if order can be resumed (simplified logic)
+  let resumeUrl: string | null = null
+  console.log('[DEBUG] Checking resume for order:', {
+    orderId: order._id,
+    orderStatus: order.orderStatus,
+    paymentStatus: order.paymentStatus,
+    paymentMethod: order.paymentMethod,
+    holdId: order.holdId,
+    reservationExpiresAt: order.reservationExpiresAt,
+  })
+
+  // Simplified logic: if order is pending, unpaid, and uses momo, allow resume
+  if (order.orderStatus === 'pending' && order.paymentStatus === 'unpaid' && order.paymentMethod?.toLowerCase() === 'momo') {
+    console.log('[DEBUG] Order qualifies for resume - setting resumeUrl')
+    resumeUrl = `/checkout?orderId=${order._id}&resume=true`
+  } else {
+    console.log('[DEBUG] Order does not qualify for resume:', {
+      statusCheck: order.orderStatus === 'pending',
+      paymentCheck: order.paymentStatus === 'unpaid',
+      methodCheck: order.paymentMethod?.toLowerCase() === 'momo'
+    })
+  }
+
+  console.log('[DEBUG] Final resumeUrl:', resumeUrl)
+
   res.status(200).json({
     success: true,
-    data: order,
+    data: {
+      ...order.toObject(),
+      resumeUrl,
+    },
   })
 })
 
@@ -155,13 +249,14 @@ export const createOrder = asyncHandler(async (req: Request, res: Response) => {
     if (effectiveHoldId && userHold) {
       console.log(`🔍 [CHECKOUT HOLD] Checking for hold ${effectiveHoldId}`)
       if (userHold && userHold.reservedUntil > new Date()) {
-        // Inherit the remaining time from the hold window
-        reservationExpiresAt = userHold.reservedUntil
+        // ✅ FIX: Give order a FRESH 15-minute window from NOW (not inherited from old hold)
+        // The hold already reserved the stock, we just need a fresh reservation timer for payment
+        reservationExpiresAt = new Date(Date.now() + 15 * 60 * 1000)
         // Mark hold as consumed so cron doesn't release it
         userHold.released = true
         await userHold.save()
         consumedHold = true
-        console.log(`✅ [CHECKOUT HOLD] Hold consumed for ${isCOD ? 'COD' : 'Momo'}, ${userHold.items.length} items reserved`)
+        console.log(`✅ [CHECKOUT HOLD] Hold consumed for ${isCOD ? 'COD' : 'Momo'}, ${userHold.items.length} items reserved, new reservation expires in 15 min`)
       } else {
         // Hold expired or not found — fall through to fresh reservation below
         if (userHold) { userHold.released = true; await userHold.save() }
@@ -575,6 +670,7 @@ export const getAllOrders = asyncHandler(async (req: Request, res: Response) => 
 export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
   console.log(`🔍 Cancel order request for: ${req.params.id}`)
   
+  const { cancelReason, releaseStock = true } = req.body  // ✅ NEW: Accept releaseStock flag (default true for backward compatibility)
   const order = await Order.findById(req.params.id)
 
   if (!order) {
@@ -601,17 +697,34 @@ export const cancelOrder = asyncHandler(async (req: Request, res: Response) => {
     })
   }
 
-  // Release reserved or sold stock back to available
-  if (order.orderStatus === 'pending' || order.orderStatus === 'processing') {
+  // ✅ NEW: Only release stock if releaseStock flag is true
+  if (releaseStock && (order.orderStatus === 'pending' || order.orderStatus === 'processing')) {
     try {
       // Check if order is confirmed/paid (Momo) or unpaid (COD)
       const isConfirmed = order.paymentStatus === 'paid' || !!order.stockConfirmedAt
       console.log(`💾 Releasing stock for ${order.orderItems.length} items... (isConfirmed: ${isConfirmed}, paymentMethod: ${order.paymentMethod})`)
-      await inventoryService.releaseStockOnCancel(order.orderItems as any, order._id.toString(), isConfirmed, order.paymentMethod)
+      await inventoryService.releaseStockOnCancel(order.orderItems as any, order._id.toString(), isConfirmed, order.paymentMethod, cancelReason)
       console.log(`✅ Stock released successfully from ${isConfirmed ? 'SOLD' : 'RESERVED'} pool`)
     } catch (err) {
       console.error('⚠️ Error releasing stock on cancel:', err)
     }
+    
+    // ✅ NEW: Also mark associated hold as released (prevent double-release by cronjob)
+    if (order.holdId) {
+      try {
+        const CheckoutHold = (await import('../models/CheckoutHold.js')).default
+        const hold = await CheckoutHold.findOne({ holdId: order.holdId })
+        if (hold && !hold.released) {
+          hold.released = true
+          await hold.save()
+          console.log(`✅ Marked hold ${order.holdId} as released to prevent cronjob double-release`)
+        }
+      } catch (e) {
+        console.error(`⚠️ Error marking hold as released:`, e)
+      }
+    }
+  } else if (!releaseStock && (order.orderStatus === 'pending' || order.orderStatus === 'processing')) {
+    console.log(`⏭️ Skipping stock release - will be handled by cronjob later (reason: ${cancelReason})`)
   } else if (order.orderStatus === 'cancelled') {
     console.log(`⏭️ Order already cancelled - skipping stock release`)
   } else {
@@ -687,6 +800,21 @@ export const deleteOrder = asyncHandler(async (req: Request, res: Response) => {
       console.log(`✅ Stock released successfully from ${isConfirmed ? 'SOLD' : 'RESERVED'} pool`)
     } catch (err) {
       console.error('⚠️ Error releasing stock on delete:', err)
+    }
+    
+    // ✅ Also mark associated hold as released (prevent double-release by cronjob)
+    if (order.holdId) {
+      try {
+        const CheckoutHold = (await import('../models/CheckoutHold.js')).default
+        const hold = await CheckoutHold.findOne({ holdId: order.holdId })
+        if (hold && !hold.released) {
+          hold.released = true
+          await hold.save()
+          console.log(`✅ Marked hold ${order.holdId} as released to prevent cronjob double-release`)
+        }
+      } catch (e) {
+        console.error(`⚠️ Error marking hold as released:`, e)
+      }
     }
   }
 
