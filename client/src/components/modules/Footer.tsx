@@ -12,7 +12,7 @@ interface FooterProps {
  */
 const Footer: FC<FooterProps> = ({ className }) => {
   return (
-    <footer className={cn('bg-bg-dark border-t border-primary/20 pt-20 pb-10 relative overflow-hidden', className)}>
+    <footer className={cn('bg-white dark:bg-bg-dark border-t border-primary/20 pt-20 pb-10 relative overflow-hidden', className)}>
       {/* Background pattern */}
       <div
         className="absolute inset-0 opacity-[0.03] pointer-events-none"
@@ -27,10 +27,10 @@ const Footer: FC<FooterProps> = ({ className }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
           {/* Column 1: Company Info */}
           <div className="space-y-6">
-            <div className="text-3xl font-black tracking-[0.2em] text-white">
+            <div className="text-3xl font-black tracking-[0.2em] text-slate-900 dark:text-white">
               VOLT<span className="text-secondary">RIX</span>
             </div>
-            <p className="text-slate-400 text-sm leading-relaxed">
+            <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
               Tiên phong công nghệ gaming tại Việt Nam. Chúng tôi mang đến hệ sinh thái thiết bị
               giải trí đỉnh cao cho cộng đồng game thủ đích thực.
             </p>
@@ -59,10 +59,10 @@ const Footer: FC<FooterProps> = ({ className }) => {
 
           {/* Column 2: Contact Info */}
           <div>
-            <h4 className="text-white font-bold uppercase text-xs tracking-[0.2em] mb-6">
+            <h4 className="text-slate-900 dark:text-white font-bold uppercase text-xs tracking-[0.2em] mb-6">
               Kết nối với chúng tôi
             </h4>
-            <ul className="space-y-4 text-sm text-slate-400">
+            <ul className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
               <li className="flex items-start gap-3">
                 <Icon name="location_on" size="md" className="text-secondary flex-shrink-0 mt-0.5" />
                 <span>92 Pasteur, Quận 1, TP. Hồ Chí Minh</span>
@@ -82,10 +82,10 @@ const Footer: FC<FooterProps> = ({ className }) => {
 
           {/* Column 3: Links */}
           <div>
-            <h4 className="text-white font-bold uppercase text-xs tracking-[0.2em] mb-6">
+            <h4 className="text-slate-900 dark:text-white font-bold uppercase text-xs tracking-[0.2em] mb-6">
               Chăm sóc khách hàng
             </h4>
-            <ul className="space-y-3 text-sm text-slate-400">
+            <ul className="space-y-3 text-sm text-slate-600 dark:text-slate-400">
               {[
                 'Chính sách bảo hành',
                 'Đổi trả & Hoàn tiền',
@@ -105,17 +105,17 @@ const Footer: FC<FooterProps> = ({ className }) => {
 
           {/* Column 4: Newsletter */}
           <div>
-            <h4 className="text-white font-bold uppercase text-xs tracking-[0.2em] mb-6">
+            <h4 className="text-slate-900 dark:text-white font-bold uppercase text-xs tracking-[0.2em] mb-6">
               Newsletter
             </h4>
-            <p className="text-slate-400 text-xs mb-4">
+            <p className="text-slate-600 dark:text-slate-400 text-xs mb-4">
               Nhận cập nhật về các sản phẩm mới nhất và ưu đãi độc quyền.
             </p>
             <form className="space-y-3">
               <input
                 type="email"
                 placeholder="Địa chỉ Email..."
-                className="w-full bg-slate-800 border-none rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:ring-1 focus:ring-primary outline-none"
+                className="w-full bg-slate-200 dark:bg-slate-800 border-none rounded-lg px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder:text-slate-500 focus:ring-1 focus:ring-primary outline-none"
               />
               <button
                 type="submit"
@@ -129,12 +129,12 @@ const Footer: FC<FooterProps> = ({ className }) => {
 
         {/* Bottom Section */}
         <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-6">
-          <p className="text-slate-500 text-[10px] uppercase tracking-widest">
+          <p className="text-slate-600 dark:text-slate-500 text-[10px] uppercase tracking-widest">
             Copyright © 2025 VOLTRIX Gaming Store. All Rights Reserved.
           </p>
           {/* Payment Methods - Placeholder */}
           <div className="flex items-center gap-4 grayscale opacity-50">
-            <span className="text-xs text-slate-500">Accepted Payments:</span>
+            <span className="text-xs text-slate-600 dark:text-slate-500">Accepted Payments:</span>
             <span className="text-sm">💳 Visa • Mastercard • Momo</span>
           </div>
         </div>

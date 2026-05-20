@@ -1,6 +1,7 @@
 import { FC, useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useNewsList, useNewsCategories } from '../hooks/queries/useNews'
+import { useTheme } from '../context/ThemeContext'
 import ArticleCard from '../components/small/ArticleCard'
 import Pagination from '../components/modules/Pagination'
 import SectionContainer from '../components/atomic/SectionContainer'
@@ -13,6 +14,7 @@ const NewsListPage: FC = () => {
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [category, setCategory] = useState(searchParams.get('category') || '')
   const [sort, setSort] = useState(searchParams.get('sort') || 'newest')
+  const { isDark } = useTheme()
   
   const sortDetailsRef = useRef<HTMLDetailsElement>(null)
   const categoryDetailsRef = useRef<HTMLDetailsElement>(null)
@@ -49,8 +51,8 @@ const NewsListPage: FC = () => {
 
   return (
     <div
-      className="min-h-screen bg-slate-950 relative overflow-hidden"
-      style={{
+      className="min-h-screen bg-background text-foreground dark:bg-slate-950 relative overflow-hidden"
+      style={isDark ? {
         backgroundImage: `
           radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
           radial-gradient(circle at 80% 70%, rgba(34, 211, 238, 0.1) 0%, transparent 40%),
@@ -63,7 +65,7 @@ const NewsListPage: FC = () => {
             rgba(15, 23, 42, 1) 100%)
         `,
         backgroundAttachment: 'fixed',
-      }}
+      } : undefined}
     >
       {/* Grid Pattern Overlay */}
       <div
@@ -121,7 +123,7 @@ const NewsListPage: FC = () => {
 
             {/* Sort Dropdown */}
             <details ref={sortDetailsRef} className="group relative">
-              <summary className="flex items-center justify-between px-6 py-4 bg-slate-900/30 border border-indigo-500/30 rounded-lg text-white text-base font-medium cursor-pointer hover:border-indigo-400/50 transition list-none">
+              <summary className="flex items-center justify-between px-6 py-4 bg-surface/95 dark:bg-slate-900/30 border border-indigo-500/30 rounded-lg text-slate-950 dark:text-white text-base font-medium cursor-pointer hover:border-indigo-400/50 transition list-none">
                 <span className="font-medium">
                   {sort === 'newest' && 'Newest First'}
                   {sort === 'oldest' && 'Oldest First'}
@@ -130,7 +132,7 @@ const NewsListPage: FC = () => {
                 </span>
                 <Icon name="expand_more" size="md" className="group-open:rotate-180 transition text-indigo-400" />
               </summary>
-              <div className="absolute top-full left-0 right-0 mb-2 bg-slate-900 border border-indigo-500/30 rounded-lg shadow-2xl z-50 overflow-hidden">
+              <div className="absolute top-full left-0 right-0 mb-2 bg-surface/95 dark:bg-slate-900 border border-indigo-500/30 rounded-lg shadow-2xl z-50 overflow-hidden">
                 <button
                   onClick={() => {
                     setSort('newest')
@@ -184,11 +186,11 @@ const NewsListPage: FC = () => {
 
             {/* Categories Dropdown */}
             <details ref={categoryDetailsRef} className="group relative">
-              <summary className="flex items-center justify-between px-6 py-4 bg-slate-900/30 border border-indigo-500/30 rounded-lg text-white text-base font-medium cursor-pointer hover:border-indigo-400/50 transition list-none">
+              <summary className="flex items-center justify-between px-6 py-4 bg-surface/95 dark:bg-slate-900/30 border border-indigo-500/30 rounded-lg text-slate-950 dark:text-white text-base font-medium cursor-pointer hover:border-indigo-400/50 transition list-none">
                 <span className="font-medium">{category ? category : 'All Categories'}</span>
                 <Icon name="expand_more" size="md" className="group-open:rotate-180 transition text-indigo-400" />
               </summary>
-              <div className="absolute top-full left-0 right-0 mb-2 bg-slate-900 border border-indigo-500/30 rounded-lg shadow-2xl z-50 overflow-hidden">
+              <div className="absolute top-full left-0 right-0 mb-2 bg-surface/95 dark:bg-slate-900 border border-indigo-500/30 rounded-lg shadow-2xl z-50 overflow-hidden">
                 <button
                   onClick={() => {
                     setCategory('')

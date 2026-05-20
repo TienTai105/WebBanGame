@@ -47,6 +47,22 @@
     --input: 217.2 32.6% 17.5%;
     --ring: 240 83% 67%; /* #6366F1 exact */
   }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    min-height: 100vh;
+    margin: 0;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
 }
 
 * {

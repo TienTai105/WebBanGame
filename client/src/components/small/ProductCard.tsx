@@ -67,13 +67,13 @@ const ProductCard: FC<ProductCardProps> = ({
     <div
       onClick={handleProductClick}
       className={cn(
-        'group bg-slate-900 border border-slate-800 rounded-xl overflow-hidden',
+        'group bg-card border border-slate-200 rounded-xl overflow-hidden dark:bg-slate-950 dark:border-slate-800',
         'hover:border-primary/50 transition-all duration-300',
         'cursor-pointer'
       )}
     >
       {/* Image Container with Overlay Icons */}
-      <div className="relative aspect-square overflow-hidden bg-slate-800">
+      <div className="relative aspect-square overflow-hidden bg-slate-100 dark:bg-slate-800">
         <Image
           src={mainImage}
           alt={product.name}
@@ -149,13 +149,13 @@ const ProductCard: FC<ProductCardProps> = ({
       <div className="p-4">
         {/* Brand/Category */}
         {product.categoryId && (
-          <p className="text-slate-400 text-xs mb-1 uppercase tracking-wide">
+          <p className="text-slate-600 dark:text-slate-400 text-xs mb-1 uppercase tracking-wide">
             {typeof product.categoryId === 'object' ? product.categoryId.name : product.categoryId}
           </p>
         )}
 
         {/* Product Name */}
-        <h3 className="font-bold text-white mb-2 line-clamp-2 group-hover:text-secondary transition-colors">
+        <h3 className="font-bold text-slate-950 dark:text-white mb-2 line-clamp-2 group-hover:text-secondary transition-colors">
           {product.name}
         </h3>
 

@@ -1,6 +1,7 @@
 import { FC, useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Wallet, Plus, Clock, QrCode } from 'lucide-react'
+import { useTheme } from '../context/ThemeContext'
 import { useCart } from '../context/CartContext'
 import Button from '../components/atomic/Button'
 import Checkbox from '../components/atomic/Checkbox'
@@ -31,6 +32,7 @@ const CheckoutPage: FC = () => {
   const location = useLocation()
   const { items, updateQuantity, clearCart } = useCart()
   const { provinces, getDistrictsByProvince, getWardsByDistrict } = useProvinces()
+  const { isDark } = useTheme()
 
   // Address type options
   const addressTypeOptions = [
@@ -947,7 +949,7 @@ const CheckoutPage: FC = () => {
   ]
 
   return (
-    <div className="min-h-screen bg-slate-950 relative overflow-hidden" style={{
+    <div className="min-h-screen bg-background text-foreground dark:bg-slate-950 relative overflow-hidden" style={isDark ? {
       backgroundImage: `
         radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
         radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
@@ -959,7 +961,7 @@ const CheckoutPage: FC = () => {
           rgba(15, 23, 42, 1) 100%)
       `,
       backgroundAttachment: 'fixed',
-    }}>
+    } : undefined}>
       {/* Grid Pattern Overlay */}
       <div className="absolute inset-0 opacity-5 pointer-events-none" style={{
         backgroundImage: `

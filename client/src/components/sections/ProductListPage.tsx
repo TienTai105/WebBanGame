@@ -7,6 +7,7 @@ import { useProducts, ProductListFilters, usePlatforms, useCategories } from '..
 import { cn } from '../../utils/cn'
 import { Icon } from '../atomic'
 import { Slider } from '../ui/slider'
+import { useTheme } from '../../context/ThemeContext'
 
 interface PriceRange {
   min: number
@@ -159,10 +160,11 @@ const ProductListPage: FC = () => {
   const totalProducts = data?.total || 0
   const totalPages = Math.ceil(totalProducts / 12)
 
+  const { isDark } = useTheme()
   const displayProducts = products
 
   return (
-    <main className="min-h-screen bg-slate-950 relative overflow-hidden" style={{
+    <main className="min-h-screen bg-background text-foreground dark:bg-slate-950 relative overflow-hidden" style={isDark ? {
       backgroundImage: `
         radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
         radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
@@ -174,7 +176,7 @@ const ProductListPage: FC = () => {
           rgba(15, 23, 42, 1) 100%)
       `,
       backgroundAttachment: 'fixed',
-    }}>
+    } : undefined}>
       {/* Grid Pattern Overlay */}
       <div className="absolute inset-0 opacity-5 pointer-events-none" style={{
         backgroundImage: `
@@ -193,10 +195,10 @@ const ProductListPage: FC = () => {
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Sidebar Filter */}
           <div className="w-full lg:w-80 shrink-0 self-start">
-            <div className="sticky top-4 bg-gradient-to-br from-indigo-950/60 to-slate-900/60 backdrop-blur-sm border border-indigo-500/30 rounded-xl p-6 space-y-6 shadow-indigo-500/10">
+            <div className="sticky top-4 bg-gradient-to-br from-slate-100/80 to-slate-200/80 dark:from-indigo-950/60 dark:to-slate-900/60 backdrop-blur-sm border border-slate-200 dark:border-indigo-500/30 rounded-xl p-6 space-y-6 shadow-slate-300/20 dark:shadow-indigo-500/10">
               <h2 className="text-lg font-black flex items-center gap-3">
-                <span className="material-symbols-outlined text-cyan-400 text-2xl">filter_alt</span>
-                <span className="bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">Bộ lọc</span>
+                <span className="material-symbols-outlined text-cyan-600 dark:text-cyan-400 text-2xl">filter_alt</span>
+                <span className="bg-gradient-to-r from-indigo-600 to-cyan-600 bg-clip-text text-transparent">Bộ lọc</span>
               </h2>
 
               {/* Filters Wrapper */}
@@ -220,7 +222,7 @@ const ProductListPage: FC = () => {
                         'transition-all duration-200 text-left text-sm font-medium',
                         filters.onSale
                           ? 'bg-gradient-to-r from-red-500/30 to-orange-500/20 text-orange-300 border border-orange-400/50 shadow-lg shadow-red-500/20'
-                          : 'hover:bg-indigo-500/10 text-slate-300 hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
+                          : 'hover:bg-indigo-500/10 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
                       )}
                     >
                       <span> Giảm Giá</span>
@@ -239,7 +241,7 @@ const ProductListPage: FC = () => {
                         'transition-all duration-200 text-left text-sm font-medium',
                         filters.isNew
                           ? 'bg-gradient-to-r from-yellow-500/30 to-amber-500/20 text-yellow-300 border border-yellow-400/50 shadow-lg shadow-yellow-500/20'
-                          : 'hover:bg-indigo-500/10 text-slate-300 hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
+                          : 'hover:bg-indigo-500/10 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
                       )}
                     >
                       <span>Mới</span>
@@ -258,7 +260,7 @@ const ProductListPage: FC = () => {
                         'transition-all duration-200 text-left text-sm font-medium',
                         filters.isBestseller
                           ? 'bg-gradient-to-r from-purple-500/30 to-pink-500/20 text-pink-300 border border-pink-400/50 shadow-lg shadow-purple-500/20'
-                          : 'hover:bg-indigo-500/10 text-slate-300 hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
+                          : 'hover:bg-indigo-500/10 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
                       )}
                     >
                       <span>Bán Chạy</span>
@@ -269,7 +271,7 @@ const ProductListPage: FC = () => {
 
                 {/* Platform Filter */}
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-widest bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-widest bg-gradient-to-r from-indigo-600 to-cyan-600 bg-clip-text text-transparent mb-4">
                     Nền tảng
                   </h3>
                   <div className="flex flex-wrap gap-2">
@@ -287,7 +289,7 @@ const ProductListPage: FC = () => {
                           'transition-all duration-200',
                           filters.platforms.includes(platform._id)
                             ? 'bg-gradient-to-r from-indigo-500 to-cyan-500 text-white border-indigo-400/50 shadow-lg shadow-indigo-500/30'
-                            : 'border-indigo-400/30 text-slate-300 hover:border-cyan-400/50 hover:text-cyan-300 hover:bg-indigo-500/10'
+                            : 'border-indigo-400/30 text-slate-700 dark:text-slate-300 hover:border-cyan-400/50 hover:text-cyan-300 hover:bg-indigo-500/10'
                         )}
                       >
                         {platform.name}
@@ -298,7 +300,7 @@ const ProductListPage: FC = () => {
 
                 {/* Price Range Filter */}
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-widest bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-widest bg-gradient-to-r from-indigo-600 to-cyan-600 bg-clip-text text-transparent mb-4">
                     Khoảng giá
                   </h3>
                   <div className="space-y-3">
@@ -325,7 +327,7 @@ const ProductListPage: FC = () => {
 
                 {/* Category Filter */}
                 <div>
-                  <h3 className="text-xs font-bold uppercase tracking-widest bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-widest bg-gradient-to-r from-indigo-600 to-cyan-600 bg-clip-text text-transparent mb-4">
                     Danh mục
                   </h3>
                   <div className="space-y-2">
@@ -344,7 +346,7 @@ const ProductListPage: FC = () => {
                           'transition-all duration-200 text-left text-sm font-medium',
                           filters.categoryId === category._id
                             ? 'bg-gradient-to-r from-indigo-500/30 to-cyan-500/20 text-cyan-300 border border-cyan-400/50 shadow-lg shadow-indigo-500/20'
-                            : 'hover:bg-indigo-500/10 text-slate-300 hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
+                            : 'hover:bg-indigo-500/10 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 border border-indigo-400/20 hover:border-indigo-400/50'
                         )}
                       >
                         <span>{category.name}</span>
@@ -365,21 +367,20 @@ const ProductListPage: FC = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-12">
             <div>
               <div className="inline-block mb-3">
-                <span className="text-indigo-400 text-xl font-bold uppercase tracking-widest">
+                <span className="text-indigo-600 dark:text-indigo-400 text-xl font-bold uppercase tracking-widest">
                   Sản Phẩm
                 </span>
               </div>
-              <h1 className="text-4xl font-black text-white mb-2">
+              <h1 className="text-4xl font-black text-slate-950 dark:text-white mb-2">
                 Gaming Gear & Games
               </h1>
-              <p className="text-slate-400">
+              <p className="text-slate-600 dark:text-slate-400">
                 Hiển thị {displayProducts.length} sản phẩm phù hợp
               </p>
-            </div>
 
             {/* Sort Dropdown */}
             <details ref={sortDetailsRef} className="group relative w-48">
-              <summary className="flex items-center justify-between px-6 py-4 bg-slate-900/30 border border-indigo-500/30 rounded-lg text-white text-base font-medium cursor-pointer hover:border-indigo-400/50 transition list-none">
+              <summary className="flex items-center justify-between px-6 py-4 bg-slate-100 dark:bg-slate-900/30 border border-slate-200 dark:border-indigo-500/30 rounded-lg text-slate-900 dark:text-white text-base font-medium cursor-pointer hover:border-indigo-400/50 transition list-none">
                 <span className="font-medium">
                   {filters.sortBy === 'newest' && 'Mới nhất'}
                   {filters.sortBy === 'priceAsc' && 'Giá thấp đến cao'}
@@ -388,14 +389,14 @@ const ProductListPage: FC = () => {
                 </span>
                 <Icon name="expand_more" size="md" className="group-open:rotate-180 transition text-indigo-400" />
               </summary>
-              <div className="absolute top-full left-0 right-0 mb-2 bg-slate-900 border border-indigo-500/30 rounded-lg shadow-2xl z-50 overflow-hidden">
+              <div className="absolute top-full left-0 right-0 mb-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-indigo-500/30 rounded-lg shadow-2xl z-50 overflow-hidden">
                 <button
                   onClick={() => {
                     setFilters({ ...filters, sortBy: 'newest' })
                     sortDetailsRef.current?.removeAttribute('open')
                   }}
                   className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
-                    filters.sortBy === 'newest' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
+                    filters.sortBy === 'newest' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-700 dark:text-slate-300 border-l-transparent hover:bg-indigo-700/50'
                   }`}
                 >
                   Mới nhất
@@ -406,7 +407,7 @@ const ProductListPage: FC = () => {
                     sortDetailsRef.current?.removeAttribute('open')
                   }}
                   className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
-                    filters.sortBy === 'priceAsc' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
+                    filters.sortBy === 'priceAsc' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-700 dark:text-slate-300 border-l-transparent hover:bg-indigo-700/50'
                   }`}
                 >
                   Giá thấp đến cao
@@ -417,7 +418,7 @@ const ProductListPage: FC = () => {
                     sortDetailsRef.current?.removeAttribute('open')
                   }}
                   className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
-                    filters.sortBy === 'priceDesc' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
+                    filters.sortBy === 'priceDesc' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-700 dark:text-slate-300 border-l-transparent hover:bg-indigo-700/50'
                   }`}
                 >
                   Giá cao đến thấp
@@ -428,7 +429,7 @@ const ProductListPage: FC = () => {
                     sortDetailsRef.current?.removeAttribute('open')
                   }}
                   className={`w-full text-left px-6 py-4 text-base font-medium transition border-l-2 ${
-                    filters.sortBy === 'bestSellers' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-300 border-l-transparent hover:bg-indigo-700/50'
+                    filters.sortBy === 'bestSellers' ? 'bg-indigo-500/20 text-indigo-400 border-l-indigo-400' : 'text-slate-700 dark:text-slate-300 border-l-transparent hover:bg-indigo-700/50'
                   }`}
                 >
                   Bán chạy nhất
@@ -439,8 +440,8 @@ const ProductListPage: FC = () => {
 
           {/* Loading State */}
           {isLoading && (
-            <div className="h-96 flex items-center justify-center bg-gradient-to-br from-indigo-950/40 to-slate-900/40 rounded-xl border border-indigo-500/30 shadow-lg shadow-indigo-500/20">
-              <p className="text-slate-300 text-center">
+            <div className="h-96 flex items-center justify-center bg-slate-100 dark:bg-gradient-to-br dark:from-indigo-950/40 dark:to-slate-900/40 rounded-xl border border-slate-200 dark:border-indigo-500/30 shadow-lg shadow-slate-300/20 dark:shadow-indigo-500/20">
+              <p className="text-slate-700 dark:text-slate-300 text-center">
                 <span className="text-5xl mb-4 block animate-spin">⏳</span>
                 Đang tải sản phẩm...
               </p>
@@ -449,8 +450,8 @@ const ProductListPage: FC = () => {
 
           {/* Error State */}
           {error && (
-            <div className="h-96 flex items-center justify-center bg-gradient-to-br from-red-950/40 to-slate-900/40 rounded-xl border border-red-500/30 shadow-lg shadow-red-500/20">
-              <p className="text-red-300 text-center">
+            <div className="h-96 flex items-center justify-center bg-slate-100 dark:bg-gradient-to-br dark:from-red-950/40 dark:to-slate-900/40 rounded-xl border border-slate-200 dark:border-red-500/30 shadow-lg shadow-slate-300/20 dark:shadow-red-500/20">
+              <p className="text-red-600 dark:text-red-300 text-center">
                 <span className="text-5xl mb-4 block">⚠️</span>
                 Lỗi tải dữ liệu
               </p>
@@ -487,8 +488,8 @@ const ProductListPage: FC = () => {
 
           {/* Empty State */}
           {!isLoading && !error && displayProducts.length === 0 && (
-            <div className="h-96 flex items-center justify-center bg-gradient-to-br from-indigo-950/40 to-slate-900/40 rounded-xl border border-indigo-500/30 shadow-lg shadow-indigo-500/20">
-              <p className="text-slate-300 text-center">
+            <div className="h-96 flex items-center justify-center bg-slate-100 dark:bg-slate-900/40 rounded-xl border border-slate-200 dark:border-indigo-500/30 shadow-lg shadow-slate-300/20 dark:shadow-indigo-500/20">
+              <p className="text-slate-700 dark:text-slate-300 text-center">
                 <span className="text-5xl mb-4 block">🎮</span>
                 Không có sản phẩm phù hợp
               </p>

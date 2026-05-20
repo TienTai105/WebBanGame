@@ -7,6 +7,7 @@ import { Header, Footer, Navigation } from './components/modules'
 import CartModal from './components/modules/CartModal'
 import { CartProvider, useCart } from './context/CartContext'
 import { AdminAuthProvider, useAdminAuth } from './context/AdminAuthContext'
+import { ThemeProvider } from './context/ThemeContext'
 import { warningToast } from './utils/toast'
 import { connectSocket } from './utils/socket'
 import Home from './pages/Home'
@@ -161,7 +162,7 @@ function UserAppContent() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-950">
+    <div className="flex flex-col min-h-screen bg-background text-foreground">
       {/* Global Header */}
       <Header
         onSearch={handleSearch}
@@ -253,24 +254,26 @@ function AppRootContent() {
 function App() {
   return (
     <Router>
-      <CartProvider>
-        <AdminAuthProvider>
-          <AppRootContent />
-          {/* Toast Notifications - Global */}
-          <ToastContainer
-            position="bottom-right"
-            autoClose={1500}
-            hideProgressBar={false}
-            newestOnTop={true}
-            closeOnClick
-            rtl={false}
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-            theme="dark"
-          />
-        </AdminAuthProvider>
-      </CartProvider>
+      <ThemeProvider>
+        <CartProvider>
+          <AdminAuthProvider>
+            <AppRootContent />
+            {/* Toast Notifications - Global */}
+            <ToastContainer
+              position="bottom-right"
+              autoClose={1500}
+              hideProgressBar={false}
+              newestOnTop={true}
+              closeOnClick
+              rtl={false}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+              theme="dark"
+            />
+          </AdminAuthProvider>
+        </CartProvider>
+      </ThemeProvider>
     </Router>
   )
 }

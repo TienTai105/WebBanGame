@@ -1,6 +1,7 @@
 import { FC, useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CheckCircle, Phone, Mail, ArrowRight, Loader } from 'lucide-react'
+import { useTheme } from '../context/ThemeContext'
 import { useCart } from '../context/CartContext'
 import Button from '../components/atomic/Button'
 import Stepper from '../components/modules/Stepper'
@@ -46,6 +47,7 @@ const OrderConfirmPage: FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { clearCart } = useCart()
+  const { isDark } = useTheme()
   const [orderData, setOrderData] = useState<OrderData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -354,8 +356,8 @@ const OrderConfirmPage: FC = () => {
 
   return (
     <div
-      className="min-h-screen bg-slate-950 relative overflow-hidden"
-      style={{
+      className="min-h-screen bg-background text-foreground dark:bg-slate-950 relative overflow-hidden"
+      style={isDark ? {
         backgroundImage: `
           radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
           radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
@@ -367,7 +369,7 @@ const OrderConfirmPage: FC = () => {
             rgba(15, 23, 42, 1) 100%)
         `,
         backgroundAttachment: 'fixed',
-      }}
+      } : undefined}
     >
       {/* Grid Pattern */}
       <div

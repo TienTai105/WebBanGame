@@ -1,7 +1,8 @@
 import { FC, useState, useRef, useEffect } from 'react'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
-import { LogOut, ShoppingBag, User, Shield, Lock } from 'lucide-react'
+import { LogOut, ShoppingBag, User, Shield, Lock, Sun, Moon } from 'lucide-react'
 import { disconnectSocket } from '../../utils/socket'
+import { useTheme } from '../../context/ThemeContext'
 import { cn } from '../../utils/cn'
 import { useCart } from '../../context/CartContext'
 import Button from '../atomic/Button'
@@ -26,6 +27,7 @@ const Header: FC<HeaderProps> = ({
 }) => {
   const navigate = useNavigate()
   const { items, openCart } = useCart()
+  const { isDark, setTheme } = useTheme()
   const [showDropdown, setShowDropdown] = useState(false)
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -111,7 +113,7 @@ const Header: FC<HeaderProps> = ({
   return (
     <header
       className={cn(
-        'w-full bg-bg-dark border-b border-primary/30',
+        'w-full bg-white dark:bg-bg-dark border-b border-primary/30',
         'sticky top-0 z-[100]',
         'backdrop-blur-md bg-opacity-90',
         className
@@ -123,7 +125,7 @@ const Header: FC<HeaderProps> = ({
           {/* Logo */}
           <div className="flex-shrink-0">
             <RouterLink to="/" className="flex items-center gap-1 hover:opacity-80 transition">
-              <span className="text-3xl font-black tracking-[0.2em] text-white font-display">
+              <span className="text-3xl font-black tracking-[0.2em] text-slate-900 dark:text-white font-display">
                 VOLT
                 <span className="text-secondary">RIX</span>
               </span>
@@ -143,15 +145,15 @@ const Header: FC<HeaderProps> = ({
           {/* Right Section */}
           <div className="flex items-center gap-8">
             {/* Hotline Info - Hidden on mobile */}
-            <div className="hidden lg:flex items-center gap-3 border-r border-slate-700 pr-8">
+            <div className="hidden lg:flex items-center gap-3 border-r border-slate-200 dark:border-slate-700 pr-8">
               <div className="w-12 h-12 rounded-full border border-secondary/30 flex items-center justify-center text-secondary">
                 <Icon name="headset_mic" size="xl" />
               </div>
               <div>
-                <div className="text-[10px] text-slate-400 uppercase tracking-widest">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                   Hotline 24/7
                 </div>
-                <div className="text-white font-bold text-sm tracking-tighter">
+                <div className="text-slate-900 dark:text-white font-bold text-sm tracking-tighter">
                   1900 888 999
                 </div>
               </div>
@@ -185,18 +187,18 @@ const Header: FC<HeaderProps> = ({
 
                 {/* Dropdown Menu */}
                 {showDropdown && user && (
-                  <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-lg shadow-xl z-50">
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl z-50">
                     {/* Dropdown Header */}
-                    <div className="px-4 py-3 border-b border-slate-800">
-                      <p className="text-white font-semibold text-sm">{user.name || 'Tài khoản'}</p>
-                      <p className="text-slate-400 text-xs mt-1">{user.email}</p>
+                    <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+                      <p className="text-slate-900 dark:text-white font-semibold text-sm">{user.name || 'Tài khoản'}</p>
+                      <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">{user.email}</p>
                     </div>
 
                     {/* Dropdown Items */}
                     <div className="py-2">
                       <button
                         onClick={handleProfile}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors"
                       >
                         <User className="w-4 h-4 text-cyan-400" />
                         <span className="text-sm font-medium">Hồ sơ của tôi</span>
@@ -204,7 +206,7 @@ const Header: FC<HeaderProps> = ({
                       {/* My Orders */}
                       <button
                         onClick={handleMyOrders}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors"
                       >
                         <ShoppingBag className="w-4 h-4 text-cyan-400" />
                         <span className="text-sm font-medium">Đơn hàng của tôi</span>
@@ -216,7 +218,7 @@ const Header: FC<HeaderProps> = ({
                           setShowDropdown(false)
                           setShowChangePasswordModal(true)
                         }}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors"
                       >
                         <Lock className="w-4 h-4 text-cyan-400" />
                         <span className="text-sm font-medium">Đổi mật khẩu</span>
@@ -226,7 +228,7 @@ const Header: FC<HeaderProps> = ({
                       {(user.role === 'admin' || user.role === 'staff') && (
                         <button
                           onClick={() => { setShowDropdown(false); navigate('/admin') }}
-                          className="w-full px-4 py-3 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors"
                         >
                           <Shield className="w-4 h-4 text-cyan-400" />
                           <span className="text-sm font-medium">Trang quản trị</span>
@@ -236,7 +238,7 @@ const Header: FC<HeaderProps> = ({
                       {/* Logout */}
                       <button
                         onClick={handleLogout}
-                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-300 hover:bg-slate-800 hover:text-red-400 transition-colors border-t border-slate-800"
+                        className="w-full px-4 py-3 flex items-center gap-3 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-red-400 transition-colors border-t border-slate-200 dark:border-slate-800"
                       >
                         <LogOut className="w-4 h-4 text-red-400" />
                         <span className="text-sm font-medium">Đăng xuất</span>
@@ -261,6 +263,19 @@ const Header: FC<HeaderProps> = ({
                   </span>
                 )}
               </div>
+
+              {/* Theme Toggle Button */}
+              <button
+                onClick={() => setTheme(isDark ? 'light' : 'dark')}
+                className="text-slate-400 hover:text-primary transition-colors p-2 rounded-lg hover:bg-slate-800"
+                title={isDark ? 'Chế độ sáng' : 'Chế độ tối'}
+              >
+                {isDark ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Moon className="w-5 h-5" />
+                )}
+              </button>
             </div>
           </div>
         </div>

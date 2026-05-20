@@ -1,5 +1,6 @@
 import { FC, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { useTheme } from '../context/ThemeContext'
 import { Icon } from '../components/atomic'
 import Button from '../components/atomic/Button'
 import Stepper from '../components/modules/Stepper'
@@ -129,14 +130,15 @@ const OrderDetailsPage: FC = () => {
     }
   }
 
+  const { isDark } = useTheme()
   const canCancelOrder = order && (order.orderStatus === 'pending' || order.orderStatus === 'processing' || order.paymentStatus === 'unpaid')
 
   if (isLoading) {
     return (
-      <main className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <main className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center">
-          <div className="text-white text-xl mb-3">Loading order details...</div>
-          <div className="text-slate-400 text-sm">Please wait...</div>
+          <div className="text-slate-900 dark:text-white text-xl mb-3">Loading order details...</div>
+          <div className="text-slate-500 dark:text-slate-400 text-sm">Please wait...</div>
         </div>
       </main>
     )
@@ -144,10 +146,10 @@ const OrderDetailsPage: FC = () => {
 
   if (!order || error) {
     return (
-      <main className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="bg-slate-900/50 border border-red-500/30 rounded-xl p-8 max-w-md text-center">
-          <div className="text-white text-xl mb-2 font-bold">Unable to Load Order</div>
-          <div className="text-red-400 text-sm mb-6">{error || 'Failed to load order details'}</div>
+      <main className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <div className="bg-surface/95 dark:bg-slate-900/50 border border-red-500/30 rounded-xl p-8 max-w-md text-center">
+          <div className="text-slate-950 dark:text-white text-xl mb-2 font-bold">Unable to Load Order</div>
+          <div className="text-red-500 dark:text-red-400 text-sm mb-6">{error || 'Failed to load order details'}</div>
           <button
             onClick={() => navigate('/profile')}
             className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold transition"
@@ -161,8 +163,8 @@ const OrderDetailsPage: FC = () => {
 
   return (
     <main
-      className="min-h-screen bg-slate-950 relative overflow-hidden"
-      style={{
+      className="min-h-screen bg-background text-foreground dark:bg-slate-950 relative overflow-hidden"
+      style={isDark ? {
         backgroundImage: `
         radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
         radial-gradient(circle at 80% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 50%),
@@ -174,7 +176,7 @@ const OrderDetailsPage: FC = () => {
           rgba(15, 23, 42, 1) 100%)
       `,
         backgroundAttachment: 'fixed',
-      }}
+      } : undefined}
     >
       {/* Grid Pattern Overlay */}
       <div
@@ -276,8 +278,8 @@ const OrderDetailsPage: FC = () => {
               {/* Shipping & Payment Info Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Shipping Address */}
-                <div className="bg-slate-900/50 border border-indigo-500/20 rounded-xl p-6">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-white">
+                <div className="bg-surface/95 dark:bg-slate-900/50 border border-indigo-500/20 rounded-xl p-6">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-950 dark:text-white">
                     <Icon name="location_on" size="sm" className="text-indigo-400" />
                     Địa chỉ giao hàng
                   </h3>
@@ -293,8 +295,8 @@ const OrderDetailsPage: FC = () => {
                 </div>
 
                 {/* Payment Method */}
-                <div className="bg-slate-900/50 border border-indigo-500/20 rounded-xl p-6">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-white">
+                <div className="bg-surface/95 dark:bg-slate-900/50 border border-indigo-500/20 rounded-xl p-6">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-950 dark:text-white">
                     <Icon name="payments" size="sm" className="text-indigo-400" />
                     Thanh toán
                   </h3>
@@ -345,17 +347,17 @@ const OrderDetailsPage: FC = () => {
               </div>
 
               {/* Order Items Section */}
-              <div className="bg-slate-900/30 border border-indigo-500/20 rounded-xl p-8">
-                <h3 className="font-bold text-xl mb-6 text-white">Sản phẩm đã mua</h3>
+              <div className="bg-surface/95 dark:bg-slate-900/30 border border-indigo-500/20 rounded-xl p-8">
+                <h3 className="font-bold text-xl mb-6 text-slate-950 dark:text-white">Sản phẩm đã mua</h3>
 
                 <div className="space-y-4">
                   {order.orderItems.map((item, index) => (
                     <div
                       key={item._id || index}
-                      className="flex gap-6 p-4 rounded-lg hover:bg-slate-800/50 transition-colors"
+                      className="flex gap-6 p-4 rounded-lg hover:bg-slate-950/30 dark:hover:bg-slate-800/50 transition-colors"
                     >
                       {/* Product Image */}
-                      <div className="w-24 h-24 rounded-lg bg-slate-800 flex-shrink-0 overflow-hidden border border-slate-700 flex items-center justify-center">
+                      <div className="w-24 h-24 rounded-lg bg-slate-950/50 dark:bg-slate-800 flex-shrink-0 overflow-hidden border border-slate-200/70 dark:border-slate-700 flex items-center justify-center">
                         <img
                           src={item.image || item.product?.images?.[0] || 'https://via.placeholder.com/96?text=No+Image'}
                           alt={item.name}
@@ -409,14 +411,14 @@ const OrderDetailsPage: FC = () => {
 
             {/* RIGHT COLUMN - Order Summary Sidebar */}
             <div className="lg:col-span-4">
-              <div className="bg-slate-900/50 border border-indigo-500/20 rounded-xl p-6 sticky top-20 space-y-6">
-                <h3 className="font-bold text-xl pb-4 border-b border-slate-700 text-white">
+              <div className="bg-surface/95 dark:bg-slate-900/50 border border-indigo-500/20 rounded-xl p-6 sticky top-20 space-y-6">
+                <h3 className="font-bold text-xl pb-4 border-b border-slate-700 text-slate-950 dark:text-white">
                   Chi tiết hóa đơn
                 </h3>
 
                 {/* Voucher Giảm Giá */}
                 {order.discountCode && order.discountAmount > 0 && (
-                  <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
+                  <div className="bg-surface/95 dark:bg-slate-800/50 border border-slate-700/50 rounded-lg p-4">
                     <p className="text-xs text-slate-400 mb-2">Voucher giảm giá</p>
                     <div className="flex justify-between items-center">
                       <span className="font-bold text-indigo-400">{order.discountCode}</span>
@@ -429,7 +431,7 @@ const OrderDetailsPage: FC = () => {
                 )}
 
                 {/* Pricing Details */}
-                <div className="space-y-3 bg-slate-800/30 p-4 rounded-lg border border-slate-700/50">
+                <div className="space-y-3 bg-surface/95 dark:bg-slate-800/30 p-4 rounded-lg border border-slate-700/50">
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-400">Tạm tính</span>
                     <span className="font-semibold text-white">

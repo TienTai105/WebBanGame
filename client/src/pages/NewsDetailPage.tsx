@@ -1,5 +1,6 @@
 import { FC, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
+import { useTheme } from '../context/ThemeContext'
 import { useNewsDetail, useFeaturedNews } from '../hooks/queries/useNews'
 import { useComments, useCreateComment } from '../hooks/queries/useComments'
 import { useAuthStore } from '../stores/authStore'
@@ -10,6 +11,7 @@ import DescriptionDisplay from '../components/sections/DescriptionDisplay'
 
 const NewsDetailPage: FC = () => {
   const { slug = '' } = useParams()
+  const { isDark } = useTheme()
   const newsQuery = useNewsDetail(slug)
   const featuredNewsQuery = useFeaturedNews()
   const { user, isAuthenticated } = useAuthStore()
@@ -32,10 +34,10 @@ const NewsDetailPage: FC = () => {
 
   if (newsQuery.isLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex justify-center items-center">
+      <div className="min-h-screen bg-background text-foreground flex justify-center items-center">
         <div className="text-center">
-          <Icon name="hourglass_empty" size="lg" className="text-slate-500 mb-4 animate-spin" />
-          <p className="text-slate-400">Loading article...</p>
+          <Icon name="hourglass_empty" size="lg" className="text-slate-500 dark:text-slate-400 mb-4 animate-spin" />
+          <p className="text-slate-500 dark:text-slate-400">Loading article...</p>
         </div>
       </div>
     )
@@ -43,10 +45,10 @@ const NewsDetailPage: FC = () => {
 
   if (newsQuery.isError || !newsQuery.data?.data) {
     return (
-      <div className="min-h-screen bg-slate-950 flex justify-center items-center">
+      <div className="min-h-screen bg-background text-foreground flex justify-center items-center">
         <div className="text-center">
           <Icon name="error" size="lg" className="text-red-500 mb-4" />
-          <p className="text-slate-400">Article not found</p>
+          <p className="text-slate-500 dark:text-slate-400">Article not found</p>
           <Link
             to="/news"
             className="mt-4 inline-flex items-center gap-2 px-6 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg transition"
@@ -162,8 +164,8 @@ const NewsDetailPage: FC = () => {
 
   return (
     <div
-      className="min-h-screen bg-slate-950 relative overflow-hidden"
-      style={{
+      className="min-h-screen bg-background text-foreground dark:bg-slate-950 relative overflow-hidden"
+      style={isDark ? {
         backgroundImage: `
           radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
           radial-gradient(circle at 80% 70%, rgba(34, 211, 238, 0.1) 0%, transparent 40%),
@@ -176,7 +178,7 @@ const NewsDetailPage: FC = () => {
             rgba(15, 23, 42, 1) 100%)
         `,
         backgroundAttachment: 'fixed',
-      }}
+      } : undefined}
     >
       {/* Grid Pattern Overlay */}
       <div
@@ -248,7 +250,7 @@ const NewsDetailPage: FC = () => {
 
                     {/* Publish Date */}
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-slate-800/50 rounded-lg">
+                      <div className="p-2 bg-surface/95 dark:bg-slate-800/50 rounded-lg">
                         <Icon name="event" size="sm" className="text-cyan-400" />
                       </div>
                       <div>
@@ -259,7 +261,7 @@ const NewsDetailPage: FC = () => {
 
                     {/* Read Time */}
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-slate-800/50 rounded-lg">
+                      <div className="p-2 bg-surface/95 dark:bg-slate-800/50 rounded-lg">
                         <Icon name="schedule" size="sm" className="text-cyan-400" />
                       </div>
                       <div>
@@ -292,7 +294,7 @@ const NewsDetailPage: FC = () => {
                 <div className="lg:col-span-4">
                   <div className="space-y-6 sticky top-24">
                     {/* Newsletter Signup */}
-                    <div className="p-6 bg-slate-800/50 rounded-xl shadow-lg border border-cyan-500/30">
+                    <div className="p-6 bg-surface/95 dark:bg-slate-800/50 rounded-xl shadow-lg border border-cyan-500/30">
                       <h3 className="text-white font-black text-lg mb-2 flex items-center gap-2">
                         <Icon name="mail" size="sm" />
                         Nhận tin tức
@@ -316,7 +318,7 @@ const NewsDetailPage: FC = () => {
                     </div>
 
                     {/* Most Read Articles */}
-                    <div className="p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl backdrop-blur-sm hover:border-cyan-500/30 transition">
+                    <div className="p-6 bg-surface/95 dark:bg-slate-800/50 border border-slate-700/50 rounded-xl backdrop-blur-sm hover:border-cyan-500/30 transition">
                       <h3 className="text-white font-black text-base mb-6 uppercase tracking-wide">Most Read</h3>
                       {newsQuery.isLoading || featuredNewsQuery.isLoading ? (
                         <div className="space-y-5">
@@ -395,7 +397,7 @@ const NewsDetailPage: FC = () => {
                 </h2>
 
                 {/* Comment Form */}
-                <div className="mb-12 p-6 bg-slate-800/50 border border-slate-700/50 rounded-xl backdrop-blur-sm">
+                <div className="mb-12 p-6 bg-surface/95 dark:bg-slate-800/50 border border-slate-700/50 rounded-xl backdrop-blur-sm">
                   <h3 className="text-white font-bold text-lg mb-6">Để lại bình luận của bạn</h3>
 
                   {/* Success Message */}
@@ -481,7 +483,7 @@ const NewsDetailPage: FC = () => {
                   <div className="space-y-6 mt-8">
                     <h3 className="text-white font-bold text-lg">Bình luận gần đây</h3>
                     {Array.from({ length: 3 }).map((_, idx) => (
-                      <div key={idx} className="p-4 bg-slate-800/40 rounded-lg border border-slate-700/50 animate-pulse">
+                      <div key={idx} className="p-4 bg-surface/95 dark:bg-slate-800/40 rounded-lg border border-slate-700/50 animate-pulse">
                         <div className="flex gap-4">
                           <div className="w-10 h-10 rounded-full bg-slate-700" />
                           <div className="flex-1">
@@ -499,7 +501,7 @@ const NewsDetailPage: FC = () => {
                   <div className="space-y-6 mt-8">
                     <h3 className="text-white font-bold text-lg">Bình luận gần đây</h3>
                     {comments.map((comment: any) => (
-                      <div key={comment._id || comment.id} className="p-4 bg-slate-800/40 rounded-lg border border-slate-700/50 hover:border-slate-600/50 transition">
+                      <div key={comment._id || comment.id} className="p-4 bg-surface/95 dark:bg-slate-800/40 rounded-lg border border-slate-700/50 hover:border-slate-600/50 transition">
                         <div className="flex items-start gap-4">
                           <div className="w-10 h-10 rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 flex items-center justify-center flex-shrink-0">
                             <span className="text-white font-bold text-sm">{getInitials(comment.name)}</span>
@@ -517,7 +519,7 @@ const NewsDetailPage: FC = () => {
                   </div>
                 ) : (
                   <div className="text-center py-12 mt-8">
-                    <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-slate-800/50 border border-slate-700/50 flex items-center justify-center">
+                    <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-surface/95 dark:bg-slate-800/50 border border-slate-700/50 flex items-center justify-center">
                       <Icon name="comment" size="md" className="text-slate-600" />
                     </div>
                     <p className="text-slate-400 text-sm font-medium">Chưa có bình luận nào</p>
