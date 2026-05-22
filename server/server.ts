@@ -41,11 +41,6 @@ dotenv.config()
 
 const app: Express = express()
 
-// Connect to MongoDB
-connectDB()
-
-// Start background jobs
-startCronJobs()
 
 // Middleware
 app.use(helmet({
@@ -147,6 +142,14 @@ app.use('/api/notifications', notificationRoutes)
 // Health check
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'Server is running', timestamp: new Date() })
+})
+
+// Root route
+app.get('/', (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    message: 'WebBanGame API is running',
+  })
 })
 
 // 404 handler
