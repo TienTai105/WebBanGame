@@ -377,6 +377,7 @@ const ProductListPage: FC = () => {
               <p className="text-slate-600 dark:text-slate-400">
                 Hiển thị {displayProducts.length} sản phẩm phù hợp
               </p>
+            </div>
 
             {/* Sort Dropdown */}
             <details ref={sortDetailsRef} className="group relative w-48">
