@@ -66,12 +66,36 @@ app.use(helmet({
   xssFilter: true,
   referrerPolicy: { policy: "strict-origin-when-cross-origin" },
 })) // Security headers
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
-    credentials: true,
-  })
-)
+// Allow multiple CLIENT_URL values and common dev hosts; permit vercel.app subdomains
+{
+  const rawClient = process.env.CLIENT_URL || ''
+  const allowed = rawClient
+    ? rawClient.split(',').map((s) => s.trim()).filter(Boolean)
+    : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175']
+
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        // Allow server-to-server or non-browser requests
+        if (!origin) return callback(null, true)
+
+        if (allowed.includes(origin)) return callback(null, true)
+
+        try {
+          const u = new URL(origin)
+          if (u.hostname === 'vercel.app' || u.hostname.endsWith('.vercel.app')) {
+            return callback(null, true)
+          }
+        } catch (err) {
+          // ignore and reject below
+        }
+
+        return callback(new Error('CORS origin denied'), false)
+      },
+      credentials: true,
+    })
+  )
+}
 app.use(morgan('combined')) // Logging
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ limit: '10mb', extended: true }))

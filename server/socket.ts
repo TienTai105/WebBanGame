@@ -52,9 +52,27 @@ export function emitUserNotification(userId: string | string[], notification: an
 }
 
 export function initSocket(server: HttpServer) {
+  // Configure Socket.IO CORS similar to HTTP CORS settings
+  const rawClient = process.env.CLIENT_URL || ''
+  const allowed = rawClient
+    ? rawClient.split(',').map((s) => s.trim()).filter(Boolean)
+    : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175']
+
   io = new Server(server, {
     cors: {
-      origin: process.env.CLIENT_URL || ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
+      origin: (origin, callback) => {
+        if (!origin) return callback(null, true)
+        if (allowed.includes(origin)) return callback(null, true)
+        try {
+          const u = new URL(origin)
+          if (u.hostname === 'vercel.app' || u.hostname.endsWith('.vercel.app')) {
+            return callback(null, true)
+          }
+        } catch (err) {
+          // fall through to reject
+        }
+        return callback(new Error('CORS origin denied'), false)
+      },
       credentials: true,
     },
   })
