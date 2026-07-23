@@ -1,5 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import './styles/print.css'
@@ -210,12 +210,15 @@ function AppRootContent() {
   const location = useLocation()
   const navigate = useNavigate()
   const isAdminRoute = location.pathname.startsWith('/admin')
+  const prevHtmlDark = useRef<boolean | null>(null)
+  const API_BASE = (import.meta.env.VITE_API_URL as string) || ''
 
   // ✅ Fetch CSRF token on app load
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
-        await fetch('/api/csrf-token', {
+        const url = API_BASE ? `${API_BASE}/csrf-token` : '/api/csrf-token'
+        await fetch(url, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
@@ -247,6 +250,22 @@ function AppRootContent() {
     window.addEventListener('tokenExpired', handleTokenExpired)
     return () => window.removeEventListener('tokenExpired', handleTokenExpired)
   }, [navigate])
+
+  // Force light theme for admin routes (temporarily remove `.dark` on <html>)
+  useEffect(() => {
+    const html = document.documentElement
+    if (isAdminRoute) {
+      // remember previous dark state
+      prevHtmlDark.current = html.classList.contains('dark')
+      if (html.classList.contains('dark')) html.classList.remove('dark')
+      html.style.colorScheme = 'light'
+    } else {
+      // restore previous dark class if it was set before entering admin
+      if (prevHtmlDark.current) html.classList.add('dark')
+      html.style.colorScheme = ''
+      prevHtmlDark.current = null
+    }
+  }, [isAdminRoute])
 
   return isAdminRoute ? <AdminAppContent /> : <UserAppContent />
 }

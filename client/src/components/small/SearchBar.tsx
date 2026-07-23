@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { cn } from '../../utils/cn'
 import Icon from '../atomic/Icon'
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string) || '/api'
+
 interface SearchResult {
   _id: string
   name: string
@@ -69,7 +71,7 @@ const SearchBar: FC<SearchBarProps> = ({
       setShowPopular(false)
       setIsLoading(true)
       try {
-        const url = `http://localhost:5000/api/products?search=${encodeURIComponent(query)}&limit=5`
+        const url = `${API_BASE_URL}/products?search=${encodeURIComponent(query)}&limit=5`
         console.log('🔍 Fetching:', url) // DEBUG
         const response = await fetch(url)
         console.log('📡 Response status:', response.status) // DEBUG
@@ -102,7 +104,7 @@ const SearchBar: FC<SearchBarProps> = ({
       if (!query.trim()) {
         try {
           const response = await fetch(
-            `http://localhost:5000/api/products?sort=newest&limit=5`
+            `${API_BASE_URL}/products?sort=newest&limit=5`
           )
           if (response.ok) {
             const data = await response.json()
