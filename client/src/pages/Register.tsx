@@ -58,7 +58,8 @@ const Register: FC = () => {
     const checkEmail = async () => {
       setCheckingEmail(true)
       try {
-        const res = await fetch('/api/auth/check-email', {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        const res = await fetch(`${API_URL}/auth/check-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: debouncedEmail }),
@@ -85,7 +86,8 @@ const Register: FC = () => {
     const checkPhone = async () => {
       setCheckingPhone(true)
       try {
-        const res = await fetch('/api/auth/check-phone', {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+        const res = await fetch(`${API_URL}/auth/check-phone`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone: debouncedPhone }),
@@ -138,7 +140,8 @@ const Register: FC = () => {
 
     setIsLoading(true)
     try {
-      const response = await fetch('/api/auth/register', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

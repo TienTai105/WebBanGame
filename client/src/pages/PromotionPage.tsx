@@ -13,7 +13,8 @@ const PromotionPage: React.FC = () => {
   const { data: promotionsData, isLoading } = useQuery({
     queryKey: ['promotions'],
     queryFn: async () => {
-      const res = await fetch('/api/promotions')
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const res = await fetch(`${API_URL}/promotions`)
       if (!res.ok) throw new Error('Failed to fetch promotions')
       return res.json()
     },

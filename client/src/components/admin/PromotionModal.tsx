@@ -170,10 +170,11 @@ const PromotionModal: React.FC<PromotionModalProps> = ({ isOpen, mode, promotion
       const token = localStorage.getItem('adminToken')
       const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
       try {
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
         const [prodRes, catRes, platRes] = await Promise.all([
-          fetch('/api/products?limit=200', { headers }),
-          fetch('/api/categories', { headers }),
-          fetch('/api/platforms', { headers }),
+          fetch(`${API_URL}/products?limit=200`, { headers }),
+          fetch(`${API_URL}/categories`, { headers }),
+          fetch(`${API_URL}/platforms`, { headers }),
         ])
         const [prodData, catData, platData] = await Promise.all([
           prodRes.json(), catRes.json(), platRes.json(),

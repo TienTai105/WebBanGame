@@ -1,6 +1,17 @@
+import { API_BASE_URL } from '../services/api'
+
 export const getCsrfTokenFromCookie = (): string => {
   const match = document.cookie.match(/(^| )csrfToken=([^;]+)/)
   return match ? decodeURIComponent(match[2]) : ''
+}
+
+const baseUrl = API_BASE_URL.replace(/\/$/, '')
+
+const buildUrl = (url: string) => {
+  if (/^https?:\/\//i.test(url)) {
+    return url
+  }
+  return `${baseUrl}${url.startsWith('/') ? url : `/${url}`}`
 }
 
 const makeHeaders = (token: string, options?: RequestInit): HeadersInit => {
@@ -30,7 +41,7 @@ export async function adminFetch<T = any>(url: string, options: RequestInit = {}
   }
 
   const request = async (currentToken: string) => {
-    return fetch(url, {
+    return fetch(buildUrl(url), {
       ...options,
       headers: makeHeaders(currentToken, options),
       credentials: 'include',
@@ -40,7 +51,7 @@ export async function adminFetch<T = any>(url: string, options: RequestInit = {}
   let res = await request(token)
 
   if (res.status === 401) {
-    const refreshRes = await fetch('/api/auth/refresh-token', {
+    const refreshRes = await fetch(buildUrl('/auth/refresh-token'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',

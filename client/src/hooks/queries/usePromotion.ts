@@ -8,7 +8,8 @@ export const usePromotions = () => {
   return useQuery({
     queryKey: ['promotions'],
     queryFn: async () => {
-      const res = await fetch('/api/promotions')
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const res = await fetch(`${API_URL}/promotions`)
       if (!res.ok) throw new Error('Failed to fetch promotions')
       return (await res.json()) as { success: boolean; data: IPromotion[] }
     },
@@ -23,7 +24,8 @@ export const usePromotionByCode = (code?: string) => {
     queryKey: ['promotion', code],
     queryFn: async () => {
       if (!code) return null
-      const res = await fetch(`/api/promotions/${code}`)
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const res = await fetch(`${API_URL}/promotions/${code}`)
       if (!res.ok) throw new Error('Failed to fetch promotion')
       return (await res.json()) as { success: boolean; data: IPromotion }
     },
@@ -37,7 +39,8 @@ export const usePromotionByCode = (code?: string) => {
 export const useValidatePromotion = () => {
   return useMutation({
     mutationFn: async (payload: ValidateCouponRequest) => {
-      const res = await fetch('/api/promotions/validate', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const res = await fetch(`${API_URL}/promotions/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -60,7 +63,8 @@ export const useValidatePromotion = () => {
 export const useApplyPromotion = () => {
   return useMutation({
     mutationFn: async (data: { promotionId: string; userId?: string }) => {
-      const res = await fetch('/api/promotions/apply', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const res = await fetch(`${API_URL}/promotions/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),

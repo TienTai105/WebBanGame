@@ -8,6 +8,7 @@ import PromotionModal from '../../components/admin/PromotionModal'
 import { errorToast, successToast } from '../../utils/toast'
 import { adminFetch } from '../../utils/adminFetch'
 
+
 // ── Types ──────────────────────────────────────────────────
 interface Promotion {
   _id: string
@@ -35,7 +36,6 @@ interface Stats {
   totalRedemptions: number
   total: number
 }
-
 // ── Constants ──────────────────────────────────────────────
 const STATUS_MAP: Record<string, { label: string; color: string; dot: string }> = {
   active:    { label: 'Active',    color: 'text-emerald-600', dot: 'bg-emerald-500' },

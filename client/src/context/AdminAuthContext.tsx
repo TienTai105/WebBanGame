@@ -90,7 +90,8 @@ export const AdminAuthProvider: React.FC<{ children: ReactNode }> = ({ children 
   const login = async (email: string, password: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch('/api/auth/login', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -133,7 +134,8 @@ export const AdminAuthProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const generateOTP = async (action: string) => {
     const token = localStorage.getItem('adminToken')
-    const response = await fetch('/api/admin/otp/generate', {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const response = await fetch(`${API_URL}/admin/otp/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -153,7 +155,8 @@ export const AdminAuthProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   const verifyOTP = async (otpId: string, code: string) => {
     const token = localStorage.getItem('adminToken')
-    const response = await fetch('/api/admin/otp/verify', {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const response = await fetch(`${API_URL}/admin/otp/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

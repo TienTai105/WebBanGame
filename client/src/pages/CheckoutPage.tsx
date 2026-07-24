@@ -838,9 +838,9 @@ const CheckoutPage: FC = () => {
         return false
       }
 
-      console.log('Saving address with token:', token?.substring(0, 20) + '...') // Log token existence
-
-      const response = await fetch('/api/user/shipping-address', {
+      console.log('Saving address with token:', token?.substring(0, 20) + '...') // Log token existence 
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/user/shipping-address`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

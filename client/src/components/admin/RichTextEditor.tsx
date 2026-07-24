@@ -21,7 +21,7 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
   height = '300px'
 }, ref) => {
   const quillRef = useRef<any>(null)
-  
+
   useImperativeHandle(ref, () => ({
     getHtml: () => {
       if (!quillRef.current) return ''
@@ -34,10 +34,11 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
   // Upload image from clipboard paste
   const uploadImageFromFile = async (file: File, quill: any) => {
     try {
+
       const formData = new FormData()
       formData.append('images', file)
-
-      const response = await fetch('/api/upload', {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/upload`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -68,13 +69,13 @@ const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(({
     toolbar: [
       [{ 'header': [1, 2, 3, false] }],
       ['bold', 'italic', 'underline', 'strike'],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      [{ 'script': 'sub'}, { 'script': 'super' }],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      [{ 'script': 'sub' }, { 'script': 'super' }],
       [{ 'color': [] }, { 'background': [] }],
       [{ 'align': [] }],
       ['blockquote', 'code-block'],
       ['link', 'image', 'video'],
-      [{ 'indent': '-1'}, { 'indent': '+1' }],
+      [{ 'indent': '-1' }, { 'indent': '+1' }],
       [{ 'size': ['small', false, 'large', 'huge'] }],
       ['clean']
     ]

@@ -12,7 +12,7 @@ interface PasswordStrength {
   label: string
   color: string
 }
-
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const ResetPasswordPage: FC = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -84,7 +84,7 @@ const ResetPasswordPage: FC = () => {
     setOtpLoading(true)
 
     try {
-      const response = await fetch('/api/auth/verify-reset-otp', {
+      const response = await fetch(`${API_URL}/auth/verify-reset-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -119,7 +119,7 @@ const ResetPasswordPage: FC = () => {
     }
 
     try {
-      const response = await fetch('/api/auth/forgot-password', {
+      const response = await fetch(`${API_URL}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email?.trim() }),
@@ -180,7 +180,7 @@ const ResetPasswordPage: FC = () => {
     setPasswordLoading(true)
 
     try {
-      const response = await fetch('/api/auth/reset-password', {
+      const response = await fetch(`${API_URL}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

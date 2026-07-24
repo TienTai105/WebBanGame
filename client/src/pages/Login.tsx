@@ -27,8 +27,9 @@ const Login: FC = () => {
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true)
     try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
       // Call login API
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // Allow browser to set/send cookies
