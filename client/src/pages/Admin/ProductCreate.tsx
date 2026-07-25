@@ -166,9 +166,9 @@ const ProductCreate: React.FC = () => {
     const fetchMetadata = async () => {
       try {
         const [catRes, genreRes, platformRes] = await Promise.all([
-          adminFetch<any>('/api/categories'),
-          adminFetch<any>('/api/genres'),
-          adminFetch<any>('/api/platforms'),
+          adminFetch<any>('/categories'),
+          adminFetch<any>('/genres'),
+          adminFetch<any>('/platforms'),
         ])
 
         let categoriesArray: Category[] = []
@@ -351,7 +351,7 @@ const ProductCreate: React.FC = () => {
         formDataToUpload.append('images', file)
       })
 
-      const response = await fetch('/api/upload', {
+      const response = await fetch('/upload', {
         method: 'POST',
         body: formDataToUpload,
         headers: {
@@ -558,7 +558,7 @@ const ProductCreate: React.FC = () => {
         formDataToUpload.append('images', file)
       })
 
-      const response = await fetch('/api/upload', {
+      const response = await fetch('/upload', {
         method: 'POST',
         body: formDataToUpload,
         headers: {
@@ -684,7 +684,7 @@ const ProductCreate: React.FC = () => {
         descriptionLength: createPayload.description?.length || 0,
       })
 
-      const { error } = await adminFetch('/api/admin/products', {
+      const { error } = await adminFetch('/admin/products', {
         method: 'POST',
         body: JSON.stringify(createPayload),
       })

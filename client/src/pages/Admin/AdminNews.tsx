@@ -94,7 +94,7 @@ const AdminNews: React.FC = () => {
       if (statusFilter !== 'all') params.set('status', statusFilter)
       if (searchQuery) params.set('search', searchQuery)
 
-      const { data: json, error } = await adminFetch(`/api/news/admin/all?${params}`)
+      const { data: json, error } = await adminFetch(`/news/admin/all?${params}`)
       if (error) throw error
       const data: NewsArticle[] = json.data || []
 
@@ -116,7 +116,7 @@ const AdminNews: React.FC = () => {
   // ── Compute Stats ────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     try {
-      const { data: fullResponse, error } = await adminFetch<any>('/api/news/admin/all?limit=9999')
+      const { data: fullResponse, error } = await adminFetch<any>('/news/admin/all?limit=9999')
       if (error) throw error
       const all: NewsArticle[] = fullResponse?.data || []
       const published = all.filter((a) => a.status === 'published').length
@@ -151,7 +151,7 @@ const AdminNews: React.FC = () => {
     if (!deleteTarget) return
     setIsDeleting(true)
     try {
-      await adminFetch(`/api/news/admin/${deleteTarget._id}`, {
+      await adminFetch(`/news/admin/${deleteTarget._id}`, {
         method: 'DELETE',
         headers: otpToken ? { otpToken } : {},
       })
@@ -169,7 +169,7 @@ const AdminNews: React.FC = () => {
   const handleTogglePublish = async (article: NewsArticle) => {
     const isPublished = article.status === 'published'
     try {
-      await adminFetch(`/api/news/admin/${article._id}/publish`, {
+      await adminFetch(`/news/admin/${article._id}/publish`, {
         method: 'PATCH',
         body: JSON.stringify({ published: !isPublished }),
       })
@@ -183,7 +183,7 @@ const AdminNews: React.FC = () => {
 
   const handleToggleFeatured = async (article: NewsArticle) => {
     try {
-      await adminFetch(`/api/news/admin/${article._id}`, {
+      await adminFetch(`/news/admin/${article._id}`, {
         method: 'PUT',
         body: JSON.stringify({ featured: !article.featured }),
       })

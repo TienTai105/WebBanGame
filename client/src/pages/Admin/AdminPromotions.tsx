@@ -102,7 +102,7 @@ const AdminPromotions: React.FC = () => {
       if (typeFilter !== 'all') params.set('type', typeFilter)
       if (statusFilter !== 'all') params.set('status', statusFilter)
 
-      const { data: json, error } = await adminFetch(`/api/promotions/admin/all?${params}`)
+      const { data: json, error } = await adminFetch(`/promotions/admin/all?${params}`)
       if (error) throw error
       setPromotions(json.data || [])
       setStats(json.stats || { activeCount: 0, totalRedemptions: 0, total: 0 })
@@ -139,7 +139,7 @@ const AdminPromotions: React.FC = () => {
     if (!deleteTarget) return
     setIsDeleting(true)
     try {
-      await adminFetch(`/api/promotions/${deleteTarget._id}`, {
+      await adminFetch(`/promotions/${deleteTarget._id}`, {
         method: 'DELETE',
         headers: otpToken ? { otpToken } : {},
       })
@@ -163,7 +163,7 @@ const AdminPromotions: React.FC = () => {
   const openViewModal = async (promo: Promotion) => {
     setLoadingDetail(true)
     try {
-      const { data: json, error } = await adminFetch(`/api/promotions/admin/${promo._id}`)
+      const { data: json, error } = await adminFetch(`/promotions/admin/${promo._id}`)
       if (error) throw error
       setModalPromotion(json.data)
       setModalMode('view')
@@ -178,7 +178,7 @@ const AdminPromotions: React.FC = () => {
   const openEditModal = async (promo: Promotion) => {
     setLoadingDetail(true)
     try {
-      const { data: json, error } = await adminFetch(`/api/promotions/admin/${promo._id}`)
+      const { data: json, error } = await adminFetch(`/promotions/admin/${promo._id}`)
       if (error) throw error
       setModalPromotion(json.data)
       setModalMode('edit')
@@ -192,13 +192,13 @@ const AdminPromotions: React.FC = () => {
 
   const handleModalSave = async (data: any) => {
     if (modalMode === 'create') {
-      await adminFetch('/api/promotions', {
+      await adminFetch('/promotions', {
         method: 'POST',
         body: JSON.stringify(data),
       })
       successToast('Đã tạo khuyến mãi mới')
     } else if (modalMode === 'edit' && modalPromotion) {
-      await adminFetch(`/api/promotions/${modalPromotion._id}`, {
+      await adminFetch(`/promotions/${modalPromotion._id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
       })
@@ -211,7 +211,7 @@ const AdminPromotions: React.FC = () => {
   // ── Toggle active ──────────────────────────────────────
   const handleToggleActive = async (promo: Promotion) => {
     try {
-      await adminFetch(`/api/promotions/${promo._id}`, {
+      await adminFetch(`/promotions/${promo._id}`, {
         method: 'PUT',
         body: JSON.stringify({ isActive: !promo.isActive }),
       })

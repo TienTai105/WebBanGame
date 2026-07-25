@@ -56,7 +56,7 @@ const AdminAuditLog: React.FC = () => {
         if (filters.entity) params.set('entity', filters.entity)
 
         const { data: fullResponse, error } = await adminFetch<{ success: boolean; data: AuditLogResponse }>(
-          `/api/admin/audit-logs?${params.toString()}`
+          `/admin/audit-logs?${params.toString()}`
         )
         if (error) throw error
         setData(fullResponse?.data || null)

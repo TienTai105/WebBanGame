@@ -136,7 +136,7 @@ const AdminUsers: React.FC = () => {
       if (activeTab !== 'all') params.set('role', activeTab)
       if (searchQuery.trim()) params.set('search', searchQuery.trim())
 
-      const { data: json, error } = await adminFetch(`/api/admin/users?${params}`)
+      const { data: json, error } = await adminFetch(`/admin/users?${params}`)
       if (error) throw error
       setUsers(json.data?.users || [])
       setTotalPages(json.data?.pagination?.pages || 1)
@@ -151,7 +151,7 @@ const AdminUsers: React.FC = () => {
   // ── Fetch stats ──────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     try {
-      const { data: json, error } = await adminFetch('/api/admin/users/stats')
+      const { data: json, error } = await adminFetch('/admin/users/stats')
       if (error) throw error
       if (json.data) setStats(json.data)
     } catch { /* silent */ }
@@ -160,7 +160,7 @@ const AdminUsers: React.FC = () => {
   // ── Fetch audit logs ─────────────────────────────────────
   const fetchAuditLogs = useCallback(async () => {
     try {
-      const { data: json, error } = await adminFetch('/api/admin/audit-logs?entity=User&limit=5&adminOnly=true')
+      const { data: json, error } = await adminFetch('/admin/audit-logs?entity=User&limit=5&adminOnly=true')
       if (error) throw error
       if (json.data?.logs) setAuditLogs(json.data.logs)
     } catch { /* silent */ }
@@ -180,7 +180,7 @@ const AdminUsers: React.FC = () => {
       params.set('limit', '10')
       params.set('adminOnly', 'true')
       if (logsFilter !== 'all') params.set('action', logsFilter)
-      const { data: json, error } = await adminFetch(`/api/admin/audit-logs?${params}`)
+      const { data: json, error } = await adminFetch(`/admin/audit-logs?${params}`)
       if (error) throw error
       if (json.data) {
         setAllLogs(json.data.logs || [])
@@ -221,7 +221,7 @@ const AdminUsers: React.FC = () => {
   // ── Toggle active ────────────────────────────────────────
   const handleToggleActive = async (user: User) => {
     try {
-      const { data: json, error } = await adminFetch(`/api/admin/users/${user._id}/toggle-active`, { method: 'PUT' })
+      const { data: json, error } = await adminFetch(`/admin/users/${user._id}/toggle-active`, { method: 'PUT' })
       if (error) throw error
       successToast(json.message || 'Cập nhật thành công')
       fetchUsers()
@@ -237,7 +237,7 @@ const AdminUsers: React.FC = () => {
     if (!selectedUser) return
     setUpdating(true)
     try {
-      await adminFetch(`/api/admin/users/${selectedUser._id}/role`, {
+      await adminFetch(`/admin/users/${selectedUser._id}/role`, {
         method: 'PUT',
         body: JSON.stringify({ role: newRole }),
       })
@@ -259,7 +259,7 @@ const AdminUsers: React.FC = () => {
     if (!selectedUser) return
     setSavingPermissions(true)
     try {
-      await adminFetch(`/api/admin/users/${selectedUser._id}/permissions`, {
+      await adminFetch(`/admin/users/${selectedUser._id}/permissions`, {
         method: 'PUT',
         body: JSON.stringify({ permissions: selectedPermissions, defaultOTP: defaultOTP || null }),
       })
@@ -284,7 +284,7 @@ const AdminUsers: React.FC = () => {
   // ── Reset password ───────────────────────────────────────
   const handleResetPassword = async (user: User) => {
     try {
-      const { data: json, error } = await adminFetch(`/api/admin/users/${user._id}/reset-password`, { method: 'POST' })
+      const { data: json, error } = await adminFetch(`/admin/users/${user._id}/reset-password`, { method: 'POST' })
       if (error) throw error
       successToast(json.message || 'Đã gửi email đặt lại mật khẩu')
     } catch (err: any) {
@@ -304,7 +304,7 @@ const AdminUsers: React.FC = () => {
     }
     setCreating(true)
     try {
-      await adminFetch('/api/admin/users', {
+      await adminFetch('/admin/users', {
         method: 'POST',
         body: JSON.stringify(createForm),
       })

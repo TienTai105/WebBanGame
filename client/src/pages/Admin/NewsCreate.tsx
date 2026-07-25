@@ -45,7 +45,7 @@ const NewsCreate: React.FC = () => {
       const formData = new FormData()
       formData.append('images', file)
       const token = localStorage.getItem('adminToken') || ''
-      const res = await fetch('/api/upload', {
+      const res = await fetch('/upload', {
         method: 'POST',
         body: formData,
         headers: { Authorization: `Bearer ${token}` },
@@ -102,7 +102,7 @@ const NewsCreate: React.FC = () => {
       if (seoTitle.trim()) body.seoTitle = seoTitle.trim()
       if (seoDescription.trim()) body.seoDescription = seoDescription.trim()
 
-      await adminFetch('/api/news', {
+      await adminFetch('/news', {
         method: 'POST',
         body: JSON.stringify(body),
       })

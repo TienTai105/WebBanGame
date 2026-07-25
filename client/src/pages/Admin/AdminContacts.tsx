@@ -94,7 +94,7 @@ const AdminContacts: React.FC = () => {
       params.set('limit', String(LIMIT))
       if (statusFilter !== 'all') params.set('status', statusFilter)
 
-      const { data: fullResponse, error } = await adminFetch<any>(`/api/contact/admin/all?${params}`)
+      const { data: fullResponse, error } = await adminFetch<any>(`/contact/admin/all?${params}`)
       if (error) throw error
       const contactsData = fullResponse?.data || fullResponse
       setContacts(contactsData?.contacts || [])
@@ -113,7 +113,7 @@ const AdminContacts: React.FC = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      const { data: fullResponse, error } = await adminFetch<any>('/api/contact/admin/stats')
+      const { data: fullResponse, error } = await adminFetch<any>('/contact/admin/stats')
       if (error) throw error
       const statsData = fullResponse?.data || fullResponse
       setStats(statsData || { total: 0, pending: 0, read: 0, replied: 0, closed: 0 })
@@ -129,7 +129,7 @@ const AdminContacts: React.FC = () => {
       const body: any = { status: newStatus }
       if (notes !== undefined) body.adminNotes = notes
 
-      const { error } = await adminFetch(`/api/contact/admin/${contact._id}/status`, {
+      const { error } = await adminFetch(`/contact/admin/${contact._id}/status`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       })
@@ -163,7 +163,7 @@ const AdminContacts: React.FC = () => {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      const { error } = await adminFetch(`/api/contact/admin/${deleteTarget._id}`, {
+      const { error } = await adminFetch(`/contact/admin/${deleteTarget._id}`, {
         method: 'DELETE',
         headers: otpToken ? { otpToken } : undefined,
       })
@@ -200,7 +200,7 @@ const AdminContacts: React.FC = () => {
     setReplying(true)
     try {
       const body: any = { status: 'replied', replyMessage }
-      const { error } = await adminFetch(`/api/contact/admin/${selectedContact._id}/status`, {
+      const { error } = await adminFetch(`/contact/admin/${selectedContact._id}/status`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       })
@@ -222,7 +222,7 @@ const AdminContacts: React.FC = () => {
     setSaving(true)
     try {
       const body: any = { status: selectedContact.status, adminNotes }
-      const { error } = await adminFetch(`/api/contact/admin/${selectedContact._id}/status`, {
+      const { error } = await adminFetch(`/contact/admin/${selectedContact._id}/status`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       })

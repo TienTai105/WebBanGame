@@ -53,7 +53,7 @@ const NewsDetail: React.FC = () => {
     const fetchArticle = async () => {
       setIsLoading(true)
       try {
-        const {data, error} = await adminFetch(`/api/news/admin/${newsId}`)
+        const {data, error} = await adminFetch(`/news/admin/${newsId}`)
         if (error) throw error
         const a = data?.data || data
         setTitle(a.title || '')
@@ -94,7 +94,7 @@ const NewsDetail: React.FC = () => {
       const formData = new FormData()
       formData.append('images', file)
       const token = localStorage.getItem('adminToken') || ''
-      const res = await fetch('/api/upload', {
+      const res = await fetch('/upload', {
         method: 'POST',
         body: formData,
         headers: { Authorization: `Bearer ${token}` },
@@ -151,7 +151,7 @@ const NewsDetail: React.FC = () => {
       if (seoTitle.trim()) body.seoTitle = seoTitle.trim()
       if (seoDescription.trim()) body.seoDescription = seoDescription.trim()
 
-      await adminFetch(`/api/news/admin/${newsId}`, {
+      await adminFetch(`/news/admin/${newsId}`, {
         method: 'PUT',
         body: JSON.stringify(body),
       })
@@ -171,7 +171,7 @@ const NewsDetail: React.FC = () => {
   const handleDelete = async () => {
     setIsDeleting(true)
     try {
-      await adminFetch(`/api/news/admin/${newsId}`, { method: 'DELETE' })
+      await adminFetch(`/news/admin/${newsId}`, { method: 'DELETE' })
       successToast('Đã xóa bài viết')
       navigate('/admin/news')
     } catch (err: any) {

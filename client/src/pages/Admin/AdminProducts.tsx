@@ -96,7 +96,7 @@ const AdminProducts: React.FC = () => {
         })
 
         const { data, error } = await adminFetch<any>(
-          `/api/admin/products?${queryParams.toString()}`
+          `/admin/products?${queryParams.toString()}`
         )
 
 
@@ -145,7 +145,7 @@ const AdminProducts: React.FC = () => {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const { data, error } = await adminFetch<any>('/api/categories')
+        const { data, error } = await adminFetch<any>('/categories')
         console.log('Categories API Response:', { data, error })
         if (error) {
           console.error('Error fetching categories:', error)
@@ -244,7 +244,7 @@ const AdminProducts: React.FC = () => {
       if (deleteModal.isBulkDelete) {
         // Bulk delete
         const deletePromises = Array.from(selectedProducts).map((productId) =>
-          adminFetch(`/api/admin/products/${productId}`, { method: 'DELETE', headers })
+          adminFetch(`/admin/products/${productId}`, { method: 'DELETE', headers })
         )
         const results = await Promise.all(deletePromises)
         const errors = results.filter((r) => r.error)
@@ -260,7 +260,7 @@ const AdminProducts: React.FC = () => {
         }
       } else {
         // Single delete
-        const { error } = await adminFetch(`/api/admin/products/${deleteModal.productId}`, {
+        const { error } = await adminFetch(`/admin/products/${deleteModal.productId}`, {
           method: 'DELETE',
           headers,
         })

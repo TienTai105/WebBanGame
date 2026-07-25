@@ -217,7 +217,7 @@ function AppRootContent() {
   useEffect(() => {
     const fetchCsrfToken = async () => {
       try {
-        const url = API_BASE ? `${API_BASE}/csrf-token` : '/api/csrf-token'
+        const url = API_BASE ? `${API_BASE}/csrf-token` : '/csrf-token'
         await fetch(url, {
           method: 'POST',
           credentials: 'include',

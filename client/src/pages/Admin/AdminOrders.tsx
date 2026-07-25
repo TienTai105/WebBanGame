@@ -203,7 +203,7 @@ const AdminOrders: React.FC = () => {
       params.set('limit', String(LIMIT))
       if (activeTab !== 'all') params.set('status', activeTab)
 
-      const { data: json, error } = await adminFetch(`/api/orders/admin/all?${params}`)
+      const { data: json, error } = await adminFetch(`/orders/admin/all?${params}`)
       if (error) throw error
       setOrders(json.data || [])
       setTotalOrders(json.total || 0)
@@ -223,8 +223,8 @@ const AdminOrders: React.FC = () => {
 
       const promises = statuses.map(async (status) => {
         const url = status === 'all'
-          ? '/api/orders/admin/all?limit=1'
-          : `/api/orders/admin/all?limit=1&status=${status}`
+          ? '/orders/admin/all?limit=1'
+          : `/orders/admin/all?limit=1&status=${status}`
         try {
           const { data: json, error } = await adminFetch(url)
           if (error) throw error
@@ -263,7 +263,7 @@ const AdminOrders: React.FC = () => {
 
     if (pendingAction.type === 'status') {
       try {
-        await adminFetch(`/api/orders/${pendingAction.orderId}`, {
+        await adminFetch(`/orders/${pendingAction.orderId}`, {
           method: 'PUT',
           body: JSON.stringify({ orderStatus: pendingAction.status }),
           headers,
@@ -333,7 +333,7 @@ const AdminOrders: React.FC = () => {
       if (editPaymentStatus !== selectedOrder.paymentStatus) body.paymentStatus = editPaymentStatus
       if (editTrackingNumber !== (selectedOrder.trackingNumber || '')) body.trackingNumber = editTrackingNumber
 
-      await adminFetch(`/api/orders/${selectedOrder._id}`, {
+      await adminFetch(`/orders/${selectedOrder._id}`, {
         method: 'PUT',
         body: JSON.stringify(body),
         headers,

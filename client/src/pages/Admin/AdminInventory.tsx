@@ -144,7 +144,7 @@ const AdminInventory: React.FC = () => {
         items: InventoryItem[]
         pagination: { page: number; total: number; pages: number }
         }
-      }>(`/api/inventory/admin/all?${params}`)
+      }>(`/inventory/admin/all?${params}`)
 
       if (error) throw error
       setItems(data?.data?.items || [])
@@ -160,7 +160,7 @@ const AdminInventory: React.FC = () => {
   // ── Fetch stats ──────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     try {
-      const { data: fullResponse, error } = await adminFetch<any>('/api/inventory/admin/stats')
+      const { data: fullResponse, error } = await adminFetch<any>('/inventory/admin/stats')
       if (!error && fullResponse) {
         const statsData = fullResponse?.data || fullResponse
         setStats(statsData)
@@ -177,7 +177,7 @@ const AdminInventory: React.FC = () => {
       params.set('limit', '20')
       if (movementType !== 'all') params.set('type', movementType)
 
-      const { data: fullResponse, error } = await adminFetch<any>(`/api/inventory/admin/movements?${params}`)
+      const { data: fullResponse, error } = await adminFetch<any>(`/inventory/admin/movements?${params}`)
 
       if (error) throw error
       const data = fullResponse?.data || fullResponse
@@ -217,7 +217,7 @@ const AdminInventory: React.FC = () => {
     setSaving(true)
     try {
       const sku = editItem.variantSku || 'null'
-      const { error } = await adminFetch(`/api/inventory/${editItem.productId}/${sku}`, {
+      const { error } = await adminFetch(`/inventory/${editItem.productId}/${sku}`, {
         method: 'PUT',
         body: JSON.stringify(editForm),
         headers: otpToken ? { otpToken } : undefined,

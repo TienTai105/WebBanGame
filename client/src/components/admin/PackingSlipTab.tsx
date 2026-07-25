@@ -88,7 +88,7 @@ const PackingSlipTab: React.FC<PackingSlipTabProps> = ({ adminFetch }) => {
       params.set('limit', String(LIMIT))
       if (activeTab !== 'all') params.set('status', activeTab)
 
-      const json = await adminFetch(`/api/packingslips?${params}`)
+      const json = await adminFetch(`/packingslips?${params}`)
       setPackingSlips(Array.isArray(json.data?.data) ? json.data.data : [])
       setTotalSlips(json.data?.total || 0)
       setTotalPages(json.data?.pages || 1)
@@ -107,8 +107,8 @@ const PackingSlipTab: React.FC<PackingSlipTabProps> = ({ adminFetch }) => {
 
       const promises = statuses.map(async (status) => {
         const url = status === 'all'
-          ? '/api/packingslips?limit=1'
-          : `/api/packingslips?limit=1&status=${status}`
+          ? '/packingslips?limit=1'
+          : `/packingslips?limit=1&status=${status}`
         try {
           const json = await adminFetch(url)
           counts[status] = json.data?.total ?? 0
@@ -171,7 +171,7 @@ const PackingSlipTab: React.FC<PackingSlipTabProps> = ({ adminFetch }) => {
         .filter(([_, note]) => note.trim())
         .map(([itemId, note]) => ({ itemId, note }))
 
-      await adminFetch(`/api/packingslips/${selectedSlip._id}`, {
+      await adminFetch(`/packingslips/${selectedSlip._id}`, {
         method: 'PUT',
         body: JSON.stringify({
           generalNotes: editNotes,
@@ -206,7 +206,7 @@ const PackingSlipTab: React.FC<PackingSlipTabProps> = ({ adminFetch }) => {
         return
       }
 
-      await adminFetch(`/api/packingslips/${slipId}/${endpoint}`, {
+      await adminFetch(`/packingslips/${slipId}/${endpoint}`, {
         method: 'PUT',
       })
 

@@ -313,9 +313,9 @@ const ProductDetail: React.FC = () => {
     const fetchMetadata = async () => {
       try {
         const [catRes, genreRes, platformRes] = await Promise.all([
-          adminFetch<any>('/api/categories'),
-          adminFetch<any>('/api/genres'),
-          adminFetch<any>('/api/platforms'),
+          adminFetch<any>('/categories'),
+          adminFetch<any>('/genres'),
+          adminFetch<any>('/platforms'),
         ])
 
         // Handle categories
@@ -358,7 +358,7 @@ const ProductDetail: React.FC = () => {
     const fetchInventory = async () => {
       if (!productId || !product) return
       try {
-        const { data, error } = await adminFetch<any>(`/api/inventory/product/${productId}`)
+        const { data, error } = await adminFetch<any>(`/inventory/product/${productId}`)
         if (error) throw error
 
         let inventoryDataList = data
@@ -405,7 +405,7 @@ const ProductDetail: React.FC = () => {
   const refreshInventoryData = async () => {
     if (!productId || !product) return
     try {
-      const { data, error } = await adminFetch<any>(`/api/inventory/product/${productId}`)
+      const { data, error } = await adminFetch<any>(`/inventory/product/${productId}`)
       if (error) throw error
 
       let inventoryDataList = data
@@ -574,7 +574,7 @@ const ProductDetail: React.FC = () => {
       const variantSku = (variant as any).sku || `variant-${variant.name}`
       
       const { error } = await adminFetch(
-        `/api/inventory/${product._id}/${variantSku}`,
+        `/inventory/${product._id}/${variantSku}`,
         {
           method: 'PUT',
           body: JSON.stringify({
@@ -653,7 +653,7 @@ const ProductDetail: React.FC = () => {
         ?.split('=')[1]
 
       // Upload to backend
-      const response = await fetch('/api/upload/upload', {
+      const response = await fetch('/upload/upload', {
         method: 'POST',
         body: formData,
         headers: {
@@ -782,7 +782,7 @@ const ProductDetail: React.FC = () => {
             })
 
             const { error } = await adminFetch(
-              `/api/inventory/${product._id}/${variantSku}`,
+              `/inventory/${product._id}/${variantSku}`,
               {
                 method: 'PUT',
                 body: JSON.stringify({
@@ -1057,7 +1057,7 @@ const ProductDetail: React.FC = () => {
         variants,
       }
 
-      const { error } = await adminFetch(`/api/admin/products/${productId}`, {
+      const { error } = await adminFetch(`/admin/products/${productId}`, {
         method: 'PUT',
         body: JSON.stringify(savePayload),
       })

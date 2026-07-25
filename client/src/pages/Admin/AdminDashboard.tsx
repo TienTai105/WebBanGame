@@ -194,7 +194,7 @@ const AdminDashboard: React.FC = () => {
         const endDate = `${dateRange.endDate.getFullYear()}-${pad(dateRange.endDate.getMonth() + 1)}-${pad(dateRange.endDate.getDate())}`
 
         const { data, error } = await adminFetch<{ success: boolean; data: DashboardStats }>(
-          `/api/admin/dashboard/stats?startDate=${startDate}&endDate=${endDate}&comparisonType=${comparisonType}`
+          `/admin/dashboard/stats?startDate=${startDate}&endDate=${endDate}&comparisonType=${comparisonType}`
         )
 
         if (error) {

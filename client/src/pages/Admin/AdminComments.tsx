@@ -83,7 +83,7 @@ const AdminComments: React.FC = () => {
       params.set('limit', String(LIMIT))
       if (statusFilter !== 'all') params.set('status', statusFilter)
 
-      const { data: fullResponse, error } = await adminFetch<any>(`/api/admin/comments?${params}`)
+      const { data: fullResponse, error } = await adminFetch<any>(`/admin/comments?${params}`)
       if (error) throw error
       const commentsData = fullResponse?.data || fullResponse
       setComments(commentsData?.comments || [])
@@ -102,7 +102,7 @@ const AdminComments: React.FC = () => {
 
   const fetchStats = useCallback(async () => {
     try {
-      const { data: fullResponse, error } = await adminFetch<any>('/api/admin/comments/stats')
+      const { data: fullResponse, error } = await adminFetch<any>('/admin/comments/stats')
       if (error) throw error
       const statsData = fullResponse?.data || fullResponse
       setStats({
@@ -120,7 +120,7 @@ const AdminComments: React.FC = () => {
   // ── Update status ────────────────────────────────────────
   const handleUpdateStatus = async (comment: Comment, newStatus: string) => {
     try {
-      const { error } = await adminFetch(`/api/admin/comments/${comment._id}/status`, {
+      const { error } = await adminFetch(`/admin/comments/${comment._id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: newStatus }),
       })
@@ -147,7 +147,7 @@ const AdminComments: React.FC = () => {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      const { error } = await adminFetch(`/api/admin/comments/${deleteTarget._id}`, {
+      const { error } = await adminFetch(`/admin/comments/${deleteTarget._id}`, {
         method: 'DELETE',
         headers: otpToken ? { otpToken } : undefined,
       })
